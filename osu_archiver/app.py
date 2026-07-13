@@ -6,9 +6,9 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QIcon, QPixmap
-from PySide6.QtWidgets import QApplication, QSplashScreen
+from PySide6.QtWidgets import QApplication, QMessageBox, QSplashScreen
 
-from . import __version__, config, logsvc, theming
+from . import __version__, config, logsvc, pathheal, theming
 from .db import Database
 from .i18n import I18N
 from .services import Services
@@ -26,8 +26,8 @@ def load_stylesheet(theme: str) -> str:
 class AppContext:
     """Shared, long-lived services handed to every tab."""
 
-    def __init__(self):
-        self.cfg = config.load_config()
+    def __init__(self, cfg: config.Config | None = None):
+        self.cfg = cfg if cfg is not None else config.load_config()
         self.cfg.ensure_dirs()
         # auto-detect osu! once if not configured
         if not self.cfg.osu_exe:
@@ -46,6 +46,33 @@ class AppContext:
         config.save_config(self.cfg)
 
 
+def _heal_paths(cfg: config.Config, headless: bool) -> pathheal.Diagnosis | None:
+    """Self-heal working-folder paths if the app folder moved (item 20).
+
+    ``relocated`` in an interactive run asks the user to confirm before re-pointing;
+    a ``fresh`` diagnosis (or any headless run) applies silently so the folder
+    structure lands next to the exe. Returns the applied Diagnosis, or None.
+    """
+    diag = pathheal.diagnose(cfg, config.app_root())
+    if not diag.has_changes():
+        return None
+    if not headless and diag.status == "relocated":
+        i18n = I18N(cfg.language)
+        changes = "\n".join(pathheal.summary_lines(diag))
+        box = QMessageBox()
+        box.setIcon(QMessageBox.Warning)
+        box.setWindowTitle(i18n.t("path_heal_title"))
+        box.setText(i18n.t("path_heal_body", base=diag.base, changes=changes))
+        apply_btn = box.addButton(i18n.t("path_heal_apply"), QMessageBox.AcceptRole)
+        box.addButton(i18n.t("path_heal_keep"), QMessageBox.RejectRole)
+        box.exec()
+        if box.clickedButton() is not apply_btn:
+            return None
+    pathheal.apply_fix(cfg, diag)
+    config.save_config(cfg)
+    return diag
+
+
 def run() -> int:
     argv = sys.argv[1:]
     if "--version" in argv:
@@ -55,7 +82,10 @@ def run() -> int:
     app = QApplication(sys.argv)
     app.setApplicationName("osu! Archive Manager")
     app.setWindowIcon(QIcon(asset_path("icon.png")))
-    ctx = AppContext()
+
+    cfg = config.load_config()
+    healed = _heal_paths(cfg, headless="--selftest" in argv)
+    ctx = AppContext(cfg)
     qss = load_stylesheet(ctx.cfg.theme)
 
     if "--selftest" in argv:
@@ -67,6 +97,8 @@ def run() -> int:
 
     app.setStyleSheet(qss)
     ctx.log.info("APP_START", version=__version__, root=str(ctx.cfg.root))
+    if healed is not None:
+        ctx.log.info("PATH_HEAL", status=healed.status, root=str(ctx.cfg.root))
 
     splash_pix = QPixmap(asset_path("splash.png"))
     splash = QSplashScreen(splash_pix) if not splash_pix.isNull() else None

@@ -169,6 +169,21 @@ STRINGS: dict[str, dict[str, str]] = {
               "buraya yapıştır ve güncelle. Featured/Spotlight vb. gerçekten eksik "
               "paketleri işaretlememizi sağlar."},
 
+    # Folder self-heal (item 20)
+    "path_heal_title": {"en": "Folder location changed",
+                        "tr": "Klasör konumu değişti"},
+    "path_heal_body": {
+        "en": "The folders saved in your settings were not found at their old "
+              "location. The app is now running from:\n\n{base}\n\nThe folders "
+              "below were found here. Set these as the new locations?\n\n{changes}",
+        "tr": "Ayarlarda kayıtlı klasörler eski konumlarında bulunamadı. Uygulama "
+              "şu an şuradan çalışıyor:\n\n{base}\n\nAşağıdaki klasörler burada "
+              "bulundu. Bunları yeni konum olarak ayarlayayım mı?\n\n{changes}"},
+    "path_heal_apply": {"en": "Use these locations", "tr": "Bu konumları kullan"},
+    "path_heal_keep": {"en": "Keep old settings", "tr": "Eski ayarları koru"},
+    "path_heal_applied": {"en": "Folder locations updated to this folder.",
+                          "tr": "Klasör konumları bu klasöre göre güncellendi."},
+
     # Theme display names
     "theme_pink-white": {"en": "Pink · Light", "tr": "Pembe · Açık"},
     "theme_pink-dark": {"en": "Pink · Dark", "tr": "Pembe · Koyu"},
