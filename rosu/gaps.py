@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Gap / "red row" detection — confidence aware.
 
 A row is only shown red when we *genuinely know* a pack is missing:

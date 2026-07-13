@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Auto-import songs already installed in an osu! client (item 15).
 
 PURE helpers (no Qt): locate osu!(stable) and osu!lazer, turn what's installed

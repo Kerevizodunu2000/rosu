@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Minimal dictionary-based i18n for the user-facing UI (English default, Turkish).
 
 Only strings the user sees are translated; logs, code and the Excel report stay

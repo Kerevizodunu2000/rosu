@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """A determinate 0→100 progress panel showing the current archive and beatmap.
 
     <archive>.zip

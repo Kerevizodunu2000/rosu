@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Tests for multi-format archive reading + extra-file detection (items 24, 25)."""
 import io
 import tarfile

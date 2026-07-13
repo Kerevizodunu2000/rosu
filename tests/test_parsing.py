@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Unit tests for rosu.parsing using real-world sample names."""
 from rosu.parsing import parse_pack_name, parse_osz_entry, split_artist_title
 

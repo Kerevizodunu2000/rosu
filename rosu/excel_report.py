@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Generate ``tracking.xlsx`` from the database — one sheet per pack category.
 
 Only confirmed-missing packs are drawn red (Standard numeric gaps, or anything a

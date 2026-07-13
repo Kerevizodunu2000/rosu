@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Theme stylesheets generated from palettes.
 
 Generating QSS from a palette (instead of hand-writing one file per theme)

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Logs tab: live view of today's log file, links to the format doc and Excel."""
 from __future__ import annotations
 

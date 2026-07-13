@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Unit tests for rosu.pathheal — folder self-heal after a move (item 20)."""
 from rosu.config import Config
 from rosu.pathheal import diagnose, apply_fix, CANONICAL_DIRS

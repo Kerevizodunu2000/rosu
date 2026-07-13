@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Pure parsing helpers: pack .zip names and .osz entries -> structured data.
 
 Kept free of I/O so it can be unit-tested exhaustively. Everything here is a

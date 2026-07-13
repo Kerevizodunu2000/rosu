@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Uniform read access to pack archives — zip, tar(.gz/.bz2/.xz) and 7z (item 24).
 
 Extraction elsewhere only needs to (a) list the members and (b) stream a chosen

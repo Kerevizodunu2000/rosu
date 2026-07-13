@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """osu! Archive Manager.
 
 A desktop tool that extracts osu! beatmap pack archives (.zip) into a flat

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """SQLite persistence layer — the single source of truth ("memory").
 
 Holds three domains:

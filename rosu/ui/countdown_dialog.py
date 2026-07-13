@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """A confirm dialog whose action button is gated behind a visible countdown.
 
 Used for a destructive, irreversible-feeling action (deleting the Library's

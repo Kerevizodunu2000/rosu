@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Application configuration: paths, language, theme and toggles.
 
 The config is a small JSON file (``config.json``) that lives next to the

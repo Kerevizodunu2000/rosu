@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Search tab: relevance-ranked query over the music memory, with metadata.
 
 Search runs off the UI thread and is debounced, so typing never freezes the app

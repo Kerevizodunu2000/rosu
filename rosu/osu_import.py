@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Bulk-import .osz files into osu!lazer via its command-line / IPC pipeline.
 
 osu!lazer imports any beatmap archive passed as a command-line argument. Because

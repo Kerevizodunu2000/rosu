@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Self-heal working-folder paths when the app (or its folder) has moved — item 20.
 
 ``config.json`` stores absolute paths for Packs/Output/Library/data/logs. If the

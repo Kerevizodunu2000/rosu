@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Scan, pre-check and extract pack .zip archives into the flat Output folder.
 
 Extraction is *flat*: every ``.osz`` inside a pack lands directly in Output,

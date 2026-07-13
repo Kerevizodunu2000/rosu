@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Read rich metadata from the .osu difficulty files inside an .osz beatmap set.
 
 An ``.osz`` is a zip whose ``.osu`` files are plain-text beatmaps. We read a

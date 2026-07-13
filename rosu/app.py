@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Application bootstrap: build the context, apply the theme, show the window."""
 from __future__ import annotations
 

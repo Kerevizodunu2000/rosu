@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """High-level orchestration used by the UI — no Qt here, so it stays testable.
 
 Each method combines the lower-level modules (extractor / library / excel / osu

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Tests for the pure-Python auto-import helpers (item 15, stable side)."""
 import zipfile
 

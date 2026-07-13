@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """QThread wrapper that runs a Services method off the UI thread.
 
 Signals are named to avoid clashing with QThread's own ``finished`` signal.

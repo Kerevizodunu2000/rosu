@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Icon design lab for Rosu — exports the concept icons and generates the
 geometric-rose variations (the direction picked from round 1: concept #15).
 

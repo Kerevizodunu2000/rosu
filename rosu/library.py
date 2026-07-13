@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Copy Output -> Library with deduplication, and refresh/disappearance tracking.
 
 Deduplication key is the beatmapset id (falling back to filename when a .osz has

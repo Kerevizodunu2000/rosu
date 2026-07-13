@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Structured, parseable logging for every user action and system event.
 
 Log lines are English and follow one fixed, machine-parseable shape so they can

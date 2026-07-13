@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Settings tab: language, theme, folders, osu! path, toggles and API reference."""
 from __future__ import annotations
 

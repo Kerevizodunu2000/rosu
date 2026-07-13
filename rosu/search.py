@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Relevance-ranked music search.
 
 The database only does broad substring recall; ranking happens here so results

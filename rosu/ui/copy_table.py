@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """A QTableWidget with several clipboard behaviours and typed sorting.
 
 * **Single click** on a row copies a clean name (for a red "missing" row this is

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Unit tests for the search/browse DB helpers rewritten for perf (item 10/11)."""
 from rosu.db import Database
 

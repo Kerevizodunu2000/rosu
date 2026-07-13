@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Main window: a tabbed shell hosting the five feature tabs."""
 from __future__ import annotations
 

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Dashboard tab: scan count, the four action buttons, and progress feedback."""
 from __future__ import annotations
 

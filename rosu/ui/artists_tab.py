@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Artists tab: artists ranked by song count; click one to see their songs."""
 from __future__ import annotations
 

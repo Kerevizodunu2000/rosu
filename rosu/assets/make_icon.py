@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Generate Rosu's app icon + splash from the chosen geometric-rose design.
 
 Run:  python -m rosu.assets.make_icon

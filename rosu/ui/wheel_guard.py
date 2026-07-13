@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Stop combo boxes from changing value on an accidental mouse-wheel scroll.
 
 On a wheel event over a combo, instead of silently stepping through the options

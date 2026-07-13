@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Optional osu! API v2 client: fetch the authoritative beatmap-pack list.
 
 With a reference of every published pack we can tell, for *any* category

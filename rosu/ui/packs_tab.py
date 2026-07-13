@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Packs tab: every pack grouped by category, with confirmed red gaps, search."""
 from __future__ import annotations
 
