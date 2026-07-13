@@ -7,6 +7,9 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   windows:
     runs-on: windows-latest
@@ -20,20 +23,24 @@ jobs:
       - name: Run tests
         run: python -m pytest tests/ -q
       - name: Build single .exe
-        run: pyinstaller osu-archiver.spec
+        run: pyinstaller rosu.spec
       - name: Smoke-test the frozen build
-        run: dist/osu-archiver.exe --selftest
-      - name: Upload artifact
+        run: dist/rosu.exe --selftest
+      - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: osu-archiver-windows
-          path: dist/osu-archiver.exe
-      - name: Attach to release
+          name: rosu-windows
+          path: dist/rosu.exe
+      - name: Rename asset for release
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: cp dist/rosu.exe "dist/rosu-${GITHUB_REF_NAME}-win64.exe"
+      - name: Attach exe to the GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/osu-archiver.exe
+          files: dist/rosu-${{ github.ref_name }}-win64.exe
 
-  # macOS build is intentionally deferred (see README "Gelecek planları").
-  # Enable later by adding a macos-latest job that runs the same steps and
+  # macOS build is intentionally deferred (see README "Roadmap").
+  # Enable it later by adding a macos-latest job that runs the same steps and
   # packages a .app/.dmg with PyInstaller.
