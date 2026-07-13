@@ -1,4 +1,4 @@
-"""Run with ``python -m osu_archiver``."""
+"""Run with ``python -m rosu``."""
 import sys
 
 from .app import run

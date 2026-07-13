@@ -1,5 +1,5 @@
-"""Unit tests for osu_archiver.gaps (confidence-aware)."""
-from osu_archiver.gaps import (
+"""Unit tests for rosu.gaps (confidence-aware)."""
+from rosu.gaps import (
     missing_numbers, build_numbered_rows, build_spotlight_rows, build_rows,
     build_reference_rows,
 )

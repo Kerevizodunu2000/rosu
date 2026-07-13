@@ -1,5 +1,5 @@
-"""Unit tests for the relevance ranker in osu_archiver.search."""
-from osu_archiver.search import rank
+"""Unit tests for the relevance ranker in rosu.search."""
+from rosu.search import rank
 
 
 def _row(id_, name):

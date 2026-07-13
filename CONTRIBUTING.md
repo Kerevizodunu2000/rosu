@@ -22,7 +22,7 @@ python -m pytest tests/ -q    # run the test suite
 ## Guidelines
 
 - **Code, comments, logs, and commit messages are English.** Only the user-facing
-  UI is localized (EN/TR — see `osu_archiver/i18n.py`).
+  UI is localized (EN/TR — see `rosu/i18n.py`).
 - Keep the layered structure: pure logic (`parsing`, `gaps`, `search`, …) stays
   I/O-free and unit-tested; `services.py` orchestrates; the `ui/` layer stays thin
   and runs work off the UI thread via `workers.py`.

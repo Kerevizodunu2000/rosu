@@ -1,5 +1,5 @@
-"""Unit tests for osu_archiver.parsing using real-world sample names."""
-from osu_archiver.parsing import parse_pack_name, parse_osz_entry, split_artist_title
+"""Unit tests for rosu.parsing using real-world sample names."""
+from rosu.parsing import parse_pack_name, parse_osz_entry, split_artist_title
 
 
 def test_standard_pack():

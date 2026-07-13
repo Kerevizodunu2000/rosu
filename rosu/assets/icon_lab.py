@@ -1,7 +1,7 @@
 """Icon design lab for Rosu — exports the concept icons and generates the
 geometric-rose variations (the direction picked from round 1: concept #15).
 
-Run:  python -m osu_archiver.assets.icon_lab
+Run:  python -m rosu.assets.icon_lab
 Outputs (all vector SVG, plus PNG for the pure-path round-2 set):
     docs/icons/round1/*.svg          the 20 round-1 concepts (archived, not lost)
     docs/icons/round1.html           the round-1 gallery (self-contained)

@@ -204,13 +204,13 @@ class Services:
 
     def _lazer_helper(self):
         """Locate the bundled lazer-export .exe (works in the dev tree and the
-        frozen exe, where PyInstaller extracts data under _MEIPASS/osu_archiver)."""
+        frozen exe, where PyInstaller extracts data under _MEIPASS/rosu)."""
         import sys
         name = "RosuLazerExport.exe"
         candidates = [Path(__file__).resolve().parent / "assets" / "lazer_export" / name]
         meipass = getattr(sys, "_MEIPASS", None)
         if meipass:
-            candidates.append(Path(meipass) / "osu_archiver" / "assets" / "lazer_export" / name)
+            candidates.append(Path(meipass) / "rosu" / "assets" / "lazer_export" / name)
         for p in candidates:
             if p.exists():
                 return p

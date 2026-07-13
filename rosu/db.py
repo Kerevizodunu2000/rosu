@@ -335,7 +335,7 @@ class Database:
     def search_candidates(self, query: str, limit: int = 2000) -> list[dict]:
         """Broad substring recall over the searchable fields.
 
-        Ranking is done in :mod:`osu_archiver.search`. Sources are NOT attached
+        Ranking is done in :mod:`rosu.search`. Sources are NOT attached
         here — that would be one JOIN per candidate (an N+1 that froze the UI on
         common words). The caller attaches sources in bulk to the *displayed*
         rows only, via :meth:`attach_sources_bulk`.

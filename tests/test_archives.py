@@ -3,9 +3,9 @@ import io
 import tarfile
 import zipfile
 
-from osu_archiver import archives, extractor
-from osu_archiver.db import Database
-from osu_archiver.parsing import parse_pack_name
+from rosu import archives, extractor
+from rosu.db import Database
+from rosu.parsing import parse_pack_name
 
 
 def _make_zip(path):

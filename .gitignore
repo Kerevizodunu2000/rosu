@@ -24,7 +24,7 @@ venv/
 /osu-archiver.exe
 *.exe
 # ...but DO keep the bundled lazer-export helper (a build input for rosu.exe)
-!osu_archiver/assets/lazer_export/RosuLazerExport.exe
+!rosu/assets/lazer_export/RosuLazerExport.exe
 
 # .NET build output for the lazer helper
 tools/RosuLazerExport/bin/

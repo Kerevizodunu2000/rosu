@@ -1,7 +1,7 @@
 """Tests for the pure-Python auto-import helpers (item 15, stable side)."""
 import zipfile
 
-from osu_archiver import client_import as ci
+from rosu import client_import as ci
 
 
 def test_id_from_folder_prefix(tmp_path):

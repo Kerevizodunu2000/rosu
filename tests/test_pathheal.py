@@ -1,6 +1,6 @@
-"""Unit tests for osu_archiver.pathheal — folder self-heal after a move (item 20)."""
-from osu_archiver.config import Config
-from osu_archiver.pathheal import diagnose, apply_fix, CANONICAL_DIRS
+"""Unit tests for rosu.pathheal — folder self-heal after a move (item 20)."""
+from rosu.config import Config
+from rosu.pathheal import diagnose, apply_fix, CANONICAL_DIRS
 
 
 def _cfg(root, **over):
@@ -41,7 +41,7 @@ def test_relocated_detects_data_next_to_exe(tmp_path):
     # Config points at an OLD location that no longer exists; the app now lives
     # in `base`, which already holds the real folders (Library has data).
     old = tmp_path / "Old"          # never created -> stale
-    base = tmp_path / "osu_archiver"
+    base = tmp_path / "rosu"
     base.mkdir()
     _make_dirs(base, ["Packs", "Output", "Library", "data", "logs"],
                with_data=["Library", "data"])
@@ -65,7 +65,7 @@ def test_relocated_when_stale_dirs_are_empty_junk(tmp_path):
     old = tmp_path / "Osu"          # unrelated folder; archiver left empty dirs here
     _make_dirs(old, ["Packs", "Output", "Library", "data", "logs"])
     (old / "data" / "memory.db").write_text("tiny", encoding="utf-8")  # near-empty db
-    base = tmp_path / "osu_archiver"
+    base = tmp_path / "rosu"
     base.mkdir()
     _make_dirs(base, ["Packs", "Output", "Library", "data", "logs"])
     for i in range(20):             # real Library has many .osz
@@ -95,7 +95,7 @@ def test_partial_leaves_valid_custom_paths(tmp_path):
     # The app moved (old root gone) and most folders are now next to the exe,
     # but the user keeps Library on another drive at a path that STILL exists.
     old = tmp_path / "Old"                      # stale root, never created
-    base = tmp_path / "osu_archiver"
+    base = tmp_path / "rosu"
     base.mkdir()
     _make_dirs(base, ["Packs", "Output", "data", "logs"], with_data=["data"])
     bigdrive = tmp_path / "BigDrive"
@@ -114,7 +114,7 @@ def test_partial_leaves_valid_custom_paths(tmp_path):
 
 def test_apply_fix_mutates_config(tmp_path):
     old = tmp_path / "Old"
-    base = tmp_path / "osu_archiver"
+    base = tmp_path / "rosu"
     base.mkdir()
     _make_dirs(base, ["Packs", "Output", "Library", "data", "logs"],
                with_data=["Library"])

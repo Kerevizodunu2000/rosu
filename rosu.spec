@@ -9,12 +9,12 @@ a = Analysis(
     pathex=[],
     binaries=[],
     datas=[
-        ('osu_archiver/assets/icon.png', 'osu_archiver/assets'),
-        ('osu_archiver/assets/icon.ico', 'osu_archiver/assets'),
-        ('osu_archiver/assets/splash.png', 'osu_archiver/assets'),
+        ('rosu/assets/icon.png', 'rosu/assets'),
+        ('rosu/assets/icon.ico', 'rosu/assets'),
+        ('rosu/assets/splash.png', 'rosu/assets'),
         # self-contained .NET helper that re-exports osu!lazer beatmapsets (item 15)
-        ('osu_archiver/assets/lazer_export/RosuLazerExport.exe',
-         'osu_archiver/assets/lazer_export'),
+        ('rosu/assets/lazer_export/RosuLazerExport.exe',
+         'rosu/assets/lazer_export'),
     ],
     hiddenimports=['send2trash', 'send2trash.plat_win', 'rapidfuzz',
                    'py7zr', 'pyppmd', 'pybcj', 'brotli', 'inflate64',
@@ -50,5 +50,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='osu_archiver/assets/icon.ico',
+    icon='rosu/assets/icon.ico',
 )

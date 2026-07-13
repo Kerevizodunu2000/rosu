@@ -17,10 +17,10 @@ no .NET runtime):
 ```bash
 dotnet publish -c Release
 cp bin/Release/net8.0/win-x64/publish/RosuLazerExport.exe \
-   ../../osu_archiver/assets/lazer_export/RosuLazerExport.exe
+   ../../rosu/assets/lazer_export/RosuLazerExport.exe
 ```
 
-The committed `osu_archiver/assets/lazer_export/RosuLazerExport.exe` is that output;
+The committed `rosu/assets/lazer_export/RosuLazerExport.exe` is that output;
 Rosu bundles it (see `rosu.spec`) and invokes it via `services.import_from_lazer`.
 
 ## Run

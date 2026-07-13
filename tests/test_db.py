@@ -1,5 +1,5 @@
 """Unit tests for the search/browse DB helpers rewritten for perf (item 10/11)."""
-from osu_archiver.db import Database
+from rosu.db import Database
 
 
 def _mk(tmp_path):
