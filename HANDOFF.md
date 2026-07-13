@@ -11,13 +11,18 @@ osu! beatmap pack archives. Location: **`C:\Desktop\Osu`**. Ships as a single **
 (no install for end users). Will be published on **GitHub, versioned**. macOS is a future goal
 (Qt is cross-platform; add a macOS CI job later — no code rewrite).
 
-**Status: v0.3.0 shipped and verified.** Location moved to **`C:\Desktop\osu_archiver\`**
-(the app now self-heals stale config paths — item 20). Runnable exe:
-**`C:\Desktop\osu_archiver\osu-archiver.exe`** (`--version`→`0.3.0`, `--selftest`→OK).
+**Status: v0.5.0 shipped and verified. The app is now named "Rosu" (rose + osu!).**
+Location **`C:\Desktop\osu_archiver\`** (self-heals stale paths — item 20). Runnable exe:
+**`C:\Desktop\osu_archiver\rosu.exe`** (built from `rosu.spec`; `--version`→`0.5.0`, `--selftest`→OK).
+Icon = geometric rose (white facets on osu! pink); `assets/icon_lab.py` regenerates it.
+Python package stays `osu_archiver` internally. GitHub: **github.com/Kerevizodunu2000/rosu** (private).
 
 > **Roadmap & design of record (v0.3→v0.8):**
 > `docs/superpowers/specs/2026-07-13-osu-archiver-v0.3-to-v0.8-roadmap-design.md`.
-> Version history: `CHANGELOG.md`. Repo is now under **git** (tags `v0.2.0`, `v0.3.0`).
+> Version history: `CHANGELOG.md`. Repo under **git**, tags `v0.2.0`…`v0.5.0` pushed.
+> **Done:** v0.3 (items 20,4,5,6,7,9) · v0.4 (10,11,3,13,22,8,12,14) · v0.5 (2,23,19+rebrand).
+> **Next:** v0.6 (16,17,18,24,25) → v0.7 auto-import (15) → v0.8 Drive (11) → final report (26).
+> Commits must NOT add a Claude co-author trailer (user wants only their name in Contributors).
 
 UI language: **EN default + TR** (Settings). All background/code/logs are **English only**.
 
