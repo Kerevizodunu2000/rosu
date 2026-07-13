@@ -79,4 +79,6 @@ def search(db, query: str, limit: int = 500) -> list[dict]:
     if not query.strip():
         return []
     candidates = db.search_candidates(query)
-    return rank(candidates, query, limit)
+    ranked = rank(candidates, query, limit)
+    db.attach_sources_bulk(ranked)  # only the displayed rows — no N+1
+    return ranked

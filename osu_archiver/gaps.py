@@ -17,6 +17,7 @@ from __future__ import annotations
 from .models import (
     CAT_SPOTLIGHTS, CONFIDENT_GAP_CATEGORIES, SEASON_INDEX, GapRow,
 )
+from .parsing import series_mode
 
 
 # --- Numbered series --------------------------------------------------------
@@ -42,7 +43,10 @@ def build_numbered_rows(series: str, present: list[dict],
         if p is not None:
             rows.append(_present_row(series, p))
         elif show_gaps:
-            rows.append(GapRow(series=series, present=False, number=n))
+            # Fill Code (series+number) and Mode (from the series prefix) so a red
+            # missing row isn't blank in those columns (item 8).
+            rows.append(GapRow(series=series, present=False, number=n,
+                               code=f"{series}{n}", mode=series_mode(series)))
     return rows
 
 

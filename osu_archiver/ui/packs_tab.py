@@ -3,7 +3,8 @@ from __future__ import annotations
 
 from PySide6.QtGui import QBrush, QColor
 from PySide6.QtWidgets import (
-    QComboBox, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QVBoxLayout, QWidget,
+    QCheckBox, QComboBox, QHBoxLayout, QHeaderView, QLabel, QLineEdit,
+    QVBoxLayout, QWidget,
 )
 
 from ..gaps import _present_row
@@ -28,9 +29,12 @@ class PacksTab(QWidget):
         top = QHBoxLayout()
         self.search = QLineEdit()
         self.search.textChanged.connect(self._apply_filter)
+        self.cb_missing = QCheckBox()
+        self.cb_missing.toggled.connect(self._apply_filter)
         self.filter = QComboBox()
         self.filter.currentIndexChanged.connect(self._apply_filter)
         top.addWidget(self.search, 1)
+        top.addWidget(self.cb_missing)
         top.addWidget(self.filter)
         root.addLayout(top)
 
@@ -44,11 +48,24 @@ class PacksTab(QWidget):
 
     def retranslate(self) -> None:
         self.search.setPlaceholderText(self.ctx.t("packs_search_placeholder"))
+        self.cb_missing.setText(self.ctx.t("only_missing"))
         self.hint.setText(self.ctx.t("copy_hint"))
+        self.table.set_menu_labels(self.ctx.t("copy_names_action"),
+                                   self.ctx.t("copy_table_action"))
         self._reload_filter_options()
 
     def on_shown(self) -> None:
         self.reload()
+
+    def focus_missing(self) -> None:
+        """Jump here from the Dashboard banner showing only the missing rows
+        (item 12): reset category to All and tick 'Only missing'."""
+        self.filter.blockSignals(True)
+        self.filter.setCurrentIndex(0)  # "All"
+        self.filter.blockSignals(False)
+        self.search.clear()
+        self.cb_missing.setChecked(True)  # triggers _apply_filter
+        self._apply_filter()
 
     def _reload_filter_options(self) -> None:
         current = self.filter.currentText()
@@ -82,8 +99,11 @@ class PacksTab(QWidget):
     def _apply_filter(self) -> None:
         text = self.search.text().strip().casefold()
         cat = self.filter.currentText() or "All"
+        missing_only = self.cb_missing.isChecked()
         shown = []
         for category, gr, full in self._rows:
+            if missing_only and gr.present:
+                continue
             if cat not in ("All", category):
                 continue
             if text:

@@ -45,6 +45,11 @@ class MainWindow(QMainWindow):
         self.retranslate()
 
     # -- shared operations ---------------------------------------------------
+    def show_missing_packs(self) -> None:
+        """Dashboard 'possibly missing' link -> Packs tab, only-missing view (item 12)."""
+        self.tabs.setCurrentWidget(self.packs)   # fires on_shown -> reload
+        self.packs.focus_missing()
+
     def apply_theme(self, theme: str) -> None:
         self.app.setStyleSheet(load_stylesheet(theme))
 

@@ -1,12 +1,18 @@
-"""Search tab: relevance-ranked query over the music memory, with metadata."""
+"""Search tab: relevance-ranked query over the music memory, with metadata.
+
+Search runs off the UI thread and is debounced, so typing never freezes the app
+even on a large library (item 10). An empty box lists everything so the library
+is browsable (item 11).
+"""
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QHBoxLayout, QHeaderView, QLabel, QLineEdit, QPushButton, QVBoxLayout, QWidget,
 )
 
 from ..i18n import human_duration
+from ..workers import Worker
 from .copy_table import CopyTable, SortItem
 
 
@@ -19,6 +25,9 @@ class SearchTab(QWidget):
         super().__init__()
         self.mw = main_window
         self.ctx = main_window.ctx
+        self._threads: list[Worker] = []
+        self._search_seq = 0        # ignore results from superseded searches
+        self._loaded_once = False
 
         root = QVBoxLayout(self)
         root.setContentsMargins(18, 18, 18, 18)
@@ -26,8 +35,7 @@ class SearchTab(QWidget):
 
         row = QHBoxLayout()
         self.box = QLineEdit()
-        self.box.returnPressed.connect(self.do_search)
-        self.box.textChanged.connect(self._maybe_live)
+        self.box.returnPressed.connect(self.do_search)          # Enter = search now
         self.btn = QPushButton()
         self.btn.clicked.connect(self.do_search)
         row.addWidget(self.box, 1)
@@ -41,7 +49,27 @@ class SearchTab(QWidget):
 
         self.table = CopyTable(name_column=0)
         self.table.setColumnCount(len(self._KEYS))
+        self._setup_columns()
         root.addWidget(self.table, 1)
+
+        # Debounced live search: wait until typing pauses (~250 ms) before running.
+        self._debounce = QTimer(self)
+        self._debounce.setSingleShot(True)
+        self._debounce.setInterval(250)
+        self._debounce.timeout.connect(self.do_search)
+        self.box.textChanged.connect(lambda _=None: self._debounce.start())
+
+    def _setup_columns(self) -> None:
+        """Size columns once: Name stretches, the rest auto-fit to content.
+
+        ``setResizeContentsPrecision(50)`` samples only 50 rows when measuring, so
+        auto-fit stays cheap even when browsing the whole library (items 10 & 22).
+        """
+        header = self.table.horizontalHeader()
+        header.setResizeContentsPrecision(50)
+        header.setSectionResizeMode(0, QHeaderView.Stretch)
+        for c in range(1, len(self._KEYS)):
+            header.setSectionResizeMode(c, QHeaderView.ResizeToContents)
 
     def retranslate(self) -> None:
         t = self.ctx.t
@@ -49,25 +77,39 @@ class SearchTab(QWidget):
         self.btn.setText(t("tab_search"))
         self.hint.setText(t("copy_hint"))
         self.table.setHorizontalHeaderLabels([t(k) for k in self._KEYS])
-        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        self.table.set_menu_labels(t("copy_names_action"), t("copy_table_action"))
 
-    def _maybe_live(self, text: str) -> None:
-        if len(text.strip()) >= 2:
+    def on_shown(self) -> None:
+        # First time the tab is opened, show the full library so it's browsable.
+        if not self._loaded_once:
+            self._loaded_once = True
             self.do_search()
-        elif not text.strip():
-            self.table.setRowCount(0)
-            self.result.setText("")
 
     def do_search(self) -> None:
+        self._debounce.stop()
         query = self.box.text().strip()
-        if not query:
-            self.table.setRowCount(0)
-            self.result.setText("")
-            return
-        rows = self.ctx.services.search(query)
+        self._search_seq += 1
+        seq = self._search_seq
+        self.result.setText(self.ctx.t("working"))
+        w = Worker(self.ctx.services.search, query)
+        self._threads.append(w)
+        w.succeeded.connect(lambda rows, s=seq, q=query: self._on_results(rows, s, q))
+        w.failed.connect(self._on_failed)
+        w.finished.connect(lambda: self._threads.remove(w) if w in self._threads else None)
+        w.start()
+
+    def _on_failed(self, msg: str) -> None:
+        self.result.setText(msg)
+
+    def _on_results(self, rows: list[dict], seq: int, query: str) -> None:
+        if seq != self._search_seq:
+            return  # a newer search already ran; drop this stale result
         self._populate(rows)
-        self.result.setText(self.ctx.t("search_have", n=len(rows)) if rows
-                            else self.ctx.t("search_none"))
+        if not query:
+            self.result.setText(self.ctx.t("browse_all", n=len(rows)))
+        else:
+            self.result.setText(self.ctx.t("search_have", n=len(rows)) if rows
+                                else self.ctx.t("search_none"))
 
     def _populate(self, rows: list[dict]) -> None:
         self.table.setSortingEnabled(False)
@@ -103,7 +145,3 @@ class SearchTab(QWidget):
             if full:
                 self.table.set_copy_value(r, 7, "; ".join(full))
         self.table.setSortingEnabled(True)
-        header = self.table.horizontalHeader()
-        for c in range(1, len(self._KEYS)):
-            header.setSectionResizeMode(c, QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(0, QHeaderView.Stretch)

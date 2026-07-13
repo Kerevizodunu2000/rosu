@@ -318,8 +318,10 @@ class Database:
     def search_candidates(self, query: str, limit: int = 2000) -> list[dict]:
         """Broad substring recall over the searchable fields.
 
-        Ranking is done in :mod:`osu_archiver.search`; this only gathers
-        candidates (with their sources attached).
+        Ranking is done in :mod:`osu_archiver.search`. Sources are NOT attached
+        here — that would be one JOIN per candidate (an N+1 that froze the UI on
+        common words). The caller attaches sources in bulk to the *displayed*
+        rows only, via :meth:`attach_sources_bulk`.
         """
         q = f"%{query.strip()}%"
         with self._lock:
@@ -333,10 +335,40 @@ class Database:
                       OR CAST(beatmapset_id AS TEXT) LIKE ?
                    LIMIT ?""",
                 (q, q, q, q, q, q, limit))
-            rows = [dict(r) for r in cur.fetchall()]
-            for r in rows:
-                self._attach_sources(r)
-            return rows
+            return [dict(r) for r in cur.fetchall()]
+
+    def all_tracks(self, limit: int = 5000) -> list[dict]:
+        """Every track, name-sorted — the default browse listing (item 11)."""
+        with self._lock:
+            cur = self._conn.execute(
+                "SELECT * FROM tracks ORDER BY display_name COLLATE NOCASE LIMIT ?",
+                (limit,))
+            return [dict(r) for r in cur.fetchall()]
+
+    def attach_sources_bulk(self, rows: list[dict]) -> None:
+        """Attach source packs to many rows in one pass (no N+1).
+
+        Fetches all their sources with a single (chunked) query and groups them
+        in Python, so a 500-row result costs a couple of queries, not 500.
+        """
+        ids = [r["id"] for r in rows if r.get("id") is not None]
+        by_track: dict[int, list] = {}
+        with self._lock:
+            for i in range(0, len(ids), 900):  # stay under SQLite's variable cap
+                chunk = ids[i:i + 900]
+                ph = ",".join("?" * len(chunk))
+                cur = self._conn.execute(
+                    f"""SELECT ts.track_id AS tid, p.code, p.full_name, ts.subfolder
+                        FROM track_sources ts LEFT JOIN packs p ON p.id=ts.pack_id
+                        WHERE ts.track_id IN ({ph}) ORDER BY p.code""", chunk)
+                for r in cur.fetchall():
+                    by_track.setdefault(r["tid"], []).append(r)
+        for row in rows:
+            srcs = by_track.get(row["id"], [])
+            row["sources"] = [
+                f"{s['code']}/{s['subfolder']}" if s["subfolder"] else (s["code"] or "?")
+                for s in srcs]
+            row["source_full"] = [(s["full_name"] or s["code"] or "?") for s in srcs]
 
     def _sources_for(self, track_id: int) -> list[dict]:
         """Return each source pack as {code, full_name, subfolder}."""
@@ -363,14 +395,27 @@ class Database:
         track_row["source_full"] = [s["full_name"] for s in srcs]
 
     # -- artists -------------------------------------------------------------
-    def artists_by_count(self, descending: bool = True) -> list[dict]:
+    _ARTIST_METRICS = {"count": "song_count", "avg_length": "avg_length",
+                       "avg_bpm": "avg_bpm"}
+
+    def artists_ranked(self, metric: str = "count",
+                       descending: bool = True) -> list[dict]:
+        """Per-artist aggregates ranked by song count, avg length or avg BPM
+        (item 14). Artists with no data for the chosen metric sort last."""
+        col = self._ARTIST_METRICS.get(metric, "song_count")
         order = "DESC" if descending else "ASC"
         with self._lock:
             cur = self._conn.execute(
-                f"""SELECT artist, COUNT(*) AS song_count FROM tracks
-                    WHERE artist IS NOT NULL AND artist <> ''
-                    GROUP BY artist ORDER BY song_count {order}, artist ASC""")
+                f"""SELECT artist, COUNT(*) AS song_count,
+                           AVG(NULLIF(length_seconds, 0)) AS avg_length,
+                           AVG(NULLIF(bpm, 0)) AS avg_bpm
+                    FROM tracks WHERE artist IS NOT NULL AND artist <> ''
+                    GROUP BY artist
+                    ORDER BY ({col} IS NULL), {col} {order}, artist ASC""")
             return [dict(r) for r in cur.fetchall()]
+
+    def artists_by_count(self, descending: bool = True) -> list[dict]:
+        return self.artists_ranked("count", descending)
 
     def tracks_by_artist(self, artist: str) -> list[dict]:
         with self._lock:

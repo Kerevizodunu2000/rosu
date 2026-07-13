@@ -40,6 +40,7 @@ class DashboardTab(QWidget):
         root.addWidget(self.count_label)
         self.banner = QLabel(objectName="banner")
         self.banner.setWordWrap(True)
+        self.banner.linkActivated.connect(lambda _: self.mw.show_missing_packs())
         root.addWidget(self.banner)
 
         btn_row = QHBoxLayout()
@@ -142,7 +143,9 @@ class DashboardTab(QWidget):
             shown = ", ".join(items[:14])
             if len(items) > 14:
                 shown += f"  (+{len(items) - 14})"
-            self.banner.setText(self.ctx.t("missing_banner", items=shown))
+            link = self.ctx.t("missing_show_link")
+            self.banner.setText(self.ctx.t("missing_banner", items=shown)
+                                + f"  <a href='#missing'>{link}</a>")
             self.banner.setVisible(True)
         else:
             self.banner.setVisible(False)

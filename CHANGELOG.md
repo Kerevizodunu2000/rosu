@@ -10,8 +10,39 @@ the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-Roadmap for v0.4.0 → v0.8.0 is tracked in
+Roadmap for v0.5.0 → v0.8.0 is tracked in
 `docs/superpowers/specs/2026-07-13-osu-archiver-v0.3-to-v0.8-roadmap-design.md`.
+
+## [0.4.0] — 2026-07-13
+
+Search & tables: the search no longer freezes, the library is browsable, and the
+tables are more useful.
+
+### Fixed
+- **Search freeze (item 10)**: typing a common word (e.g. "hardcore") froze the app.
+  Root cause was an N+1 query — one JOIN per candidate row to attach its source
+  packs, on every keystroke. Now sources are attached in one bulk query to only the
+  displayed rows, the search runs off the UI thread, and keystrokes are debounced
+  (~250 ms). Searching "hardcore" over 1225 tracks dropped from a freeze to ~2 ms.
+
+### Added
+- **Browse the whole library (item 11)**: an empty search box now lists every track,
+  name-sorted, so the library is browsable without typing.
+- **Double-click a cell to copy just that field (item 3)** — id, source, BPM, etc.
+- **Right-click → "Copy names"** copies the selected rows' names, one per line — a
+  reliable way to grab a multi-selection's names, distinct from Ctrl+C's full TSV
+  (item 13).
+- **Dashboard "possibly missing" is now a link (item 12)** → jumps to the Packs tab
+  filtered to only the missing rows (new "Only missing" toggle there).
+- **Artist sort options (item 14)**: longest/shortest average length and
+  highest/lowest average BPM, plus new Avg length / Avg BPM columns.
+
+### Changed
+- **Code & Mode filled for red missing rows (item 8)**: a missing Standard pack row
+  now shows its Code (series+number, e.g. `S1821`) and Mode (from the series), so
+  those columns aren't blank.
+- **Column sizing (item 22)**: table columns size once (name stretches, the rest
+  auto-fit), sampling ~50 rows so auto-fit stays cheap even when browsing everything.
 
 ## [0.3.0] — 2026-07-13
 
@@ -96,7 +127,8 @@ Initial release. The core archive-management pipeline.
 - **EN/TR** localization; English-only code/logs.
 - Single-file **PyInstaller** build (`osu-archiver.spec`) + GitHub Actions build workflow.
 
-[Unreleased]: https://example.invalid/compare/v0.3.0...HEAD
+[Unreleased]: https://example.invalid/compare/v0.4.0...HEAD
+[0.4.0]: https://example.invalid/releases/tag/v0.4.0
 [0.3.0]: https://example.invalid/releases/tag/v0.3.0
 [0.2.0]: https://example.invalid/releases/tag/v0.2.0
 [0.1.0]: https://example.invalid/releases/tag/v0.1.0

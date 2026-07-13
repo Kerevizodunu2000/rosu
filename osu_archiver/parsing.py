@@ -49,6 +49,11 @@ _SERIES_CATEGORY = {
 def pack_category(series: str | None) -> str:
     return _SERIES_CATEGORY.get(series or "", CAT_OTHER)
 
+
+def series_mode(series: str | None) -> str | None:
+    """Implied game mode for a standard series prefix (S/SM/ST/SC), else None."""
+    return _SERIES_MODE.get(series or "")
+
 # --- .osz entry -------------------------------------------------------------
 # "2138180 Luna - Toki to Uta.osz" -> id 2138180, rest "Luna - Toki to Uta"
 _OSZ_RE = re.compile(r"^(\d+)\s+(.+)\.osz$", re.IGNORECASE)

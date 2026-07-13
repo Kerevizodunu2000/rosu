@@ -34,7 +34,7 @@ class ArtistsTab(QWidget):
 
         splitter = QSplitter(Qt.Horizontal)
         self.artists = CopyTable(name_column=0)
-        self.artists.setColumnCount(2)
+        self.artists.setColumnCount(4)  # Artist, Songs, Avg length, Avg BPM
         self.artists.cellClicked.connect(self._on_artist)
         self.songs = CopyTable(name_column=0)
         self.songs.setColumnCount(len(self._SONG_KEYS))
@@ -47,34 +47,55 @@ class ArtistsTab(QWidget):
         self.selected = QLabel(objectName="status")
         root.addWidget(self.selected)
 
+    _SORTS = (
+        ("sort_most", ("count", True)),
+        ("sort_least", ("count", False)),
+        ("sort_len_long", ("avg_length", True)),
+        ("sort_len_short", ("avg_length", False)),
+        ("sort_bpm_high", ("avg_bpm", True)),
+        ("sort_bpm_low", ("avg_bpm", False)),
+    )
+
     def retranslate(self) -> None:
         t = self.ctx.t
         self.sort_label.setText(t("sort_by"))
         cur = self.sort.currentIndex()
         self.sort.blockSignals(True)
         self.sort.clear()
-        self.sort.addItem(t("sort_most"), True)
-        self.sort.addItem(t("sort_least"), False)
+        for key, data in self._SORTS:
+            self.sort.addItem(t(key), data)
         self.sort.setCurrentIndex(cur if cur >= 0 else 0)
         self.sort.blockSignals(False)
-        self.artists.setHorizontalHeaderLabels([t("col_artist"), t("col_songs")])
+        self.artists.setHorizontalHeaderLabels(
+            [t("col_artist"), t("col_songs"), t("col_avg_length"), t("col_avg_bpm")])
+        self.artists.set_menu_labels(t("copy_names_action"), t("copy_table_action"))
         self.songs.setHorizontalHeaderLabels([t(k) for k in self._SONG_KEYS])
+        self.songs.set_menu_labels(t("copy_names_action"), t("copy_table_action"))
 
     def on_shown(self) -> None:
         self.reload()
 
     def reload(self) -> None:
-        descending = self.sort.currentData()
-        if descending is None:
-            descending = True
-        rows = self.ctx.services.artists(descending)
+        metric, descending = self.sort.currentData() or ("count", True)
+        rows = self.ctx.services.artists(metric, descending)
         self.artists.setSortingEnabled(False)
         self.artists.setRowCount(len(rows))
         for r, a in enumerate(rows):
+            avg_len = a.get("avg_length")
+            avg_bpm = a.get("avg_bpm")
             self.artists.setItem(r, 0, SortItem(a["artist"]))
             self.artists.setItem(r, 1, SortItem(str(a["song_count"]), a["song_count"]))
+            self.artists.setItem(r, 2, SortItem(
+                human_duration(int(avg_len)) if avg_len else "", avg_len or 0))
+            self.artists.setItem(r, 3, SortItem(
+                f"{avg_bpm:.0f}" if avg_bpm else "", avg_bpm or 0.0))
+            for c in (1, 2, 3):
+                self.artists.item(r, c).setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self.artists.setSortingEnabled(True)
-        self.artists.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        header = self.artists.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.Stretch)
+        for c in (1, 2, 3):
+            header.setSectionResizeMode(c, QHeaderView.ResizeToContents)
         self.songs.setRowCount(0)
         self.selected.setText("")
 

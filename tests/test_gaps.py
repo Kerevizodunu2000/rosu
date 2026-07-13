@@ -23,6 +23,17 @@ def test_numbered_rows_with_gaps():
     assert [r.present for r in rows] == [True, True, False, True]
 
 
+def test_numbered_missing_row_has_code_and_mode():
+    # A red gap row must not be blank in Code/Mode (item 8): code = series+number,
+    # mode derived from the series prefix.
+    rows = build_numbered_rows("SM", _numbered([361, 363]), show_gaps=True)
+    missing = [r for r in rows if not r.present]
+    assert len(missing) == 1
+    assert missing[0].number == 362
+    assert missing[0].code == "SM362"
+    assert missing[0].mode == "osu!mania"
+
+
 def test_numbered_rows_without_gaps():
     rows = build_numbered_rows("FQ", _numbered([92, 94, 97]), show_gaps=False)
     assert [r.number for r in rows] == [92, 94, 97]

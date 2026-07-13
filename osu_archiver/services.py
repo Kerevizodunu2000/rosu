@@ -191,13 +191,19 @@ class Services:
         return numbered
 
     # -- search --------------------------------------------------------------
-    def search(self, query: str) -> list[dict]:
-        rows = search.search(self.db, query)
-        self.log.info("SEARCH", query=query, results=len(rows))
+    def search(self, query: str, progress=None) -> list[dict]:
+        """Ranked search, or the full name-sorted listing when the box is empty
+        (item 11). ``progress`` is accepted so it can run in a Worker thread."""
+        if query.strip():
+            rows = search.search(self.db, query)
+        else:
+            rows = self.db.all_tracks()
+            self.db.attach_sources_bulk(rows)
+        self.log.info("SEARCH", query=query or "(all)", results=len(rows))
         return rows
 
-    def artists(self, descending: bool = True) -> list[dict]:
-        return self.db.artists_by_count(descending)
+    def artists(self, metric: str = "count", descending: bool = True) -> list[dict]:
+        return self.db.artists_ranked(metric, descending)
 
     def tracks_by_artist(self, artist: str) -> list[dict]:
         return self.db.tracks_by_artist(artist)
