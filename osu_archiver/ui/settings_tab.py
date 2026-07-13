@@ -107,6 +107,23 @@ class SettingsTab(QWidget):
         ref_row.addWidget(self.lbl_ref_status, 1)
         root.addLayout(ref_row)
 
+        # Auto-import from installed osu! clients (item 15)
+        self.lbl_import = QLabel(objectName="h1")
+        root.addWidget(self.lbl_import)
+        self.lbl_import_help = QLabel(objectName="status")
+        self.lbl_import_help.setWordWrap(True)
+        root.addWidget(self.lbl_import_help)
+        imp_row = QHBoxLayout()
+        self.btn_import_stable = QPushButton(objectName="secondary")
+        self.btn_import_lazer = QPushButton(objectName="secondary")
+        self.btn_import_stable.clicked.connect(lambda: self._run_import("stable"))
+        self.btn_import_lazer.clicked.connect(lambda: self._run_import("lazer"))
+        self.lbl_import_status = QLabel(objectName="status")
+        imp_row.addWidget(self.btn_import_stable)
+        imp_row.addWidget(self.btn_import_lazer)
+        imp_row.addWidget(self.lbl_import_status, 1)
+        root.addLayout(imp_row)
+
         root.addStretch(1)
         bottom = QHBoxLayout()
         self.saved_label = QLabel(objectName="status")
@@ -170,6 +187,10 @@ class SettingsTab(QWidget):
         self.lbl_cid.setText(t("set_client_id"))
         self.lbl_cs.setText(t("set_client_secret"))
         self.btn_reference.setText(t("btn_update_reference"))
+        self.lbl_import.setText(t("set_import"))
+        self.lbl_import_help.setText(t("set_import_help"))
+        self.btn_import_stable.setText(t("btn_import_stable"))
+        self.btn_import_lazer.setText(t("btn_import_lazer"))
         self.btn_save.setText(t("btn_save"))
         self._refresh_reference_status()
 
@@ -226,6 +247,48 @@ class SettingsTab(QWidget):
     def _reference_failed(self, msg) -> None:
         self.btn_reference.setEnabled(True)
         self._refresh_reference_status()
+        QMessageBox.critical(self, self.ctx.t("app_title"), msg)
+
+    # -- auto-import from installed osu! clients (item 15) -------------------
+    def _run_import(self, client: str) -> None:
+        self.btn_import_stable.setEnabled(False)
+        self.btn_import_lazer.setEnabled(False)
+        self.lbl_import_status.setText(self.ctx.t("working"))
+        fn = (self.ctx.services.import_from_lazer if client == "lazer"
+              else self.ctx.services.import_from_stable)
+        w = Worker(fn)
+        self._threads.append(w)
+        w.progressed.connect(self._on_import_progress)
+        w.succeeded.connect(self._on_import_done)
+        w.failed.connect(self._on_import_failed)
+        w.finished.connect(lambda: self._threads.remove(w) if w in self._threads else None)
+        w.start()
+
+    def _on_import_progress(self, msg) -> None:
+        if isinstance(msg, dict) and msg.get("kind") == "import" and "done" in msg:
+            self.lbl_import_status.setText(f"{msg['done']}/{msg['total']}")
+        elif isinstance(msg, str):
+            self.lbl_import_status.setText(msg)
+
+    def _on_import_done(self, res) -> None:
+        self.btn_import_stable.setEnabled(True)
+        self.btn_import_lazer.setEnabled(True)
+        t = self.ctx.t
+        client = "osu!lazer" if res.get("source") == "lazer" else "osu!(stable)"
+        if not res.get("found"):
+            self.lbl_import_status.setText(t("import_client_none", client=client))
+            return
+        if res.get("error"):
+            self.lbl_import_status.setText(t("import_lazer_error"))
+            return
+        self.lbl_import_status.setText(t("import_client_result", client=client,
+                                       new=res.get("new", 0), dup=res.get("duplicates", 0)))
+        self.mw.dashboard.refresh_scan()
+        self.mw.packs.reload()
+
+    def _on_import_failed(self, msg) -> None:
+        self.btn_import_stable.setEnabled(True)
+        self.btn_import_lazer.setEnabled(True)
         QMessageBox.critical(self, self.ctx.t("app_title"), msg)
 
     # -- physical-copy toggle (guarded delete) -------------------------------

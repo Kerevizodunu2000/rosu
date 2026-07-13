@@ -126,6 +126,85 @@ class Services:
                       dup_ids=res["dup_ids"][:50])
         return res
 
+    # -- auto-import from installed osu! clients (item 15) -------------------
+    def import_osz_folder(self, folder, progress=None) -> dict:
+        """Dedup every .osz/.olz in ``folder`` into the Library (shared by the
+        stable, lazer and manual import paths)."""
+        cb = (lambda name: progress({"kind": "import", "name": name})) if progress else None
+        res = library.copy_to_library(folder, self.cfg.library_path, self.db,
+                                      now_iso(), self.cfg.library_physical_copy, cb)
+        self.rebuild()
+        self.log.info("LIBRARY_COPY", new=res["new"], duplicates=res["duplicates"],
+                      dup_ids=res["dup_ids"][:50])
+        return res
+
+    def import_from_stable(self, progress=None) -> dict:
+        """Zip osu!(stable) Songs/ folders we don't already have into Output, then
+        dedup them into the Library."""
+        from . import client_import
+        songs = client_import.stable_songs_dir()
+        if not songs:
+            return {"source": "stable", "found": False}
+        known = self.db.known_track_ids()
+        folders = list(client_import.iter_stable_folders(songs))
+        made = 0
+        for i, folder in enumerate(folders, 1):
+            bid = client_import.beatmapset_id_for_folder(folder)
+            if bid is None or bid in known:
+                continue  # unresolved id, or we already have this set
+            osz = self.cfg.output_path / client_import._osz_name_for(folder, bid)
+            if not osz.exists():
+                client_import.zip_folder_to_osz(folder, osz)
+            made += 1
+            if progress:
+                progress({"kind": "import", "done": i, "total": len(folders)})
+        res = self.import_osz_folder(self.cfg.output_path, progress)
+        self.log.info("CLIENT_IMPORT", client="stable", added=res["new"], made=made)
+        return {"source": "stable", "found": True, "made": made, **res}
+
+    def import_from_lazer(self, progress=None) -> dict:
+        """Run the bundled .NET helper to re-export osu!lazer beatmapsets from its
+        Realm + files store, then dedup the exported .osz into the Library."""
+        import shutil
+        import subprocess
+        import tempfile
+        from . import client_import
+        data = client_import.lazer_data_dir()
+        if not data:
+            return {"source": "lazer", "found": False}
+        helper = self._lazer_helper()
+        if not helper:
+            return {"source": "lazer", "found": True, "error": "helper_missing"}
+        out = Path(tempfile.mkdtemp(prefix="rosu_lazer_"))
+        try:
+            if progress:
+                progress("Exporting from osu!lazer…")
+            proc = subprocess.run([str(helper), str(data), str(out)],
+                                  capture_output=True, text=True, timeout=3600)
+            if proc.returncode != 0:
+                self.log.error("import:lazer", (proc.stderr or "helper failed")[:300])
+                return {"source": "lazer", "found": True, "error": "helper_failed",
+                        "detail": (proc.stderr or "")[:300]}
+            res = self.import_osz_folder(out, progress)
+            self.log.info("CLIENT_IMPORT", client="lazer", added=res["new"], made=0)
+            return {"source": "lazer", "found": True, **res}
+        finally:
+            shutil.rmtree(out, ignore_errors=True)
+
+    def _lazer_helper(self):
+        """Locate the bundled lazer-export .exe (works in the dev tree and the
+        frozen exe, where PyInstaller extracts data under _MEIPASS/osu_archiver)."""
+        import sys
+        name = "RosuLazerExport.exe"
+        candidates = [Path(__file__).resolve().parent / "assets" / "lazer_export" / name]
+        meipass = getattr(sys, "_MEIPASS", None)
+        if meipass:
+            candidates.append(Path(meipass) / "osu_archiver" / "assets" / "lazer_export" / name)
+        for p in candidates:
+            if p.exists():
+                return p
+        return None
+
     def purge_library_files(self, progress=None) -> dict:
         """Move every physical .osz in Library to the Recycle Bin but keep the
         rows as memory-only (item 17). Metadata stays; the files go."""

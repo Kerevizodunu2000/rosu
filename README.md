@@ -25,6 +25,10 @@ bir kütüphaneye yedekleyen ve tek tuşla osu!lazer'a aktaran masaüstü uygula
 5. **Arşiv Verisini Yenile** — `Library/`'yi tarar; elle eklenenleri hafızaya
    alır, kaybolanları tarih damgasıyla "kayboldu" olarak işaretler.
 6. **Müzik Ara** — sanatçı/başlık/ID ile arama ("Hatsune Miku" → tüm eşleşmeler).
+7. **Yüklü şarkıları içe aktar** (Ayarlar) — bilgisayarında zaten kurulu olan
+   beatmap'leri doğrudan kütüphanene çeker: **osu!(stable)** `Songs/` klasörlerini
+   ve **osu!lazer**'i (gömülü, .NET gerektirmeyen bir yardımcı `client.realm`'i
+   okuyup `.osz`'ye dönüştürür). Tekilleştirme otomatik.
 
 ## Seri boşluk (kırmızı) mantığı — yalnızca GERÇEK eksikler
 

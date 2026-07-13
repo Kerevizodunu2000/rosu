@@ -10,8 +10,27 @@ the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-Roadmap for v0.7.0 → v0.8.0 is tracked in
+Roadmap for v0.8.0 (Google Drive) is tracked in
 `docs/superpowers/specs/2026-07-13-osu-archiver-v0.3-to-v0.8-roadmap-design.md`.
+
+## [0.7.0] — 2026-07-13
+
+Auto-import the songs already installed in your osu! client (item 15).
+
+### Added
+- **Import from osu!(stable)** — detects the `Songs/` folder (honouring a custom
+  `BeatmapDirectory`), zips each installed beatmapset back into an `.osz`
+  (preserving storyboard/skin subfolders) and dedups it into the Library. Pure
+  Python; resolves the beatmapset id from the folder prefix or a `.osu`'s
+  `BeatmapSetID`, and skips sets you already have.
+- **Import from osu!lazer** — a bundled, self-contained .NET 8 helper
+  (`RosuLazerExport`) reads lazer's `client.realm` **dynamically + read-only**
+  (no schema-version coupling) and re-exports every submitted beatmapset from the
+  hash-addressed `files/` store into `.osz`, which Rosu then dedups into the
+  Library. Validated against a real 1200+ beatmap lazer install. Source in
+  `tools/RosuLazerExport/`.
+- Both live under **Settings → Import installed songs**, and run off the UI thread
+  with progress.
 
 ## [0.6.0] — 2026-07-13
 
@@ -170,7 +189,8 @@ Initial release. The core archive-management pipeline.
 - **EN/TR** localization; English-only code/logs.
 - Single-file **PyInstaller** build (`osu-archiver.spec`) + GitHub Actions build workflow.
 
-[Unreleased]: https://github.com/Kerevizodunu2000/rosu/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/Kerevizodunu2000/rosu/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/Kerevizodunu2000/rosu/releases/tag/v0.7.0
 [0.6.0]: https://github.com/Kerevizodunu2000/rosu/releases/tag/v0.6.0
 [0.5.0]: https://github.com/Kerevizodunu2000/rosu/releases/tag/v0.5.0
 [0.4.0]: https://github.com/Kerevizodunu2000/rosu/releases/tag/v0.4.0

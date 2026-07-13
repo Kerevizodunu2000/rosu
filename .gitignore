@@ -19,7 +19,14 @@ venv/
 /dist/
 *.spec.bak
 
-# Built executable (~54MB; distributed via GitHub Releases, not the repo)
+# Built executable (~94MB; distributed via GitHub Releases, not the repo)
 /rosu.exe
 /osu-archiver.exe
 *.exe
+# ...but DO keep the bundled lazer-export helper (a build input for rosu.exe)
+!osu_archiver/assets/lazer_export/RosuLazerExport.exe
+
+# .NET build output for the lazer helper
+tools/RosuLazerExport/bin/
+tools/RosuLazerExport/obj/
+tools/RosuLazerExport/FodyWeavers.xml

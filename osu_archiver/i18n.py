@@ -193,6 +193,25 @@ STRINGS: dict[str, dict[str, str]] = {
     "physical_off_done": {"en": "Moved {n} .osz from Library to Recycle Bin (info kept).",
                           "tr": "{n} .osz Library'den Geri Dönüşüm Kutusu'na taşındı (bilgiler korundu)."},
 
+    # Auto-import from installed osu! clients (item 15)
+    "set_import": {"en": "Import installed songs", "tr": "Yüklü şarkıları içe aktar"},
+    "set_import_help": {
+        "en": "Pull the beatmaps already installed in your osu! client straight into "
+              "your library (dedup is automatic). osu!lazer export bundles a helper — "
+              "close osu!lazer first for best results.",
+        "tr": "osu! istemcinde zaten yüklü beatmap'leri doğrudan kütüphanene çeker "
+              "(tekilleştirme otomatik). osu!lazer için en iyi sonuç için önce "
+              "osu!lazer'ı kapat."},
+    "btn_import_stable": {"en": "From osu!(stable)", "tr": "osu!(stable)'dan"},
+    "btn_import_lazer": {"en": "From osu!lazer", "tr": "osu!lazer'dan"},
+    "import_client_result": {"en": "{client}: {new} added, {dup} already had.",
+                             "tr": "{client}: {new} eklendi, {dup} zaten vardı."},
+    "import_client_none": {"en": "{client} not found on this PC.",
+                           "tr": "{client} bu bilgisayarda bulunamadı."},
+    "import_lazer_error": {
+        "en": "Couldn't read osu!lazer. Close osu!lazer and try again.",
+        "tr": "osu!lazer okunamadı. osu!lazer'ı kapatıp tekrar deneyin."},
+
     # Settings additions
     "set_auto_backup": {"en": "Auto-copy to Library after unpacking",
                         "tr": "Açtıktan sonra otomatik Library'e kopyala"},

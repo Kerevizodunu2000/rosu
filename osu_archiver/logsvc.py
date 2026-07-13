@@ -40,6 +40,7 @@ ACTIONS: dict[str, tuple[tuple[str, ...], str]] = {
     "OSU_IMPORT":    (("batch", "files"), "Button: Import to osu! sent a batch to osu!lazer"),
     "OSU_IMPORT_DONE": (("files", "batches"), "Import to osu! finished dispatching"),
     "REFRESH":       (("added", "disappeared", "present"), "Button: Refresh Library Data finished"),
+    "CLIENT_IMPORT": (("client", "added", "made"), "Auto-imported songs from an installed osu! client"),
     "REFERENCE_SYNC": (("packs",), "Fetched the authoritative pack list from the osu! API"),
     "OSU_IMPORT_CANCEL": (("sent", "total"), "User cancelled osu! import dispatch"),
     "GAP_DETECT":    (("summary",), "Recomputed missing/red rows across all series"),
