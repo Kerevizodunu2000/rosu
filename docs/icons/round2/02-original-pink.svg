@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="256" height="256"><defs>
+<linearGradient id="gPink" x1="0" y1="0" x2="1" y2="1">
+  <stop offset="0" stop-color="#ff8ab5"/><stop offset="1" stop-color="#ff3d86"/></linearGradient>
+<linearGradient id="gRose" x1="0" y1="0" x2="1" y2="1">
+  <stop offset="0" stop-color="#8f2455"/><stop offset="1" stop-color="#3d1230"/></linearGradient>
+<linearGradient id="gInk" x1="0" y1="0" x2="1" y2="1">
+  <stop offset="0" stop-color="#2a1019"/><stop offset="1" stop-color="#120810"/></linearGradient>
+<linearGradient id="gGeo" x1="0" y1="0" x2="1" y2="1">
+  <stop offset="0" stop-color="#ffa0c6"/><stop offset="1" stop-color="#ff2f7d"/></linearGradient>
+<radialGradient id="gGlass" cx="0.38" cy="0.32" r="0.85">
+  <stop offset="0" stop-color="#ffe0ec"/><stop offset="0.5" stop-color="#ff77ac"/>
+  <stop offset="1" stop-color="#ff2f7d"/></radialGradient>
+<linearGradient id="gSoft" x1="0" y1="0" x2="0" y2="1">
+  <stop offset="0" stop-color="#ffe9f2"/><stop offset="1" stop-color="#ffd0e2"/></linearGradient>
+
+<path id="petal" d="M0 0 C 13 -9 13 -33 0 -43 C -13 -33 -13 -9 0 0 Z"/>
+<symbol id="bloom" viewBox="-50 -50 100 100"><g fill="currentColor">
+  <g opacity="0.95"><use href="#petal"/><use href="#petal" transform="rotate(72)"/>
+    <use href="#petal" transform="rotate(144)"/><use href="#petal" transform="rotate(216)"/>
+    <use href="#petal" transform="rotate(288)"/></g>
+  <g opacity="0.72" transform="rotate(36) scale(.6)"><use href="#petal"/>
+    <use href="#petal" transform="rotate(72)"/><use href="#petal" transform="rotate(144)"/>
+    <use href="#petal" transform="rotate(216)"/><use href="#petal" transform="rotate(288)"/></g>
+  <circle r="6.5" opacity="0.9"/></g></symbol>
+</defs><rect x="2" y="2" width="96" height="96" rx="24" fill="url(#gPink)"/><g transform="translate(50 50) scale(0.9)"><path d="M0 -26 L14 -8 L0 6 L-14 -8 Z" fill="#ffffff"/><path d="M0 6 L18 2 L10 22 Z" fill="#ffd0e2"/><path d="M0 6 L-18 2 L-10 22 Z" fill="#ffd0e2"/><path d="M0 6 L10 22 L-10 22 Z" fill="#ffb3d1"/><circle cy="-6" r="5" fill="#a5175a"/></g></svg>
