@@ -22,10 +22,11 @@ def now_iso() -> str:
 
 
 def _clear_osz(folder: Path) -> int:
+    from send2trash import send2trash
     n = 0
     for p in Path(folder).glob("*.osz"):
         try:
-            p.unlink()
+            send2trash(str(p))  # recoverable — matches the app's other guarded deletes
             n += 1
         except OSError:
             pass
@@ -38,6 +39,7 @@ class Services:
         self.db = db
         self.log = log
         self._cancel = threading.Event()  # cooperative cancel for osu! import
+        self._rebuild_lock = threading.Lock()  # serialize tracking.xlsx writes
 
     def request_cancel(self) -> None:
         self._cancel.set()
@@ -108,13 +110,22 @@ class Services:
         return result
 
     def rebuild(self) -> dict:
-        info = excel_report.build_report(self.db, self.cfg.excel_path,
-                                         self._reference())
-        summary = gaps.gap_summary(info["numbered_missing"])
-        self.log.info("GAP_DETECT", summary=summary)
-        self.log.info("EXCEL_WRITE", path=str(self.cfg.excel_path),
-                      sheets=len(info["sheets"]))
-        return info
+        # Serialize report writes so two workers (e.g. a Dashboard extract and a
+        # Settings import) can't corrupt tracking.xlsx by saving it at once.
+        with self._rebuild_lock:
+            try:
+                info = excel_report.build_report(self.db, self.cfg.excel_path,
+                                                 self._reference())
+            except PermissionError:
+                # Report is open in Excel (Windows file lock). Don't abort the
+                # pipeline — data is safe in the DB and re-renders next run.
+                self.log.info("EXCEL_LOCKED", path=str(self.cfg.excel_path))
+                return {"sheets": [], "numbered_missing": {}}
+            summary = gaps.gap_summary(info["numbered_missing"])
+            self.log.info("GAP_DETECT", summary=summary)
+            self.log.info("EXCEL_WRITE", path=str(self.cfg.excel_path),
+                          sheets=len(info["sheets"]))
+            return info
 
     # -- library -------------------------------------------------------------
     def copy_library(self, progress=None) -> dict:

@@ -93,6 +93,16 @@ def test_directory_entry_ignored():
     assert parse_osz_entry("osu!mania/") is None
 
 
+def test_osz_drive_letter_rejected():
+    # security: a drive-relative / ADS name like "D:evil.osz" has no "/" to split
+    # on, so it would survive as the flattened filename and escape the Output
+    # folder when joined as ``output_dir / filename`` on Windows. Must be rejected.
+    assert parse_osz_entry("D:evil.osz") is None
+    assert parse_osz_entry("1234 Artist - Title.osz:bad.osz") is None
+    # a normal nested entry with the same id must still parse fine
+    assert parse_osz_entry("osu!/1234 Artist - Title.osz") is not None
+
+
 def test_split_artist_title():
     assert split_artist_title("A - B") == ("A", "B")
     assert split_artist_title("NoDash") == ("", "NoDash")

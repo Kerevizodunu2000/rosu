@@ -23,6 +23,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import BinaryIO
 
+# Refuse to unpack a .7z whose declared uncompressed total is absurd (zip-bomb).
+_MAX_STAGE_BYTES = 30 * 1024 ** 3
+
 # suffix -> family. Longest suffixes are matched first (see archive_kind).
 _SUFFIXES = {
     ".zip": "zip",
@@ -116,6 +119,21 @@ class _SevenReader:
 
     def _stage(self) -> None:
         import py7zr
+        # Defense-in-depth against py7zr path-traversal CVEs (CVE-2022-44900,
+        # CVE-2026-23879): validate every member name and the total size BEFORE
+        # extracting, since extractall() writes the whole archive at once.
+        total = 0
+        with py7zr.SevenZipFile(self._path) as z:
+            for f in z.list():
+                if getattr(f, "is_directory", False):
+                    continue
+                name = f.filename or ""
+                norm = name.replace("\\", "/")
+                if norm.startswith("/") or ".." in norm.split("/") or ":" in name:
+                    raise ValueError(f"unsafe 7z member: {name!r}")
+                total += getattr(f, "uncompressed", 0) or 0
+        if total > _MAX_STAGE_BYTES:
+            raise ValueError(f"7z archive too large to unpack ({total} bytes)")
         self._tmp = Path(tempfile.mkdtemp(prefix="rosu7z_"))
         with py7zr.SevenZipFile(self._path) as z:
             z.extractall(path=str(self._tmp))

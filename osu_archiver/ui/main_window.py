@@ -71,3 +71,24 @@ class MainWindow(QMainWindow):
         widget = self.tabs.widget(index)
         if hasattr(widget, "on_shown"):
             widget.on_shown()
+
+    def closeEvent(self, event) -> None:
+        """Stop and join background workers before the app tears down the DB.
+
+        Without this, closing the window returns from ``app.exec()`` and
+        ``ctx.db.close()`` runs while a worker thread may still be using the DB
+        (``Cannot operate on a closed database``) or delivering a signal to an
+        already-deleted widget.
+        """
+        try:
+            self.ctx.services.request_cancel()
+        except Exception:
+            pass
+        for tab in self._ordered_tabs:
+            for w in list(getattr(tab, "_threads", [])):
+                try:
+                    if w.isRunning():
+                        w.wait(5000)  # give each worker up to 5s to finish
+                except RuntimeError:
+                    pass  # C++ object already gone
+        super().closeEvent(event)

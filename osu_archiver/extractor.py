@@ -16,6 +16,7 @@ from .osz_meta import read_osz_meta
 from .parsing import parse_osz_entry, parse_pack_name
 
 _CHUNK = 1 << 20  # 1 MiB streaming buffer
+_MAX_OSZ_BYTES = 500 * 1024 * 1024  # per-.osz cap (zip-bomb / disk-exhaustion guard)
 
 
 def archive_dialog_filter() -> str:
@@ -85,6 +86,7 @@ def extract_pack(archive_path: Path, parsed: ParsedPack, output_dir: Path, db,
     """
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
+    out_resolved = output_dir.resolve()
 
     subfolders: set[str] = set()
     extra_files: list[str] = []
@@ -99,12 +101,17 @@ def extract_pack(archive_path: Path, parsed: ParsedPack, output_dir: Path, db,
             if t is None:
                 continue
             try:
+                if m.size and m.size > _MAX_OSZ_BYTES:
+                    raise ValueError(f"oversize entry ({m.size} bytes)")
                 if t.subfolder:
                     subfolders.add(t.subfolder)
                 target = output_dir / t.filename
+                # Security: never let a crafted entry name escape the Output dir.
+                if target.resolve().parent != out_resolved:
+                    raise ValueError(f"unsafe entry path: {t.filename!r}")
                 if not (target.exists() and target.stat().st_size == m.size):
                     with r.open(m.name) as src:
-                        _stream_copy(src, target)
+                        _stream_copy(src, target, _MAX_OSZ_BYTES)
                 meta = read_osz_meta(target) if read_meta else None
                 track_id, _is_new = db.upsert_track(t, when, meta)
                 db.add_track_source(track_id, pack_id, t.subfolder, when)
@@ -119,15 +126,23 @@ def extract_pack(archive_path: Path, parsed: ParsedPack, output_dir: Path, db,
             "extra_files": extra_files}
 
 
-def _stream_copy(src: BinaryIO, target: Path) -> None:
+def _stream_copy(src: BinaryIO, target: Path, max_bytes: int | None = None) -> None:
     tmp = target.with_suffix(target.suffix + ".part")
-    with tmp.open("wb") as dst:
-        while True:
-            chunk = src.read(_CHUNK)
-            if not chunk:
-                break
-            dst.write(chunk)
-    tmp.replace(target)
+    written = 0
+    try:
+        with tmp.open("wb") as dst:
+            while True:
+                chunk = src.read(_CHUNK)
+                if not chunk:
+                    break
+                written += len(chunk)
+                if max_bytes is not None and written > max_bytes:
+                    raise ValueError(f"entry exceeds size cap ({max_bytes} bytes)")
+                dst.write(chunk)
+        tmp.replace(target)
+    except BaseException:
+        tmp.unlink(missing_ok=True)  # never leave a half-written .part behind
+        raise
 
 
 def dispose_zip(zip_path: Path, mode: str, processed_dir: Path) -> str:

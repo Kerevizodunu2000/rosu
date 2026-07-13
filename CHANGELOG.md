@@ -13,6 +13,40 @@ the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Roadmap for v0.8.0 (Google Drive) is tracked in
 `docs/superpowers/specs/2026-07-13-osu-archiver-v0.3-to-v0.8-roadmap-design.md`.
 
+## [0.7.1] — 2026-07-13
+
+Security & robustness hardening from a full code + security review (no new features).
+
+### Security
+- **Archive path-traversal hardening**: reject a drive-relative / ADS `.osz` entry
+  name such as `D:evil.osz` that could otherwise escape the flat Output folder on
+  Windows, plus a containment check so a written file can never land outside Output.
+  Pin **`py7zr>=1.1.3`** (fixes CVE-2022-44900 / CVE-2026-23879) and pre-validate
+  every `.7z` member name and total size before extracting.
+- **Decompression caps** (zip-bomb / disk-exhaustion guard): 500 MB per `.osz` and
+  a total ceiling before unpacking a `.7z`.
+
+### Fixed
+- **No more permanent loss of un-backed-up beatmaps**: clearing Output before a
+  re-extract now moves `.osz` to the Recycle Bin (Send2Trash) instead of an
+  unrecoverable delete — matching every other guarded deletion in the app.
+- **Stale Library copies are refreshed**: a re-uploaded beatmapset (same name,
+  different size) is now re-copied into the Library instead of being kept stale as
+  an "up-to-date" duplicate.
+- **Report write is crash-safe**: if `tracking.xlsx` is open in Excel, an
+  extract/import no longer aborts mid-run (which could strand freshly extracted
+  files) — it logs `EXCEL_LOCKED` and continues. Report writes are also serialized
+  so two background operations can't corrupt the workbook.
+- **Clean shutdown**: closing the window now cancels and joins background workers
+  before the database is closed, preventing "closed database" / deleted-widget
+  errors when quitting mid-operation.
+- **Reference sync survives rate limits**: an osu! API 429 now honours
+  `Retry-After` and retries the page instead of discarding the whole sync.
+- Corrected the cancelled-import toast (it counted beatmaps but said "batches").
+
+### Verified
+- 50 unit tests pass (added a regression test for the path-traversal guard).
+
 ## [0.7.0] — 2026-07-13
 
 Auto-import the songs already installed in your osu! client (item 15).
@@ -189,7 +223,8 @@ Initial release. The core archive-management pipeline.
 - **EN/TR** localization; English-only code/logs.
 - Single-file **PyInstaller** build (`osu-archiver.spec`) + GitHub Actions build workflow.
 
-[Unreleased]: https://github.com/Kerevizodunu2000/rosu/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/Kerevizodunu2000/rosu/compare/v0.7.1...HEAD
+[0.7.1]: https://github.com/Kerevizodunu2000/rosu/releases/tag/v0.7.1
 [0.7.0]: https://github.com/Kerevizodunu2000/rosu/releases/tag/v0.7.0
 [0.6.0]: https://github.com/Kerevizodunu2000/rosu/releases/tag/v0.6.0
 [0.5.0]: https://github.com/Kerevizodunu2000/rosu/releases/tag/v0.5.0

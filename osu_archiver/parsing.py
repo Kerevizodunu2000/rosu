@@ -137,6 +137,11 @@ def parse_osz_entry(entry_path: str, size_bytes: int = 0) -> ParsedTrack | None:
     subfolder = parts[-2] if len(parts) >= 2 else None
     if not filename.lower().endswith(".osz"):
         return None
+    # Security: reject a drive-relative / alternate-data-stream name such as
+    # "D:evil.osz" — with no "/" to split on it would survive as the flattened
+    # filename and, joined as ``output_dir / filename`` on Windows, escape Output.
+    if ":" in filename:
+        return None
 
     m = _OSZ_RE.match(filename)
     if m:

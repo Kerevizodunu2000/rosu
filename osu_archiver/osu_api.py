@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import datetime as _dt
 import json
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -62,6 +63,7 @@ def fetch_reference(client_id: str, client_secret: str, progress=None) -> dict:
     packs: list[dict] = []
     for pack_type in PACK_TYPES:
         cursor = None
+        retries = 0
         while True:
             query = {"type": pack_type}
             if cursor:
@@ -72,10 +74,19 @@ def fetch_reference(client_id: str, client_secret: str, progress=None) -> dict:
             except urllib.error.HTTPError as exc:
                 if exc.code in (404, 422):
                     break
+                if exc.code == 429 and retries < 5:
+                    # rate limited — honour Retry-After (or exponential backoff)
+                    # and retry the same page instead of discarding the whole sync.
+                    ra = exc.headers.get("Retry-After") if exc.headers else None
+                    delay = int(ra) if (ra and ra.isdigit()) else 2 ** retries
+                    time.sleep(min(delay, 60))
+                    retries += 1
+                    continue
                 raise OsuApiError(f"{pack_type}: HTTP {exc.code}") from exc
             except urllib.error.URLError as exc:
                 raise OsuApiError(f"{pack_type}: {exc}") from exc
 
+            retries = 0
             for bp in data.get("beatmap_packs", []):
                 packs.append(_normalize(bp, pack_type))
             if progress:

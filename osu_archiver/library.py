@@ -50,13 +50,16 @@ def copy_to_library(output_dir: Path, library_dir: Path, db, when: str,
 
         if physical_copy:
             target = library_dir / t.filename
-            if target.exists():
+            # Treat as an up-to-date duplicate only when the sizes match; a
+            # same-named file of a different size is a re-upload and must be
+            # refreshed (mirrors extractor.extract_pack's size guard).
+            if target.exists() and target.stat().st_size == src_path.stat().st_size:
                 duplicates += 1
                 dup_ids.append(t.beatmapset_id if t.beatmapset_id is not None
                                else t.filename)
                 db.set_library_state(track_id, True, "present", when)
             else:
-                shutil.copy2(src_path, target)
+                shutil.copy2(src_path, target)  # new, or refreshed on size change
                 new += 1
                 db.set_library_state(track_id, True, "present", when)
         else:  # memory-only mode

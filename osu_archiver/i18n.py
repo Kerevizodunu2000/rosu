@@ -169,8 +169,8 @@ STRINGS: dict[str, dict[str, str]] = {
               "arka planda tek tek içe aktarır, bu yüzden biraz sürebilir "
               "(~{eta}). Gönderimi istediğin an iptal edebilirsin."},
     "btn_cancel": {"en": "Cancel", "tr": "İptal"},
-    "import_cancelled": {"en": "Import cancelled ({sent}/{total} batches sent).",
-                         "tr": "Aktarım iptal edildi ({sent}/{total} parti gönderildi)."},
+    "import_cancelled": {"en": "Import cancelled ({sent}/{total} beatmaps sent).",
+                         "tr": "Aktarım iptal edildi ({sent}/{total} müzik gönderildi)."},
     "import_dispatching": {"en": "Dispatching batch {batch}/{total}…",
                            "tr": "Parti gönderiliyor {batch}/{total}…"},
     "osu_keep_open": {

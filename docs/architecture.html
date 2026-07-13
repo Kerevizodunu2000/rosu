@@ -1,0 +1,850 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rosu - Bagimlilik Agi</title>
+</head>
+<body>
+<style>
+  :root{
+    --bg:#f6efef; --surface:#fffdfd; --surface-2:#f2e7e8; --ink:#241a1b;
+    --muted:#705c5e; --line:#e6d6d7; --rose:#c81e30; --rose-deep:#8f1a24;
+    --diagram:#ffffff; --diagram-line:#e6d6d7;
+    --mono:ui-monospace,"Cascadia Code","Cascadia Mono","Segoe UI Mono",Consolas,"Liberation Mono",monospace;
+    --sans:"Segoe UI",system-ui,-apple-system,Roboto,"Helvetica Neue",Arial,sans-serif;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --bg:#140e0f; --surface:#1e1517; --surface-2:#281c1f; --ink:#f1e7e8;
+      --muted:#ab9498; --line:#38292c; --rose:#ef4a5a; --rose-deep:#f4808a;
+      --diagram:#fbf9f9; --diagram-line:#d9c8c9;
+    }
+  }
+  :root[data-theme="light"]{
+    --bg:#f6efef; --surface:#fffdfd; --surface-2:#f2e7e8; --ink:#241a1b;
+    --muted:#705c5e; --line:#e6d6d7; --rose:#c81e30; --rose-deep:#8f1a24;
+    --diagram:#ffffff; --diagram-line:#e6d6d7;
+  }
+  :root[data-theme="dark"]{
+    --bg:#140e0f; --surface:#1e1517; --surface-2:#281c1f; --ink:#f1e7e8;
+    --muted:#ab9498; --line:#38292c; --rose:#ef4a5a; --rose-deep:#f4808a;
+    --diagram:#fbf9f9; --diagram-line:#d9c8c9;
+  }
+
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:var(--sans); line-height:1.55;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1120px; margin:0 auto; padding:clamp(20px,5vw,56px) clamp(16px,4vw,40px) 64px}
+
+  .eyebrow{
+    font-family:var(--mono); font-size:.72rem; letter-spacing:.22em;
+    text-transform:uppercase; color:var(--rose); margin:0 0 14px;
+    display:flex; align-items:center; gap:10px;
+  }
+  .eyebrow::before{content:""; width:26px; height:2px; background:var(--rose); display:inline-block}
+  h1{
+    font-size:clamp(1.8rem,4.4vw,2.7rem); line-height:1.08; margin:0 0 12px;
+    font-weight:680; letter-spacing:-.015em; text-wrap:balance;
+  }
+  h1 .dim{color:var(--muted); font-weight:480}
+  .lede{max-width:64ch; color:var(--muted); font-size:1.02rem; margin:0 0 22px}
+  .lede b{color:var(--ink); font-weight:600}
+
+  .chips{display:flex; flex-wrap:wrap; gap:8px; margin:0 0 4px}
+  .chip{
+    font-family:var(--mono); font-size:.78rem; color:var(--ink);
+    background:var(--surface-2); border:1px solid var(--line);
+    padding:5px 11px; border-radius:999px; font-variant-numeric:tabular-nums;
+  }
+  .chip b{color:var(--rose); font-weight:700}
+
+  section{margin-top:34px}
+  .kicker{
+    font-family:var(--mono); font-size:.7rem; letter-spacing:.18em;
+    text-transform:uppercase; color:var(--muted); margin:0 0 12px;
+  }
+
+  /* legend */
+  .legend{
+    display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:18px;
+    background:var(--surface); border:1px solid var(--line); border-radius:16px;
+    padding:20px 22px;
+  }
+  .legend h3{margin:0 0 10px; font-size:.9rem; font-weight:640}
+  .scale{height:14px; border-radius:7px; border:1px solid var(--line);
+    background:linear-gradient(90deg,#f91010,#c23030,#8f2a2a,#5a2626)}
+  .scale-lab{display:flex; justify-content:space-between; margin-top:7px;
+    font-family:var(--mono); font-size:.72rem; color:var(--muted)}
+  .arrow-note{font-size:.9rem; color:var(--muted)}
+  .arrow-note code{font-family:var(--mono); font-size:.82rem; color:var(--ink);
+    background:var(--surface-2); padding:1px 6px; border-radius:6px}
+  .arrow-note .flow{color:var(--rose); font-weight:600}
+
+  /* reading guide */
+  .guide{display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:12px}
+  .node-card{
+    background:var(--surface); border:1px solid var(--line); border-radius:14px;
+    padding:14px 16px; border-left:3px solid var(--rose);
+  }
+  .node-card .name{font-family:var(--mono); font-size:.9rem; font-weight:700; color:var(--rose-deep)}
+  .node-card .role{font-size:.86rem; color:var(--muted); margin-top:4px}
+
+  /* diagram */
+  .diagram{border:1px solid var(--line); border-radius:16px; overflow:hidden; background:var(--surface)}
+  .toolbar{
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+    padding:12px 16px; border-bottom:1px solid var(--line); background:var(--surface);
+  }
+  .toolbar .title{font-family:var(--mono); font-size:.78rem; color:var(--muted)}
+  .controls{display:flex; gap:6px}
+  .controls button{
+    font-family:var(--mono); font-size:.9rem; color:var(--ink); cursor:pointer;
+    background:var(--surface-2); border:1px solid var(--line); border-radius:9px;
+    width:34px; height:32px; display:inline-flex; align-items:center; justify-content:center;
+    transition:background .15s, border-color .15s;
+  }
+  .controls button.wide{width:auto; padding:0 12px; font-size:.76rem; letter-spacing:.04em}
+  .controls button:hover{border-color:var(--rose); color:var(--rose)}
+  .controls button:focus-visible{outline:2px solid var(--rose); outline-offset:2px}
+
+  .stage{
+    position:relative; background:var(--diagram); overflow:hidden;
+    aspect-ratio:1378/657; max-height:78vh; cursor:grab; touch-action:none;
+  }
+  .stage.grabbing{cursor:grabbing}
+  .pan{width:100%; height:100%; transform-origin:0 0; will-change:transform}
+  .pan svg{width:100%; height:100%; display:block}
+  .hint{
+    position:absolute; left:14px; bottom:12px; font-family:var(--mono); font-size:.7rem;
+    color:#8a6f70; background:rgba(255,255,255,.82); padding:4px 9px; border-radius:8px;
+    border:1px solid var(--diagram-line); pointer-events:none;
+  }
+
+  footer{
+    margin-top:40px; padding-top:20px; border-top:1px solid var(--line);
+    font-family:var(--mono); font-size:.76rem; color:var(--muted);
+    display:flex; flex-wrap:wrap; gap:6px 18px;
+  }
+  footer .lead{color:var(--ink)}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+  <p class="eyebrow">Mimari · Bağımlılık ağı</p>
+  <h1>Rosu <span class="dim">— modül bağımlılık haritası</span></h1>
+  <p class="lede"><b>osu_archiver</b> Python paketinin iç import ağı. Her düğüm bir modül;
+  her ok, bir modülün başka bir modülü içe aktardığını gösterir. Dış kütüphaneler
+  (PySide6, openpyxl…) ve standart kütüphane bilinçli olarak dışarıda bırakıldı —
+  sadece <b>kendi mimarin</b>.</p>
+  <div class="chips">
+    <span class="chip"><b>25</b> modül</span>
+    <span class="chip"><b>63</b> bağımlılık oku</span>
+    <span class="chip">pydeps + Graphviz</span>
+    <span class="chip">osu_archiver.*</span>
+  </div>
+
+  <section>
+    <p class="kicker">Nasıl okunur</p>
+    <div class="legend">
+      <div>
+        <h3>Renk = katman derinliği</h3>
+        <div class="scale"></div>
+        <div class="scale-lab"><span>çekirdek · çok kullanılan</span><span>üst seviye · giriş</span></div>
+      </div>
+      <div>
+        <h3>Ok yönü = kullanım</h3>
+        <p class="arrow-note"><code>models</code> <span class="flow">→</span> <code>db</code>
+        şu demek: <b>db, models'i import ediyor</b>. Yani oklar düşük seviyeli
+        yaprak modüllerden (üstte) onları kullanan üst seviye modüllere (altta:
+        <code>app</code>, <code>__main__</code>) doğru akar.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <p class="kicker">Ağın kilit düğümleri</p>
+    <div class="guide">
+      <div class="node-card"><div class="name">models</div><div class="role">Veri sınıfları (ParsedPack/Track, ExtractPlan). Neredeyse her modül bunu import eder — en parlak çekirdek.</div></div>
+      <div class="node-card"><div class="name">services</div><div class="role">Qt'siz orkestrasyon merkezi: extractor + library + excel + osu import'u birleştirir. Ana toplayıcı hub.</div></div>
+      <div class="node-card"><div class="name">parsing</div><div class="role">Pack/.osz adı çözümleme. extractor, library ve gaps buradan beslenir.</div></div>
+      <div class="node-card"><div class="name">ui.main_window</div><div class="role">Tüm sekmeleri (dashboard, packs, search…) toplayan pencere; UI katmanının merkezi.</div></div>
+      <div class="node-card"><div class="name">app → __main__</div><div class="role">Uygulama girişi. Grafiğin en altı: her şeyin aktığı uç nokta.</div></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="diagram">
+      <div class="toolbar">
+        <span class="title">osu_archiver — import graph</span>
+        <div class="controls">
+          <button id="zout" title="Uzaklaş" aria-label="Uzaklaş">−</button>
+          <button id="zin" title="Yakınlaş" aria-label="Yakınlaş">+</button>
+          <button id="zfit" class="wide" title="Sığdır">SIĞDIR</button>
+        </div>
+      </div>
+      <div class="stage" id="stage">
+        <div class="pan" id="pan"><svg width="1378pt" height="657pt"
+ viewBox="0.00 0.00 1378.00 657.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 653.02)">
+<title>G</title><style>.edge>path:hover{stroke-width:8}</style>
+<polygon fill="white" stroke="none" points="-4,4 -4,-653.02 1374.03,-653.02 1374.03,4 -4,4"/>
+<!-- osu_archiver___main__ -->
+<g id="node1" class="node">
+<title>osu_archiver___main__</title><style>.edge>path:hover{stroke-width:8}</style>
+<ellipse fill="#a65959" stroke="black" cx="1062" cy="-18" rx="34.88" ry="18"/>
+<text xml:space="preserve" text-anchor="middle" x="1062" y="-14.5" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#ffffff">__main__</text>
+</g>
+<!-- osu_archiver_app -->
+<g id="node2" class="node">
+<title>osu_archiver_app</title><style>.edge>path:hover{stroke-width:8}</style>
+<ellipse fill="#723131" stroke="black" cx="1062" cy="-90" rx="27" ry="18"/>
+<text xml:space="preserve" text-anchor="middle" x="1062" y="-86.5" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#ffffff">app</text>
+</g>
+<!-- osu_archiver_app&#45;&gt;osu_archiver___main__ -->
+<g id="edge1" class="edge">
+<title>osu_archiver_app&#45;&gt;osu_archiver___main__</title><style>.edge>path:hover{stroke-width:8}</style>
+<path fill="none" stroke="black" d="M1062,-71.7C1062,-64.41 1062,-55.73 1062,-47.54"/>
+<polygon fill="#723131" stroke="black" points="1065.5,-47.62 1062,-37.62 1058.5,-47.62 1065.5,-47.62"/>
+</g>
+<!-- osu_archiver_archives -->
+<g id="node3" class="node">
+<title>osu_archiver_archives</title><style>.edge>path:hover{stroke-width:8}</style>
+<ellipse fill="#b65353" stroke="black" cx="290" cy="-545.14" rx="31.72" ry="18"/>
+<text xml:space="preserve" text-anchor="middle" x="290" y="-541.64" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#ffffff">archives</text>
+</g>
+<!-- osu_archiver_extractor -->
+<g id="node10" class="node">
+<title>osu_archiver_extractor</title><style>.edge>path:hover{stroke-width:8}</style>
+<ellipse fill="#a13535" stroke="black" cx="287" cy="-468.51" rx="32.62" ry="18"/>
+<text xml:space="preserve" text-anchor="middle" x="287" y="-465.01" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#ffffff">extractor</text>
+</g>
+<!-- osu_archiver_archives&#45;&gt;osu_archiver_extractor -->
+<g id="edge2" class="edge">
+<title>osu_archiver_archives&#45;&gt;osu_archiver_extractor</title><style>.edge>path:hover{stroke-width:8}</style>
+<path fill="none" stroke="black" d="M289.3,-526.83C288.96,-518.32 288.54,-507.84 288.15,-498.18"/>
+<polygon fill="#b65353" stroke="black" points="291.66,-498.35 287.76,-488.5 284.67,-498.63 291.66,-498.35"/>
+</g>
+<!-- osu_archiver_assets_icon_lab -->
+<g id="node4" class="node">
+<title>osu_archiver_assets_icon_lab</title><style>.edge>path:hover{stroke-width:8}</style>
+<ellipse fill="#b65353" stroke="black" cx="532" cy="-626.39" rx="36.77" ry="22.63"/>
+<text xml:space="preserve" text-anchor="middle" x="532" y="-628.89" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#ffffff">assets.</text>
+<text xml:space="preserve" text-anchor="middle" x="532" y="-616.89" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#ffffff">icon_lab</text>
+</g>
+<!-- osu_archiver_assets_make_icon -->
+<g id="node5" class="node">
+<title>osu_archiver_assets_make_icon</title><style>.edge>path:hover{stroke-width:8}</style>
+<ellipse fill="#995252" stroke="black" cx="532" cy="-545.14" rx="44.72" ry="22.63"/>
+<text xml:space="preserve" text-anchor="middle" x="532" y="-547.64" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#ffffff">assets.</text>
+<text xml:space="preserve" text-anchor="middle" x="532" y="-535.64" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#ffffff">make_icon</text>
+</g>
+<!-- osu_archiver_assets_icon_lab&#45;&gt;osu_archiver_assets_make_icon -->
+<g id="edge3" class="edge">
+<title>osu_archiver_assets_icon_lab&#45;&gt;osu_archiver_assets_make_icon</title><style>.edge>path:hover{stroke-width:8}</style>
+<path fill="none" stroke="black" d="M532,-603.32C532,-595.93 532,-587.52 532,-579.47"/>
+<polygon fill="#b65353" stroke="black" points="535.5,-579.61 532,-569.61 528.5,-579.61 535.5,-579.61"/>
+</g>
+<!-- osu_archiver_client_import -->
+<g id="node6" class="node">
+<title>osu_archiver_client_import</title><style>.edge>path:hover{stroke-width:8}</style>
+<ellipse fill="#b65353" stroke="black" cx="301" cy="-391.88" rx="43" ry="18"/>
+<text xml:space="preserve" text-anchor="middle" x="301" y="-388.38" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#ffffff">client_import</text>
+</g>
+<!-- osu_archiver_services -->
+<g id="node22" class="node">
+<title>osu_archiver_services</title><style>.edge>path:hover{stroke-width:8}</style>
+<ellipse fill="#6b2e2e" stroke="black" cx="337" cy="-310.63" rx="31.72" ry="18"/>
+<text xml:space="preserve" text-anchor="middle" x="337" y="-307.13" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#ffffff">services</text>
+</g>
+<!-- osu_archiver_client_import&#45;&gt;osu_archiver_services -->
+<g id="edge4" class="edge">
+<title>osu_archiver_client_import&#45;&gt;osu_archiver_services</title><style>.edge>path:hover{stroke-width:8}</style>
+<path fill="none" stroke="black" d="M308.81,-373.69C313.42,-363.54 319.35,-350.48 324.59,-338.95"/>
+<polygon fill="#b65353" stroke="black" points="327.75,-340.45 328.7,-329.9 321.38,-337.55 327.75,-340.45"/>
+</g>
+<!-- osu_archiver_config -->
+<g id="node7" class="node">
+<title>osu_archiver_config</title><style>.edge>path:hover{stroke-width:8}</style>
+<ellipse fill="#ce3b3b" stroke="black" cx="137" cy="-468.51" rx="27" ry="18"/>
+<text xml:space="preserve" text-anchor="middle" x="137" y="-465.01" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#ffffff">config</text>
+</g>
+<!-- osu_archiver_config&#45;&gt;osu_archiver_app -->
+<g id="edge5" class="edge">
+<title>osu_archiver_config&#45;&gt;osu_archiver_app</title><style>.edge>path:hover{stroke-width:8}</style>
+<path fill="none" stroke="black" d="M127.95,-451.14C120.69,-435.78 112.8,-412.32 120,-392.88"/>
+<path fill="none" stroke="black" d="M120,-390.88C132.24,-357.85 93.1,-334.36 120,-311.63"/>
+</g>
+<!-- osu_archiver_config&#45;&gt;osu_archiver_services -->
+<g id="edge6" class="edge">
+<title>osu_archiver_config&#45;&gt;osu_archiver_services</title><style>.edge>path:hover{stroke-width:8}</style>
+<path fill="none" stroke="black" d="M120,-390.88C132.64,-356.77 236.33,-331.21 295.68,-319.2"/>
+<polygon fill="#ce3b3b" stroke="black" points="296.31,-322.65 305.44,-317.28 294.95,-315.78 296.31,-322.65"/>
+</g>
+<!-- osu_archiver_ui_settings_tab -->
+<g id="node34" class="node">
+<title>osu_archiver_ui_settings_tab</title><style>.edge>path:hover{stroke-width:8}</style>
+<ellipse fill="#883a3a" stroke="black" cx="969" cy="-310.63" rx="48.97" ry="22.63"/>
+<text xml:space="preserve" text-anchor="middle" x="969" y="-313.13" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#ffffff">ui.</text>
+<text xml:space="preserve" text-anchor="middle" x="969" y="-301.13" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#ffffff">settings_tab</text>
+</g>
+<!-- osu_archiver_config&#45;&gt;osu_archiver_ui_settings_tab -->
+<g id="edge7" class="edge">
+<title>osu_archiver_config&#45;&gt;osu_archiver_ui_settings_tab</title><style>.edge>path:hover{stroke-width:8}</style>
+<path fill="none" stroke="black" d="M800,-390.88C845.93,-376.38 895.49,-352 928.99,-334.11"/>
+<polygon fill="#ce3b3b" stroke="black" points="930.38,-337.33 937.51,-329.5 927.05,-331.17 930.38,-337.33"/>
+<path fill="none" stroke="black" d="M157.43,-456.22C162.39,-453.94 167.78,-451.84 173,-450.51 304.13,-417 659.4,-473.94 781,-414.51 792.5,-408.89 787.8,-396.73 800,-392.88"/>
+</g>
+<!-- osu_archiver_db -->
+<g id="node8" class="node">
+<title>osu_archiver_db</title><style>.edge>path:hover{stroke-width:8}</style>
+<ellipse fill="#ac4949" stroke="black" cx="27" cy="-468.51" rx="27" ry="18"/>
+<text xml:space="preserve" text-anchor="middle" x="27" y="-465.01" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#ffffff">db</text>
+</g>
+<!-- osu_archiver_db&#45;&gt;osu_archiver_app -->
+<g id="edge8" class="edge">
+<title>osu_archiver_db&#45;&gt;osu_archiver_app</title><style>.edge>path:hover{stroke-width:8}</style>
+<path fill="none" stroke="black" d="M32.87,-450.48C44.58,-418.84 73.79,-350.68 120,-311.63"/>
+<path fill="none" stroke="black" d="M120,-309.63C214,-223.49 277.76,-280.15 397,-235"/>
+<path fill="none" stroke="black" d="M969,-161C978.17,-154.34 979.16,-151.09 988,-144 1002.83,-132.11 1020.05,-119.7 1034.15,-109.88"/>
+<polygon fill="#ac4949" stroke="black" points="1035.86,-112.95 1042.1,-104.39 1031.88,-107.19 1035.86,-112.95"/>
+<path fill="none" stroke="black" d="M397,-233C636.53,-142.31 761.78,-313.52 969,-163"/>
+</g>
+<!-- osu_archiver_excel_report -->
+<g id="node9" class="node">
+<title>osu_archiver_excel_report</title><style>.edge>path:hover{stroke-width:8}</style>
+<ellipse fill="#a44646" stroke="black" cx="442" cy="-391.88" rx="41.64" ry="18"/>
+<text xml:space="preserve" text-anchor="middle" x="442" y="-388.38" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#ffffff">excel_report</text>
+</g>
+<!-- osu_archiver_excel_report&#45;&gt;osu_archiver_services -->
+<g id="edge9" class="edge">
+<title>osu_archiver_excel_report&#45;&gt;osu_archiver_services</title><style>.edge>path:hover{stroke-width:8}</style>
+<path fill="none" stroke="black" d="M422.25,-375.98C405.96,-363.68 382.67,-346.1 364.55,-332.42"/>
+<polygon fill="#a44646" stroke="black" points="366.9,-329.81 356.81,-326.58 362.68,-335.4 366.9,-329.81"/>
+</g>
+<!-- osu_archiver_extractor&#45;&gt;osu_archiver_services -->
+<g id="edge10" class="edge">
+<title>osu_archiver_extractor&#45;&gt;osu_archiver_services</title><style>.edge>path:hover{stroke-width:8}</style>
+<path fill="none" stroke="black" d="M261.72,-456.74C233.87,-444.62 191.14,-425.25 177,-414.51 166.81,-406.77 157.38,-405.66 158,-392.88"/>
+</g>
+<!-- osu_archiver_ui_dashboard_tab -->
+<g id="node28" class="node">
+<title>osu_archiver_ui_dashboard_tab</title><style>.edge>path:hover{stroke-width:8}</style>
+<ellipse fill="#8f3d3d" stroke="black" cx="733" cy="-310.63" rx="56.39" ry="22.63"/>
+<text xml:space="preserve" text-anchor="middle" x="733" y="-313.13" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#ffffff">ui.</text>
+<text xml:space="preserve" text-anchor="middle" x="733" y="-301.13" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#ffffff">dashboard_tab</text>
+</g>
+<!-- osu_archiver_extractor&#45;&gt;osu_archiver_ui_dashboard_tab -->
+<g id="edge11" class="edge">
+<title>osu_archiver_extractor&#45;&gt;osu_archiver_ui_dashboard_tab</title><style>.edge>path:hover{stroke-width:8}</style>
+<path fill="none" stroke="black" d="M628,-390.88C639.49,-385.25 637.38,-377.69 647,-369.25 660.85,-357.1 677.41,-345.44 692.27,-335.82"/>
+<polygon fill="#a13535" stroke="black" points="693.9,-338.93 700.48,-330.62 690.16,-333.02 693.9,-338.93"/>
+<path fill="none" stroke="black" d="M311.52,-456.36C317.17,-454.14 323.22,-452.02 329,-450.51 450.37,-418.71 498.23,-473.44 609,-414.51 620.3,-408.5 616.51,-398.51 628,-392.88"/>
+</g>
+<!-- osu_archiver_gaps -->
+<g id="node11" class="node">
+<title>osu_archiver_gaps</title><style>.edge>path:hover{stroke-width:8}</style>
+<ellipse fill="#c43131" stroke="black" cx="459" cy="-468.51" rx="27" ry="18"/>
+<text xml:space="preserve" text-anchor="middle" x="459" y="-465.01" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#ffffff">gaps</text>
+</g>
+<!-- osu_archiver_gaps&#45;&gt;osu_archiver_excel_report -->
+<g id="edge12" class="edge">
+<title>osu_archiver_gaps&#45;&gt;osu_archiver_excel_report</title><style>.edge>path:hover{stroke-width:8}</style>
+<path fill="none" stroke="black" d="M455.06,-450.2C453.08,-441.54 450.64,-430.83 448.41,-421.02"/>
+<polygon fill="#c43131" stroke="black" points="451.89,-420.55 446.26,-411.57 445.07,-422.1 451.89,-420.55"/>
+</g>
+<!-- osu_archiver_gaps&#45;&gt;osu_archiver_services -->
+<g id="edge13" class="edge">
+<title>osu_archiver_gaps&#45;&gt;osu_archiver_services</title><style>.edge>path:hover{stroke-width:8}</style>
+<path fill="none" stroke="black" d="M439.58,-455.65C424.88,-445.96 404.92,-431.16 391,-414.51 371.95,-391.7 356.94,-361.08 347.63,-339.18"/>
+<polygon fill="#c43131" stroke="black" points="350.9,-337.93 343.87,-330.01 344.43,-340.59 350.9,-337.93"/>
+</g>
+<!-- osu_archiver_ui_packs_tab -->
+<g id="node31" class="node">
+<title>osu_archiver_ui_packs_tab</title><style>.edge>path:hover{stroke-width:8}</style>
+<ellipse fill="#964040" stroke="black" cx="1079" cy="-310.63" rx="43" ry="18"/>
+<text xml:space="preserve" text-anchor="middle" x="1079" y="-307.13" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#ffffff">ui.packs_tab</text>
+</g>
+<!-- osu_archiver_gaps&#45;&gt;osu_archiver_ui_packs_tab -->
+<g id="edge14" class="edge">
+<title>osu_archiver_gaps&#45;&gt;osu_archiver_ui_packs_tab</title><style>.edge>path:hover{stroke-width:8}</style>
+<path fill="none" stroke="black" d="M479.45,-456.26C484.4,-453.98 489.78,-451.87 495,-450.51 605.35,-421.66 907.75,-470.71 1007,-414.51 1036.45,-397.84 1056.66,-363.56 1068,-339.15"/>
+<polygon fill="#c43131" stroke="black" points="1071.15,-340.68 1071.98,-330.12 1064.75,-337.86 1071.15,-340.68"/>
+</g>
+<!-- osu_archiver_i18n -->
+<g id="node12" class="node">
+<title>osu_archiver_i18n</title><style>.edge>path:hover{stroke-width:8}</style>
+<ellipse fill="#db2f2f" stroke="black" cx="1026" cy="-468.51" rx="27" ry="18"/>
+<text xml:space="preserve" text-anchor="middle" x="1026" y="-465.01" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#ffffff">i18n</text>
+</g>
+<!-- osu_archiver_i18n&#45;&gt;osu_archiver_app -->
+<g id="edge15" class="edge">
+<title>osu_archiver_i18n&#45;&gt;osu_archiver_app</title><style>.edge>path:hover{stroke-width:8}</style>
+<path fill="none" stroke="black" d="M1362,-390.88C1374.5,-346.1 1373.98,-322.68 1343,-288 1226.25,-157.29 818.34,-252.54 969,-163"/>
+</g>
+<!-- osu_archiver_ui_artists_tab -->
+<g id="node25" class="node">
+<title>osu_archiver_ui_artists_tab</title><style>.edge>path:hover{stroke-width:8}</style>
+<ellipse fill="#964040" stroke="black" cx="1183" cy="-310.63" rx="43.45" ry="18"/>
+<text xml:space="preserve" text-anchor="middle" x="1183" y="-307.13" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#ffffff">ui.artists_tab</text>
+</g>
+<!-- osu_archiver_i18n&#45;&gt;osu_archiver_ui_artists_tab -->
+<g id="edge16" class="edge">
+<title>osu_archiver_i18n&#45;&gt;osu_archiver_ui_artists_tab</title><style>.edge>path:hover{stroke-width:8}</style>
+<path fill="none" stroke="black" d="M1053.29,-466.99C1130.35,-464.79 1345.15,-453.24 1362,-392.88"/>
+<path fill="none" stroke="black" d="M1362,-390.88C1362.51,-389.06 1275.55,-351.36 1222.67,-328.62"/>
+<polygon fill="#db2f2f" stroke="black" points="1224.22,-325.48 1213.66,-324.75 1221.46,-331.92 1224.22,-325.48"/>
+</g>
+<!-- osu_archiver_i18n&#45;&gt;osu_archiver_ui_dashboard_tab -->
+<g id="edge17" class="edge">
+<title>osu_archiver_i18n&#45;&gt;osu_archiver_ui_dashboard_tab</title><style>.edge>path:hover{stroke-width:8}</style>
+<path fill="none" stroke="black" d="M1004.95,-456.81C1000.1,-454.56 994.93,-452.32 990,-450.51 932.53,-429.35 908.98,-446.89 857,-414.51 846.14,-407.74 848.81,-399.73 838,-392.88"/>
+</g>
+<!-- osu_archiver_ui_search_tab -->
+<g id="node33" class="node">
+<title>osu_archiver_ui_search_tab</title><style>.edge>path:hover{stroke-width:8}</style>
+<ellipse fill="#a44646" stroke="black" cx="1289" cy="-310.63" rx="44.8" ry="18"/>
+<text xml:space="preserve" text-anchor="middle" x="1289" y="-307.13" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#ffffff">ui.search_tab</text>
+</g>
+<!-- osu_archiver_i18n&#45;&gt;osu_archiver_ui_search_tab -->
+<g id="edge18" class="edge">
+<title>osu_archiver_i18n&#45;&gt;osu_archiver_ui_search_tab</title><style>.edge>path:hover{stroke-width:8}</style>
+<path fill="none" stroke="black" d="M1362,-390.88C1368.89,-366.2 1347.5,-345.23 1326.12,-331.08"/>
+<polygon fill="#db2f2f" stroke="black" points="1328.03,-328.14 1317.68,-325.86 1324.35,-334.1 1328.03,-328.14"/>
+</g>
+<!-- osu_archiver_library -->
+<g id="node13" class="node">
+<title>osu_archiver_library</title><style>.edge>path:hover{stroke-width:8}</style>
+<ellipse fill="#ac4949" stroke="black" cx="209" cy="-468.51" rx="27" ry="18"/>
+<text xml:space="preserve" text-anchor="middle" x="209" y="-465.01" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#ffffff">library</text>
+</g>
+<!-- osu_archiver_library&#45;&gt;osu_archiver_services -->
+<g id="edge19" class="edge">
+<title>osu_archiver_library&#45;&gt;osu_archiver_services</title><style>.edge>path:hover{stroke-width:8}</style>
+<path fill="none" stroke="black" d="M192.06,-454.22C176.75,-440.56 156.78,-417.8 158,-392.88"/>
+<path fill="none" stroke="black" d="M158,-390.88C160.88,-332.02 241.97,-316.54 294.01,-312.67"/>
+<polygon fill="#ac4949" stroke="black" points="293.99,-316.18 303.76,-312.07 293.56,-309.19 293.99,-316.18"/>
+</g>
+<!-- osu_archiver_logsvc -->
+<g id="node14" class="node">
+<title>osu_archiver_logsvc</title><style>.edge>path:hover{stroke-width:8}</style>
+<ellipse fill="#b65353" stroke="black" cx="1024" cy="-162" rx="27" ry="18"/>
+<text xml:space="preserve" text-anchor="middle" x="1024" y="-158.5" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#ffffff">logsvc</text>
+</g>
+<!-- osu_archiver_logsvc&#45;&gt;osu_archiver_app -->
+<g id="edge20" class="edge">
+<title>osu_archiver_logsvc&#45;&gt;osu_archiver_app</title><style>.edge>path:hover{stroke-width:8}</style>
+<path fill="none" stroke="black" d="M1032.81,-144.76C1037.27,-136.55 1042.8,-126.37 1047.84,-117.09"/>
+<polygon fill="#b65353" stroke="black" points="1050.82,-118.94 1052.51,-108.48 1044.67,-115.6 1050.82,-118.94"/>
+</g>
+<!-- osu_archiver_models -->
+<g id="node15" class="node">
+<title>osu_archiver_models</title><style>.edge>path:hover{stroke-width:8}</style>
+<ellipse fill="#f91010" stroke="black" cx="287" cy="-626.39" rx="28.56" ry="18"/>
+<text xml:space="preserve" text-anchor="middle" x="287" y="-622.89" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#ffffff">models</text>
+</g>
+<!-- osu_archiver_models&#45;&gt;osu_archiver_db -->
+<g id="edge21" class="edge">
+<title>osu_archiver_models&#45;&gt;osu_archiver_db</title><style>.edge>path:hover{stroke-width:8}</style>
+<path fill="none" stroke="black" d="M259.06,-622.08C215.37,-615.46 130.82,-596.59 82,-546.14"/>
+<path fill="none" stroke="black" d="M82,-544.14C67.4,-529.05 53.4,-509.97 43.18,-494.87"/>
+<polygon fill="#f91010" stroke="black" points="46.32,-493.27 37.88,-486.87 40.49,-497.14 46.32,-493.27"/>
+</g>
+<!-- osu_archiver_models&#45;&gt;osu_archiver_extractor -->
+<g id="edge22" class="edge">
+<title>osu_archiver_models&#45;&gt;osu_archiver_extractor</title><style>.edge>path:hover{stroke-width:8}</style>
+<path fill="none" stroke="black" d="M459,-544.14C460.31,-540.7 374.04,-504.92 323.2,-484.18"/>
+<polygon fill="#f91010" stroke="black" points="324.61,-480.97 314.03,-480.44 321.97,-487.46 324.61,-480.97"/>
+<path fill="none" stroke="black" d="M315.39,-623.48C358.43,-618.78 437.46,-602.49 459,-546.14"/>
+</g>
+<!-- osu_archiver_models&#45;&gt;osu_archiver_gaps -->
+<g id="edge23" class="edge">
+<title>osu_archiver_models&#45;&gt;osu_archiver_gaps</title><style>.edge>path:hover{stroke-width:8}</style>
+<path fill="none" stroke="black" d="M459,-544.14C464.57,-529.58 464.9,-512.22 463.69,-497.91"/>
+<polygon fill="#f91010" stroke="black" points="467.2,-497.77 462.57,-488.24 460.24,-498.57 467.2,-497.77"/>
+</g>
+<!-- osu_archiver_osu_api -->
+<g id="node16" class="node">
+<title>osu_archiver_osu_api</title><style>.edge>path:hover{stroke-width:8}</style>
+<ellipse fill="#c43131" stroke="black" cx="534" cy="-468.51" rx="29.92" ry="18"/>
+<text xml:space="preserve" text-anchor="middle" x="534" y="-465.01" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#ffffff">osu_api</text>
+</g>
+<!-- osu_archiver_models&#45;&gt;osu_archiver_osu_api -->
+<g id="edge24" class="edge">
+<title>osu_archiver_models&#45;&gt;osu_archiver_osu_api</title><style>.edge>path:hover{stroke-width:8}</style>
+<path fill="none" stroke="black" d="M459,-544.14C467.74,-521.26 487.72,-501.98 504.86,-488.74"/>
+<polygon fill="#f91010" stroke="black" points="506.79,-491.66 512.78,-482.92 502.65,-486.02 506.79,-491.66"/>
+</g>
+<!-- osu_archiver_osz_meta -->
+<g id="node18" class="node">
+<title>osu_archiver_osz_meta</title><style>.edge>path:hover{stroke-width:8}</style>
+<ellipse fill="#c04040" stroke="black" cx="205" cy="-545.14" rx="35.33" ry="18"/>
+<text xml:space="preserve" text-anchor="middle" x="205" y="-541.64" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#ffffff">osz_meta</text>
+</g>
+<!-- osu_archiver_models&#45;&gt;osu_archiver_osz_meta -->
+<g id="edge25" class="edge">
+<title>osu_archiver_models&#45;&gt;osu_archiver_osz_meta</title><style>.edge>path:hover{stroke-width:8}</style>
+<path fill="none" stroke="black" d="M271.96,-610.86C260.01,-599.31 243.07,-582.94 229.22,-569.55"/>
+<polygon fill="#f91010" stroke="black" points="231.78,-567.15 222.15,-562.72 226.91,-572.18 231.78,-567.15"/>
+</g>
+<!-- osu_archiver_parsing -->
+<g id="node19" class="node">
+<title>osu_archiver_parsing</title><style>.edge>path:hover{stroke-width:8}</style>
+<ellipse fill="#e61919" stroke="black" cx="368" cy="-545.14" rx="28.56" ry="18"/>
+<text xml:space="preserve" text-anchor="middle" x="368" y="-541.64" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#ffffff">parsing</text>
+</g>
+<!-- osu_archiver_models&#45;&gt;osu_archiver_parsing -->
+<g id="edge26" class="edge">
+<title>osu_archiver_models&#45;&gt;osu_archiver_parsing</title><style>.edge>path:hover{stroke-width:8}</style>
+<path fill="none" stroke="black" d="M301.86,-610.86C313.88,-599.09 331.04,-582.3 344.86,-568.78"/>
+<polygon fill="#f91010" stroke="black" points="347.18,-571.4 351.88,-561.91 342.29,-566.4 347.18,-571.4"/>
+</g>
+<!-- osu_archiver_models&#45;&gt;osu_archiver_services -->
+<g id="edge27" class="edge">
+<title>osu_archiver_models&#45;&gt;osu_archiver_services</title><style>.edge>path:hover{stroke-width:8}</style>
+<path fill="none" stroke="black" d="M82,-544.14C54.72,-515.95 79.8,-398.45 106,-369.25 130.84,-341.57 234.95,-324.33 294.58,-316.53"/>
+<polygon fill="#f91010" stroke="black" points="294.89,-320.02 304.37,-315.28 294.01,-313.07 294.89,-320.02"/>
+</g>
+<!-- osu_archiver_osu_api&#45;&gt;osu_archiver_excel_report -->
+<g id="edge28" class="edge">
+<title>osu_archiver_osu_api&#45;&gt;osu_archiver_excel_report</title><style>.edge>path:hover{stroke-width:8}</style>
+<path fill="none" stroke="black" d="M516.7,-453.47C503.38,-442.67 484.73,-427.54 469.39,-415.1"/>
+<polygon fill="#c43131" stroke="black" points="471.96,-412.68 461.99,-409.09 467.55,-418.11 471.96,-412.68"/>
+</g>
+<!-- osu_archiver_osu_api&#45;&gt;osu_archiver_services -->
+<g id="edge29" class="edge">
+<title>osu_archiver_osu_api&#45;&gt;osu_archiver_services</title><style>.edge>path:hover{stroke-width:8}</style>
+<path fill="none" stroke="black" d="M531.35,-450.44C527.07,-428.63 516.62,-391.08 493,-369.25 455.22,-334.35 430.81,-352.23 383,-333.25 378.87,-331.62 374.59,-329.79 370.38,-327.9"/>
+<polygon fill="#c43131" stroke="black" points="372.08,-324.84 361.53,-323.83 369.15,-331.19 372.08,-324.84"/>
+</g>
+<!-- osu_archiver_osu_api&#45;&gt;osu_archiver_ui_settings_tab -->
+<g id="edge30" class="edge">
+<title>osu_archiver_osu_api&#45;&gt;osu_archiver_ui_settings_tab</title><style>.edge>path:hover{stroke-width:8}</style>
+<path fill="none" stroke="black" d="M564.31,-467.02C613.19,-464.97 711.02,-455.57 781,-414.51 792.03,-408.03 787.8,-396.73 800,-392.88"/>
+</g>
+<!-- osu_archiver_osu_import -->
+<g id="node17" class="node">
+<title>osu_archiver_osu_import</title><style>.edge>path:hover{stroke-width:8}</style>
+<ellipse fill="#c24747" stroke="black" cx="376" cy="-468.51" rx="38.49" ry="18"/>
+<text xml:space="preserve" text-anchor="middle" x="376" y="-465.01" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#ffffff">osu_import</text>
+</g>
+<!-- osu_archiver_osu_import&#45;&gt;osu_archiver_services -->
+<g id="edge31" class="edge">
+<title>osu_archiver_osu_import&#45;&gt;osu_archiver_services</title><style>.edge>path:hover{stroke-width:8}</style>
+<path fill="none" stroke="black" d="M346.84,-456.38C340.97,-454.3 334.82,-452.25 329,-450.51 252.14,-427.59 154.09,-472.99 158,-392.88"/>
+</g>
+<!-- osu_archiver_osu_import&#45;&gt;osu_archiver_ui_dashboard_tab -->
+<g id="edge32" class="edge">
+<title>osu_archiver_osu_import&#45;&gt;osu_archiver_ui_dashboard_tab</title><style>.edge>path:hover{stroke-width:8}</style>
+<path fill="none" stroke="black" d="M404.86,-456.27C410.8,-454.18 417.06,-452.15 423,-450.51 504.17,-428.12 535.95,-456.39 609,-414.51 620.1,-408.15 616.51,-398.51 628,-392.88"/>
+</g>
+<!-- osu_archiver_osz_meta&#45;&gt;osu_archiver_extractor -->
+<g id="edge33" class="edge">
+<title>osu_archiver_osz_meta&#45;&gt;osu_archiver_extractor</title><style>.edge>path:hover{stroke-width:8}</style>
+<path fill="none" stroke="black" d="M221.59,-529.04C233.34,-518.34 249.29,-503.83 262.5,-491.81"/>
+<polygon fill="#c04040" stroke="black" points="264.55,-494.67 269.59,-485.35 259.84,-489.5 264.55,-494.67"/>
+</g>
+<!-- osu_archiver_osz_meta&#45;&gt;osu_archiver_library -->
+<g id="edge34" class="edge">
+<title>osu_archiver_osz_meta&#45;&gt;osu_archiver_library</title><style>.edge>path:hover{stroke-width:8}</style>
+<path fill="none" stroke="black" d="M205.93,-526.83C206.38,-518.32 206.95,-507.84 207.46,-498.18"/>
+<polygon fill="#c04040" stroke="black" points="210.94,-498.67 207.98,-488.49 203.95,-498.29 210.94,-498.67"/>
+</g>
+<!-- osu_archiver_parsing&#45;&gt;osu_archiver_db -->
+<g id="edge35" class="edge">
+<title>osu_archiver_parsing&#45;&gt;osu_archiver_db</title><style>.edge>path:hover{stroke-width:8}</style>
+<path fill="none" stroke="black" d="M349.08,-531.26C343.47,-527.95 337.17,-524.71 331,-522.51 233.53,-487.8 202.59,-506.1 101,-486.51 88.64,-484.13 75.21,-481.16 63.22,-478.37"/>
+<polygon fill="#e61919" stroke="black" points="64.26,-475.02 53.72,-476.12 62.65,-481.83 64.26,-475.02"/>
+</g>
+<!-- osu_archiver_parsing&#45;&gt;osu_archiver_extractor -->
+<g id="edge36" class="edge">
+<title>osu_archiver_parsing&#45;&gt;osu_archiver_extractor</title><style>.edge>path:hover{stroke-width:8}</style>
+<path fill="none" stroke="black" d="M352.38,-529.75C340.77,-519.05 324.69,-504.24 311.39,-491.98"/>
+<polygon fill="#e61919" stroke="black" points="313.96,-489.59 304.24,-485.39 309.22,-494.74 313.96,-489.59"/>
+</g>
+<!-- osu_archiver_parsing&#45;&gt;osu_archiver_gaps -->
+<g id="edge37" class="edge">
+<title>osu_archiver_parsing&#45;&gt;osu_archiver_gaps</title><style>.edge>path:hover{stroke-width:8}</style>
+<path fill="none" stroke="black" d="M384.69,-530.45C398.42,-519.19 418.08,-503.06 433.74,-490.23"/>
+<polygon fill="#e61919" stroke="black" points="435.73,-493.12 441.24,-484.07 431.29,-487.71 435.73,-493.12"/>
+</g>
+<!-- osu_archiver_parsing&#45;&gt;osu_archiver_library -->
+<g id="edge38" class="edge">
+<title>osu_archiver_parsing&#45;&gt;osu_archiver_library</title><style>.edge>path:hover{stroke-width:8}</style>
+<path fill="none" stroke="black" d="M348.3,-531.97C342.78,-528.74 336.73,-525.37 331,-522.51 293.92,-504.01 282.85,-503.36 245,-486.51 243.69,-485.92 242.35,-485.32 241,-484.71"/>
+<polygon fill="#e61919" stroke="black" points="242.55,-481.57 232,-480.55 239.61,-487.92 242.55,-481.57"/>
+</g>
+<!-- osu_archiver_parsing&#45;&gt;osu_archiver_osu_api -->
+<g id="edge39" class="edge">
+<title>osu_archiver_parsing&#45;&gt;osu_archiver_osu_api</title><style>.edge>path:hover{stroke-width:8}</style>
+<path fill="none" stroke="black" d="M390.73,-533.92C418.97,-521.22 467.41,-499.45 500.06,-484.77"/>
+<polygon fill="#e61919" stroke="black" points="501.4,-488 509.09,-480.71 498.53,-481.62 501.4,-488"/>
+</g>
+<!-- osu_archiver_pathheal -->
+<g id="node20" class="node">
+<title>osu_archiver_pathheal</title><style>.edge>path:hover{stroke-width:8}</style>
+<ellipse fill="#b65353" stroke="black" cx="1101" cy="-162" rx="31.72" ry="18"/>
+<text xml:space="preserve" text-anchor="middle" x="1101" y="-158.5" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#ffffff">pathheal</text>
+</g>
+<!-- osu_archiver_pathheal&#45;&gt;osu_archiver_app -->
+<g id="edge40" class="edge">
+<title>osu_archiver_pathheal&#45;&gt;osu_archiver_app</title><style>.edge>path:hover{stroke-width:8}</style>
+<path fill="none" stroke="black" d="M1091.76,-144.41C1087.18,-136.19 1081.54,-126.06 1076.4,-116.85"/>
+<polygon fill="#b65353" stroke="black" points="1079.57,-115.34 1071.64,-108.31 1073.45,-118.75 1079.57,-115.34"/>
+</g>
+<!-- osu_archiver_search -->
+<g id="node21" class="node">
+<title>osu_archiver_search</title><style>.edge>path:hover{stroke-width:8}</style>
+<ellipse fill="#b65353" stroke="black" cx="213" cy="-391.88" rx="27.21" ry="18"/>
+<text xml:space="preserve" text-anchor="middle" x="213" y="-388.38" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#ffffff">search</text>
+</g>
+<!-- osu_archiver_search&#45;&gt;osu_archiver_services -->
+<g id="edge41" class="edge">
+<title>osu_archiver_search&#45;&gt;osu_archiver_services</title><style>.edge>path:hover{stroke-width:8}</style>
+<path fill="none" stroke="black" d="M232.1,-378.67C252.08,-365.91 283.7,-345.69 307.01,-330.8"/>
+<polygon fill="#b65353" stroke="black" points="308.61,-333.93 315.15,-325.59 304.84,-328.03 308.61,-333.93"/>
+</g>
+<!-- osu_archiver_services&#45;&gt;osu_archiver_app -->
+<g id="edge42" class="edge">
+<title>osu_archiver_services&#45;&gt;osu_archiver_app</title><style>.edge>path:hover{stroke-width:8}</style>
+<path fill="none" stroke="black" d="M344.14,-292.74C353.2,-273.94 370.88,-244.89 397,-235"/>
+</g>
+<!-- osu_archiver_theming -->
+<g id="node23" class="node">
+<title>osu_archiver_theming</title><style>.edge>path:hover{stroke-width:8}</style>
+<ellipse fill="#c24747" stroke="black" cx="570" cy="-391.88" rx="30.37" ry="18"/>
+<text xml:space="preserve" text-anchor="middle" x="570" y="-388.38" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#ffffff">theming</text>
+</g>
+<!-- osu_archiver_theming&#45;&gt;osu_archiver_app -->
+<g id="edge43" class="edge">
+<title>osu_archiver_theming&#45;&gt;osu_archiver_app</title><style>.edge>path:hover{stroke-width:8}</style>
+<path fill="none" stroke="black" d="M397,-309.63C399.94,-276.59 365.98,-246.74 397,-235"/>
+<path fill="none" stroke="black" d="M546.28,-380.36C498.84,-359.26 396.82,-313.65 397,-311.63"/>
+</g>
+<!-- osu_archiver_ui_main_window -->
+<g id="node30" class="node">
+<title>osu_archiver_ui_main_window</title><style>.edge>path:hover{stroke-width:8}</style>
+<ellipse fill="#813737" stroke="black" cx="969" cy="-234" rx="51.56" ry="18"/>
+<text xml:space="preserve" text-anchor="middle" x="969" y="-230.5" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#ffffff">ui.main_window</text>
+</g>
+<!-- osu_archiver_theming&#45;&gt;osu_archiver_ui_main_window -->
+<g id="edge44" class="edge">
+<title>osu_archiver_theming&#45;&gt;osu_archiver_ui_main_window</title><style>.edge>path:hover{stroke-width:8}</style>
+<path fill="none" stroke="black" d="M397,-309.63C401.5,-258.98 758.83,-241.73 906.36,-236.76"/>
+<polygon fill="#c24747" stroke="black" points="906.06,-240.27 915.94,-236.44 905.83,-233.27 906.06,-240.27"/>
+</g>
+<!-- osu_archiver_ui -->
+<g id="node24" class="node">
+<title>osu_archiver_ui</title><style>.edge>path:hover{stroke-width:8}</style>
+<ellipse fill="#db2f2f" stroke="black" cx="1178" cy="-162" rx="27" ry="18"/>
+<text xml:space="preserve" text-anchor="middle" x="1178" y="-158.5" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#ffffff">ui</text>
+</g>
+<!-- osu_archiver_ui&#45;&gt;osu_archiver_app -->
+<g id="edge45" class="edge">
+<title>osu_archiver_ui&#45;&gt;osu_archiver_app</title><style>.edge>path:hover{stroke-width:8}</style>
+<path fill="none" stroke="black" d="M1158.32,-149.13C1139.88,-138 1112.08,-121.22 1091.08,-108.55"/>
+<polygon fill="#db2f2f" stroke="black" points="1093.05,-105.65 1082.68,-103.48 1089.44,-111.64 1093.05,-105.65"/>
+</g>
+<!-- osu_archiver_ui_artists_tab&#45;&gt;osu_archiver_ui_main_window -->
+<g id="edge46" class="edge">
+<title>osu_archiver_ui_artists_tab&#45;&gt;osu_archiver_ui_main_window</title><style>.edge>path:hover{stroke-width:8}</style>
+<path fill="none" stroke="black" d="M1153.73,-296.99C1146.36,-293.93 1138.43,-290.75 1131,-288 1093.4,-274.05 1050.21,-260.02 1017.89,-249.9"/>
+<polygon fill="#964040" stroke="black" points="1018.97,-246.57 1008.38,-246.94 1016.88,-253.25 1018.97,-246.57"/>
+</g>
+<!-- osu_archiver_ui_copy_table -->
+<g id="node26" class="node">
+<title>osu_archiver_ui_copy_table</title><style>.edge>path:hover{stroke-width:8}</style>
+<ellipse fill="#ce3b3b" stroke="black" cx="1252" cy="-391.88" rx="44.35" ry="18"/>
+<text xml:space="preserve" text-anchor="middle" x="1252" y="-388.38" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#ffffff">ui.copy_table</text>
+</g>
+<!-- osu_archiver_ui_copy_table&#45;&gt;osu_archiver_ui_artists_tab -->
+<g id="edge47" class="edge">
+<title>osu_archiver_ui_copy_table&#45;&gt;osu_archiver_ui_artists_tab</title><style>.edge>path:hover{stroke-width:8}</style>
+<path fill="none" stroke="black" d="M1237.7,-374.46C1228.17,-363.52 1215.47,-348.92 1204.7,-336.56"/>
+<polygon fill="#ce3b3b" stroke="black" points="1207.48,-334.41 1198.27,-329.17 1202.2,-339.01 1207.48,-334.41"/>
+</g>
+<!-- osu_archiver_ui_copy_table&#45;&gt;osu_archiver_ui_packs_tab -->
+<g id="edge48" class="edge">
+<title>osu_archiver_ui_copy_table&#45;&gt;osu_archiver_ui_packs_tab</title><style>.edge>path:hover{stroke-width:8}</style>
+<path fill="none" stroke="black" d="M1223.43,-377.79C1194.55,-364.56 1149.71,-344.02 1117.66,-329.34"/>
+<polygon fill="#ce3b3b" stroke="black" points="1119.25,-326.22 1108.7,-325.23 1116.33,-332.58 1119.25,-326.22"/>
+</g>
+<!-- osu_archiver_ui_copy_table&#45;&gt;osu_archiver_ui_search_tab -->
+<g id="edge49" class="edge">
+<title>osu_archiver_ui_copy_table&#45;&gt;osu_archiver_ui_search_tab</title><style>.edge>path:hover{stroke-width:8}</style>
+<path fill="none" stroke="black" d="M1260.03,-373.69C1264.73,-363.61 1270.78,-350.65 1276.13,-339.19"/>
+<polygon fill="#ce3b3b" stroke="black" points="1279.29,-340.7 1280.35,-330.16 1272.95,-337.74 1279.29,-340.7"/>
+</g>
+<!-- osu_archiver_ui_countdown_dialog -->
+<g id="node27" class="node">
+<title>osu_archiver_ui_countdown_dialog</title><style>.edge>path:hover{stroke-width:8}</style>
+<ellipse fill="#b65353" stroke="black" cx="932" cy="-391.88" rx="66.47" ry="22.63"/>
+<text xml:space="preserve" text-anchor="middle" x="932" y="-394.38" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#ffffff">ui.</text>
+<text xml:space="preserve" text-anchor="middle" x="932" y="-382.38" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#ffffff">countdown_dialog</text>
+</g>
+<!-- osu_archiver_ui_countdown_dialog&#45;&gt;osu_archiver_ui_settings_tab -->
+<g id="edge50" class="edge">
+<title>osu_archiver_ui_countdown_dialog&#45;&gt;osu_archiver_ui_settings_tab</title><style>.edge>path:hover{stroke-width:8}</style>
+<path fill="none" stroke="black" d="M942.11,-369.23C945.82,-361.28 950.11,-352.1 954.15,-343.44"/>
+<polygon fill="#b65353" stroke="black" points="957.2,-345.17 958.26,-334.63 950.86,-342.21 957.2,-345.17"/>
+</g>
+<!-- osu_archiver_ui_dashboard_tab&#45;&gt;osu_archiver_ui_main_window -->
+<g id="edge51" class="edge">
+<title>osu_archiver_ui_dashboard_tab&#45;&gt;osu_archiver_ui_main_window</title><style>.edge>path:hover{stroke-width:8}</style>
+<path fill="none" stroke="black" d="M776.56,-295.85C817.52,-282.9 878.7,-263.56 921.03,-250.17"/>
+<polygon fill="#8f3d3d" stroke="black" points="921.98,-253.54 930.46,-247.19 919.87,-246.87 921.98,-253.54"/>
+</g>
+<!-- osu_archiver_ui_logs_tab -->
+<g id="node29" class="node">
+<title>osu_archiver_ui_logs_tab</title><style>.edge>path:hover{stroke-width:8}</style>
+<ellipse fill="#b65353" stroke="black" cx="864" cy="-310.63" rx="38.03" ry="18"/>
+<text xml:space="preserve" text-anchor="middle" x="864" y="-307.13" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#ffffff">ui.logs_tab</text>
+</g>
+<!-- osu_archiver_ui_logs_tab&#45;&gt;osu_archiver_ui_main_window -->
+<g id="edge52" class="edge">
+<title>osu_archiver_ui_logs_tab&#45;&gt;osu_archiver_ui_main_window</title><style>.edge>path:hover{stroke-width:8}</style>
+<path fill="none" stroke="black" d="M884.49,-295.06C899.7,-284.25 920.7,-269.33 937.96,-257.06"/>
+<polygon fill="#b65353" stroke="black" points="939.75,-260.08 945.88,-251.44 935.7,-254.38 939.75,-260.08"/>
+</g>
+<!-- osu_archiver_ui_main_window&#45;&gt;osu_archiver_app -->
+<g id="edge53" class="edge">
+<title>osu_archiver_ui_main_window&#45;&gt;osu_archiver_app</title><style>.edge>path:hover{stroke-width:8}</style>
+<path fill="none" stroke="black" d="M962.15,-215.69C956.57,-198.42 952.08,-173.06 969,-163"/>
+</g>
+<!-- osu_archiver_ui_packs_tab&#45;&gt;osu_archiver_ui_main_window -->
+<g id="edge54" class="edge">
+<title>osu_archiver_ui_packs_tab&#45;&gt;osu_archiver_ui_main_window</title><style>.edge>path:hover{stroke-width:8}</style>
+<path fill="none" stroke="black" d="M1057,-294.7C1041.03,-283.87 1019.16,-269.03 1001.21,-256.86"/>
+<polygon fill="#964040" stroke="black" points="1003.21,-253.98 992.97,-251.26 999.28,-259.77 1003.21,-253.98"/>
+</g>
+<!-- osu_archiver_ui_progress_panel -->
+<g id="node32" class="node">
+<title>osu_archiver_ui_progress_panel</title><style>.edge>path:hover{stroke-width:8}</style>
+<ellipse fill="#b65353" stroke="black" cx="714" cy="-391.88" rx="57.98" ry="22.63"/>
+<text xml:space="preserve" text-anchor="middle" x="714" y="-394.38" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#ffffff">ui.</text>
+<text xml:space="preserve" text-anchor="middle" x="714" y="-382.38" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#ffffff">progress_panel</text>
+</g>
+<!-- osu_archiver_ui_progress_panel&#45;&gt;osu_archiver_ui_dashboard_tab -->
+<g id="edge55" class="edge">
+<title>osu_archiver_ui_progress_panel&#45;&gt;osu_archiver_ui_dashboard_tab</title><style>.edge>path:hover{stroke-width:8}</style>
+<path fill="none" stroke="black" d="M719.19,-369.23C721.02,-361.6 723.12,-352.85 725.12,-344.51"/>
+<polygon fill="#b65353" stroke="black" points="728.47,-345.55 727.4,-335.01 721.66,-343.91 728.47,-345.55"/>
+</g>
+<!-- osu_archiver_ui_search_tab&#45;&gt;osu_archiver_ui_main_window -->
+<g id="edge56" class="edge">
+<title>osu_archiver_ui_search_tab&#45;&gt;osu_archiver_ui_main_window</title><style>.edge>path:hover{stroke-width:8}</style>
+<path fill="none" stroke="black" d="M1259.67,-296.63C1251.77,-293.47 1243.15,-290.34 1235,-288 1148.19,-263.08 1123.24,-271.28 1035,-252 1030.12,-250.93 1025.06,-249.76 1020,-248.54"/>
+<polygon fill="#a44646" stroke="black" points="1021.04,-245.19 1010.49,-246.18 1019.36,-251.98 1021.04,-245.19"/>
+</g>
+<!-- osu_archiver_ui_settings_tab&#45;&gt;osu_archiver_ui_main_window -->
+<g id="edge57" class="edge">
+<title>osu_archiver_ui_settings_tab&#45;&gt;osu_archiver_ui_main_window</title><style>.edge>path:hover{stroke-width:8}</style>
+<path fill="none" stroke="black" d="M969,-287.64C969,-280.1 969,-271.56 969,-263.57"/>
+<polygon fill="#883a3a" stroke="black" points="972.5,-263.61 969,-253.61 965.5,-263.61 972.5,-263.61"/>
+</g>
+<!-- osu_archiver_ui_wheel_guard -->
+<g id="node35" class="node">
+<title>osu_archiver_ui_wheel_guard</title><style>.edge>path:hover{stroke-width:8}</style>
+<ellipse fill="#ce3b3b" stroke="black" cx="1141" cy="-391.88" rx="48.86" ry="18"/>
+<text xml:space="preserve" text-anchor="middle" x="1141" y="-388.38" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#ffffff">ui.wheel_guard</text>
+</g>
+<!-- osu_archiver_ui_wheel_guard&#45;&gt;osu_archiver_ui_artists_tab -->
+<g id="edge58" class="edge">
+<title>osu_archiver_ui_wheel_guard&#45;&gt;osu_archiver_ui_artists_tab</title><style>.edge>path:hover{stroke-width:8}</style>
+<path fill="none" stroke="black" d="M1149.91,-374.07C1155.33,-363.85 1162.38,-350.54 1168.58,-338.84"/>
+<polygon fill="#ce3b3b" stroke="black" points="1171.66,-340.5 1173.25,-330.02 1165.48,-337.22 1171.66,-340.5"/>
+</g>
+<!-- osu_archiver_ui_wheel_guard&#45;&gt;osu_archiver_ui_packs_tab -->
+<g id="edge59" class="edge">
+<title>osu_archiver_ui_wheel_guard&#45;&gt;osu_archiver_ui_packs_tab</title><style>.edge>path:hover{stroke-width:8}</style>
+<path fill="none" stroke="black" d="M1127.85,-374.07C1119.41,-363.28 1108.29,-349.07 1098.79,-336.93"/>
+<polygon fill="#ce3b3b" stroke="black" points="1101.77,-335.05 1092.85,-329.33 1096.25,-339.36 1101.77,-335.05"/>
+</g>
+<!-- osu_archiver_ui_wheel_guard&#45;&gt;osu_archiver_ui_settings_tab -->
+<g id="edge60" class="edge">
+<title>osu_archiver_ui_wheel_guard&#45;&gt;osu_archiver_ui_settings_tab</title><style>.edge>path:hover{stroke-width:8}</style>
+<path fill="none" stroke="black" d="M1111.43,-377.26C1084.34,-364.77 1043.86,-346.12 1012.97,-331.89"/>
+<polygon fill="#ce3b3b" stroke="black" points="1014.82,-328.89 1004.27,-327.88 1011.89,-335.24 1014.82,-328.89"/>
+</g>
+<!-- osu_archiver_workers -->
+<g id="node36" class="node">
+<title>osu_archiver_workers</title><style>.edge>path:hover{stroke-width:8}</style>
+<ellipse fill="#ce3b3b" stroke="black" cx="951" cy="-468.51" rx="30.37" ry="18"/>
+<text xml:space="preserve" text-anchor="middle" x="951" y="-465.01" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#ffffff">workers</text>
+</g>
+<!-- osu_archiver_workers&#45;&gt;osu_archiver_ui_dashboard_tab -->
+<g id="edge61" class="edge">
+<title>osu_archiver_workers&#45;&gt;osu_archiver_ui_dashboard_tab</title><style>.edge>path:hover{stroke-width:8}</style>
+<path fill="none" stroke="black" d="M927.22,-456.88C907.34,-447.37 878.82,-432.22 857,-414.51 847.06,-406.45 848.81,-399.73 838,-392.88"/>
+<path fill="none" stroke="black" d="M838,-390.88C812.74,-374.88 785.85,-354.51 765.6,-338.43"/>
+<polygon fill="#ce3b3b" stroke="black" points="767.97,-335.84 757.98,-332.32 763.6,-341.3 767.97,-335.84"/>
+</g>
+<!-- osu_archiver_workers&#45;&gt;osu_archiver_ui_search_tab -->
+<g id="edge62" class="edge">
+<title>osu_archiver_workers&#45;&gt;osu_archiver_ui_search_tab</title><style>.edge>path:hover{stroke-width:8}</style>
+<path fill="none" stroke="black" d="M973.69,-456.27C978.94,-454.06 984.58,-451.97 990,-450.51 1058.04,-432.23 1258.09,-467.08 1305,-414.51 1323.28,-394.02 1314.23,-361.61 1303.85,-338.65"/>
+<polygon fill="#ce3b3b" stroke="black" points="1307.11,-337.35 1299.58,-329.9 1300.81,-340.42 1307.11,-337.35"/>
+</g>
+<!-- osu_archiver_workers&#45;&gt;osu_archiver_ui_settings_tab -->
+<g id="edge63" class="edge">
+<title>osu_archiver_workers&#45;&gt;osu_archiver_ui_settings_tab</title><style>.edge>path:hover{stroke-width:8}</style>
+<path fill="none" stroke="black" d="M971.35,-454.72C984.22,-445.35 999.75,-431.35 1007,-414.51 1014.95,-396.04 1012.78,-388.52 1007,-369.25 1004.05,-359.41 998.81,-349.7 993.15,-341.13"/>
+<polygon fill="#ce3b3b" stroke="black" points="996.19,-339.37 987.55,-333.24 990.48,-343.42 996.19,-339.37"/>
+</g>
+</g>
+</svg>
+</div>
+        <div class="hint">sürükle · +/− ile yakınlaş · bir oka gel → kalınlaşır</div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <span class="lead">pydeps 3.0.6 · Graphviz 15.1.0</span>
+    <span>python -m pydeps osu_archiver --only osu_archiver</span>
+    <span>claude-context indexiyle aynı kod tabanı</span>
+  </footer>
+</div>
+
+<script>
+(function(){
+  var stage=document.getElementById('stage'), pan=document.getElementById('pan');
+  var scale=1, tx=0, ty=0, MIN=1, MAX=8;
+  function apply(){ pan.style.transform='translate('+tx+'px,'+ty+'px) scale('+scale+')'; }
+  function zoomAt(cx,cy,factor){
+    var ns=Math.min(MAX,Math.max(MIN,scale*factor));
+    var r=stage.getBoundingClientRect();
+    var px=cx-r.left, py=cy-r.top;
+    // keep the point under the cursor stable
+    tx=px-(px-tx)*(ns/scale); ty=py-(py-ty)*(ns/scale);
+    scale=ns; if(scale===MIN){tx=0;ty=0;} apply();
+  }
+  function center(){var r=stage.getBoundingClientRect();return {x:r.width/2,y:r.height/2,left:r.left,top:r.top};}
+  document.getElementById('zin').onclick=function(){var c=center();zoomAt(c.left+c.x,c.top+c.y,1.25);};
+  document.getElementById('zout').onclick=function(){var c=center();zoomAt(c.left+c.x,c.top+c.y,1/1.25);};
+  document.getElementById('zfit').onclick=function(){scale=1;tx=0;ty=0;apply();};
+
+  stage.addEventListener('wheel',function(e){
+    e.preventDefault(); zoomAt(e.clientX,e.clientY, e.deltaY<0?1.12:1/1.12);
+  },{passive:false});
+
+  var drag=false,sx=0,sy=0,stx=0,sty=0;
+  stage.addEventListener('pointerdown',function(e){
+    drag=true;sx=e.clientX;sy=e.clientY;stx=tx;sty=ty;
+    stage.classList.add('grabbing'); stage.setPointerCapture(e.pointerId);
+  });
+  stage.addEventListener('pointermove',function(e){
+    if(!drag)return; tx=stx+(e.clientX-sx); ty=sty+(e.clientY-sy); apply();
+  });
+  function end(){drag=false;stage.classList.remove('grabbing');}
+  stage.addEventListener('pointerup',end);
+  stage.addEventListener('pointercancel',end);
+  apply();
+})();
+</script>
+
+</body>
+</html>
