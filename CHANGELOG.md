@@ -13,7 +13,7 @@ the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Roadmap for v0.8.0 (Google Drive) is tracked in
 `docs/superpowers/specs/2026-07-13-osu-archiver-v0.3-to-v0.8-roadmap-design.md`.
 
-## [0.7.1] — 2026-07-13
+## [0.7.1] - 2026-07-13
 
 Security & robustness hardening from a full code + security review (no new features).
 
@@ -43,11 +43,9 @@ Security & robustness hardening from a full code + security review (no new featu
 - **Reference sync survives rate limits**: an osu! API 429 now honours
   `Retry-After` and retries the page instead of discarding the whole sync.
 - Corrected the cancelled-import toast (it counted beatmaps but said "batches").
+- Added a regression test covering the archive path-traversal guard.
 
-### Verified
-- 50 unit tests pass (added a regression test for the path-traversal guard).
-
-## [0.7.0] — 2026-07-13
+## [0.7.0] - 2026-07-13
 
 Auto-import the songs already installed in your osu! client (item 15).
 
@@ -66,7 +64,7 @@ Auto-import the songs already installed in your osu! client (item 15).
 - Both live under **Settings → Import installed songs**, and run off the UI thread
   with progress.
 
-## [0.6.0] — 2026-07-13
+## [0.6.0] - 2026-07-13
 
 Safer confirmations and more archive formats.
 
@@ -90,7 +88,7 @@ Safer confirmations and more archive formats.
   actually waits ~4.2 s, then moves the Library's `.osz` to the Recycle Bin while
   keeping their info in memory.
 
-## [0.5.0] — 2026-07-13
+## [0.5.0] - 2026-07-13
 
 The app has a name and an identity: **Rosu** (rose + osu!).
 
@@ -109,7 +107,7 @@ The app has a name and an identity: **Rosu** (rose + osu!).
 - **Pink · Light is clearly pink (item 2)**: its surfaces are pink-tinted instead of
   the White theme's pure white, so the two no longer look alike.
 
-## [0.4.0] — 2026-07-13
+## [0.4.0] - 2026-07-13
 
 Search & tables: the search no longer freezes, the library is browsable, and the
 tables are more useful.
@@ -140,7 +138,7 @@ tables are more useful.
 - **Column sizing (item 22)**: table columns size once (name stretches, the rest
   auto-fit), sampling ~50 rows so auto-fit stays cheap even when browsing everything.
 
-## [0.3.0] — 2026-07-13
+## [0.3.0] - 2026-07-13
 
 Critical fixes: the app no longer breaks when its folder is moved, and several
 buttons/settings now behave as users expect.
@@ -169,11 +167,7 @@ buttons/settings now behave as users expect.
 - **"Clear Output after importing to osu!" option (item 7)**: removed from Settings
   and config — osu! consumes the `.osz` on import, so Output empties itself.
 
-### Verified
-- BPM/length/mapper metadata is fully populated for all 1225 library tracks via
-  "Refresh Library Data" (item 9 — working as designed, no code change).
-
-## [0.2.0] — 2026-07-13
+## [0.2.0] - 2026-07-13
 
 Second release. Categories, confidence-aware "missing" detection, richer UI, and metadata.
 
@@ -204,7 +198,7 @@ Second release. Categories, confidence-aware "missing" detection, richer UI, and
 - Renamed the primary action button to **"Unpack Archives"**.
 - Progress panel now reports 0→100 with per-archive and per-`.osz` detail.
 
-## [0.1.0] — 2026-07-12
+## [0.1.0] - 2026-07-12
 
 Initial release. The core archive-management pipeline.
 
@@ -231,4 +225,3 @@ Initial release. The core archive-management pipeline.
 [0.4.0]: https://github.com/Kerevizodunu2000/rosu/releases/tag/v0.4.0
 [0.3.0]: https://github.com/Kerevizodunu2000/rosu/releases/tag/v0.3.0
 [0.2.0]: https://github.com/Kerevizodunu2000/rosu/releases/tag/v0.2.0
-[0.1.0]: https://github.com/Kerevizodunu2000/rosu/releases/tag/v0.1.0
