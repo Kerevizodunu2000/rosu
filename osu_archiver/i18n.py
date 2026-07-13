@@ -213,6 +213,7 @@ STRINGS: dict[str, dict[str, str]] = {
     # Theme display names
     "theme_pink-white": {"en": "Pink · Light", "tr": "Pembe · Açık"},
     "theme_pink-dark": {"en": "Pink · Dark", "tr": "Pembe · Koyu"},
+    "theme_pink-darker": {"en": "Pink · Darker", "tr": "Pembe · Daha Koyu"},
     "theme_nord": {"en": "Nord", "tr": "Nord"},
     "theme_dracula": {"en": "Dracula", "tr": "Dracula"},
     "theme_catppuccin-mocha": {"en": "Catppuccin Mocha", "tr": "Catppuccin Mocha"},

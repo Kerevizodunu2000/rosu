@@ -16,7 +16,7 @@ from pathlib import Path
 # --- Enumerated option values (stored in config, compared in code) ----------
 LANGUAGES = ("en", "tr")
 THEMES = (
-    "dark", "white", "pink", "pink-white", "pink-dark",
+    "dark", "white", "pink", "pink-white", "pink-dark", "pink-darker",
     "nord", "dracula", "catppuccin-mocha", "catppuccin-latte",
     "solarized-dark", "solarized-light",
 )

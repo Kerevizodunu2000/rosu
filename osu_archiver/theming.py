@@ -34,14 +34,16 @@ PALETTES: dict[str, dict[str, str]] = {
         header_bg="#ffe0ec", header_text="#a5326a",
         sel_bg="#ff4f92", sel_text="#ffffff",
         banner_bg="#ffd0e0", banner_text="#a51f57", banner_border="#ff4f92"),
+    # Pink · Light — clearly pink (surfaces are pink-tinted, not the white theme's
+    # pure #ffffff), so it no longer reads like the White theme (item 2).
     "pink-white": dict(
-        bg="#fff5f9", surface="#ffffff", table="#ffffff", alt="#fff0f6",
-        text="#3a2230", muted="#9a6b82", border="#ffd0e2",
-        accent="#ff4f92", accent_text="#ffffff", accent_hover="#ff69a3",
-        secondary="#ffe3ef", secondary_text="#7a2f4f",
-        header_bg="#fff0f6", header_text="#a5326a",
-        sel_bg="#ff4f92", sel_text="#ffffff",
-        banner_bg="#ffe0ec", banner_text="#a51f57", banner_border="#ff8ab5"),
+        bg="#ffe7f1", surface="#fff4f9", table="#fff4f9", alt="#ffdcec",
+        text="#3d1f2e", muted="#9a5b7a", border="#ffbcd6",
+        accent="#ff3d86", accent_text="#ffffff", accent_hover="#ff5f9c",
+        secondary="#ffd0e2", secondary_text="#7a2f4f",
+        header_bg="#ffd2e5", header_text="#a5326a",
+        sel_bg="#ff3d86", sel_text="#ffffff",
+        banner_bg="#ffd0e0", banner_text="#a51f57", banner_border="#ff5f9c"),
     "pink-dark": dict(
         bg="#201019", surface="#2c1826", table="#281624", alt="#331b2c",
         text="#ffe3ef", muted="#c893ad", border="#452638",
@@ -50,6 +52,15 @@ PALETTES: dict[str, dict[str, str]] = {
         header_bg="#3a2030", header_text="#ffb3d1",
         sel_bg="#ff4f92", sel_text="#201019",
         banner_bg="#3a2030", banner_text="#ffb3d1", banner_border="#ff4f92"),
+    # Pink · Darker — deeper than pink-dark: near-black with a rose undertone (item 23).
+    "pink-darker": dict(
+        bg="#140a10", surface="#1f0e18", table="#1a0c14", alt="#250f1b",
+        text="#ffd9e8", muted="#b87f9a", border="#3a1c2c",
+        accent="#ff3d86", accent_text="#140a10", accent_hover="#ff5f9c",
+        secondary="#2a1420", secondary_text="#ffc2da",
+        header_bg="#2a1420", header_text="#ff9dc2",
+        sel_bg="#ff3d86", sel_text="#140a10",
+        banner_bg="#2a1420", banner_text="#ff9dc2", banner_border="#ff3d86"),
     "nord": dict(
         bg="#2e3440", surface="#3b4252", table="#2e3440", alt="#3b4252",
         text="#eceff4", muted="#aab1c2", border="#434c5e",
