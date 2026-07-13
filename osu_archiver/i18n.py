@@ -6,7 +6,7 @@ English by design. Add languages by extending each entry.
 from __future__ import annotations
 
 STRINGS: dict[str, dict[str, str]] = {
-    "app_title": {"en": "osu! Archive Manager", "tr": "osu! Arşiv Yöneticisi"},
+    "app_title": {"en": "Rosu", "tr": "Rosu"},
 
     # Tabs
     "tab_dashboard": {"en": "Dashboard", "tr": "Panel"},

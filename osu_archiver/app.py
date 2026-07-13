@@ -80,7 +80,7 @@ def run() -> int:
         return 0
 
     app = QApplication(sys.argv)
-    app.setApplicationName("osu! Archive Manager")
+    app.setApplicationName("Rosu")
     app.setWindowIcon(QIcon(asset_path("icon.png")))
 
     cfg = config.load_config()

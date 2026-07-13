@@ -1,8 +1,9 @@
-# osu! Archive Manager
+# Rosu 🌹
 
-osu! beatmap paketlerini (`.zip`) toplu olarak açan, hafızada takip eden, seri
-boşluklarını bulup Excel'de kırmızı gösteren, `.osz` müzikleri tekilleştirilmiş
+**Rosu** — osu! beatmap paketlerini (`.zip`) toplu olarak açan, hafızada takip eden,
+seri boşluklarını bulup Excel'de kırmızı gösteren, `.osz` müzikleri tekilleştirilmiş
 bir kütüphaneye yedekleyen ve tek tuşla osu!lazer'a aktaran masaüstü uygulaması.
+(*Rosu* = **rose** + **osu!** 🌹)
 
 > Arka plan, kod ve loglar İngilizce; kullanıcı arayüzü Türkçe/İngilizce (Ayarlar'dan).
 
@@ -80,8 +81,9 @@ Son kullanıcı hiçbir şey kurmaz; sadece `.exe`'yi çalıştırır.
 
 ```bash
 pip install -r requirements-dev.txt
-pyinstaller osu-archiver.spec
-# çıktı: dist/osu-archiver.exe  (yayınlarken osu-archiver-<sürüm>.exe olarak adlandırın)
+pyinstaller rosu.spec
+# çıktı: dist/rosu.exe  (yayınlarken rosu-<sürüm>.exe olarak adlandırın)
+python -m osu_archiver.assets.make_icon   # ikon/splash'ı yeniden üret (gerekirse)
 ```
 
 ## Testler

@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to **osu! Archive Manager** are documented here.
+All notable changes to **Rosu** (osu! beatmap archive manager) are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
@@ -10,8 +10,27 @@ the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-Roadmap for v0.5.0 → v0.8.0 is tracked in
+Roadmap for v0.6.0 → v0.8.0 is tracked in
 `docs/superpowers/specs/2026-07-13-osu-archiver-v0.3-to-v0.8-roadmap-design.md`.
+
+## [0.5.0] — 2026-07-13
+
+The app has a name and an identity: **Rosu** (rose + osu!).
+
+### Added
+- **New theme "Pink · Darker" (item 23)** — deeper than Pink · Dark, near-black with
+  a rose undertone. 12 themes total.
+- **Icon design system (item 19)**: 20 icon concepts + 20 geometric-rose variations
+  designed and archived under `docs/icons/`; `assets/icon_lab.py` generates them all
+  and finalises the chosen one to `.png/.ico/splash`. The winner is a geometric rose
+  (white facets on osu! pink).
+
+### Changed
+- **Renamed to Rosu**: app title, window title, splash wordmark, exe name
+  (`rosu.exe`, built from `rosu.spec`) and the app icon are all Rosu now. (The Python
+  package stays `osu_archiver` internally.)
+- **Pink · Light is clearly pink (item 2)**: its surfaces are pink-tinted instead of
+  the White theme's pure white, so the two no longer look alike.
 
 ## [0.4.0] — 2026-07-13
 
@@ -127,8 +146,9 @@ Initial release. The core archive-management pipeline.
 - **EN/TR** localization; English-only code/logs.
 - Single-file **PyInstaller** build (`osu-archiver.spec`) + GitHub Actions build workflow.
 
-[Unreleased]: https://example.invalid/compare/v0.4.0...HEAD
-[0.4.0]: https://example.invalid/releases/tag/v0.4.0
-[0.3.0]: https://example.invalid/releases/tag/v0.3.0
-[0.2.0]: https://example.invalid/releases/tag/v0.2.0
-[0.1.0]: https://example.invalid/releases/tag/v0.1.0
+[Unreleased]: https://github.com/Kerevizodunu2000/rosu/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/Kerevizodunu2000/rosu/releases/tag/v0.5.0
+[0.4.0]: https://github.com/Kerevizodunu2000/rosu/releases/tag/v0.4.0
+[0.3.0]: https://github.com/Kerevizodunu2000/rosu/releases/tag/v0.3.0
+[0.2.0]: https://github.com/Kerevizodunu2000/rosu/releases/tag/v0.2.0
+[0.1.0]: https://github.com/Kerevizodunu2000/rosu/releases/tag/v0.1.0

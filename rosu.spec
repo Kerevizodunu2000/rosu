@@ -1,6 +1,6 @@
 # -*- mode: python ; coding: utf-8 -*-
-# PyInstaller spec: builds a single, self-contained osu-archiver.exe.
-# Build with:  pyinstaller osu-archiver.spec
+# PyInstaller spec: builds a single, self-contained rosu.exe.
+# Build with:  pyinstaller rosu.spec
 
 block_cipher = None
 
@@ -32,7 +32,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name='osu-archiver',
+    name='rosu',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

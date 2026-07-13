@@ -264,6 +264,65 @@ Each is a complete app icon (large + 40&nbsp;px + 22&nbsp;px). Tell me the numbe
     out.write_text(html, encoding="utf-8")
 
 
+# =====================================================================
+# Finalise — the chosen icon (round-2 #02: white facets on pink) -> assets
+# =====================================================================
+ASSETS = Path(__file__).resolve().parent
+
+
+def final_inner() -> str:
+    """Round-2 #02 · 'Original · pink' — the icon Rosu ships with."""
+    return (f'{RECT} fill="url(#gPink)"/>'
+            f'<g transform="translate(50 50) scale(0.9)">'
+            f'{orig("#ffffff", "#ffd0e2", "#ffb3d1", "#a5175a")}</g>')
+
+
+def _win_font(name: str, size: int):
+    from PIL import ImageFont
+    for p in (rf"C:\Windows\Fonts\{name}", name):
+        try:
+            return ImageFont.truetype(p, size)
+        except OSError:
+            continue
+    return ImageFont.load_default()
+
+
+def _grad(w: int, h: int, top, bottom):
+    from PIL import Image
+    g = Image.new("RGB", (1, h))
+    for y in range(h):
+        t = y / max(1, h - 1)
+        g.putpixel((0, y), tuple(int(a + (b - a) * t) for a, b in zip(top, bottom)))
+    return g.resize((w, h))
+
+
+def finalize() -> None:
+    """Render the chosen icon to icon.png / icon.ico / splash.png."""
+    from PIL import Image, ImageDraw
+
+    svg = _svg_file(final_inner())
+    png = ASSETS / "icon.png"
+    if not _render_png(svg, png, 256):
+        raise RuntimeError("QtSvg render failed — cannot build icon")
+    img = Image.open(png).convert("RGBA")
+    img.save(ASSETS / "icon.ico",
+             sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64),
+                    (128, 128), (256, 256)])
+
+    # splash: pink banner + icon + "Rosu" wordmark
+    w, h = 540, 320
+    splash = _grad(w, h, (255, 138, 181), (255, 61, 134)).convert("RGBA")
+    ic = img.resize((132, 132), Image.LANCZOS)
+    splash.alpha_composite(ic, (w // 2 - 66, 44))
+    d = ImageDraw.Draw(splash)
+    d.text((w // 2, 210), "Rosu", fill=(255, 255, 255, 255),
+           font=_win_font("segoeuib.ttf", 60), anchor="mm")
+    d.text((w // 2, 258), "osu! beatmap archive manager",
+           fill=(255, 235, 244, 235), font=_win_font("segoeui.ttf", 19), anchor="mm")
+    splash.convert("RGB").save(ASSETS / "splash.png")
+    print("finalized -> icon.png, icon.ico, splash.png in", ASSETS)
+
+
 def main() -> None:
     (OUT / "round1").mkdir(parents=True, exist_ok=True)
     (OUT / "round2").mkdir(parents=True, exist_ok=True)
@@ -291,4 +350,8 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    import sys
+    if "finalize" in sys.argv:
+        finalize()
+    else:
+        main()

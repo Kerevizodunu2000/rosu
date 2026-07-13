@@ -19,6 +19,7 @@ venv/
 /dist/
 *.spec.bak
 
-# Built executable (53MB; distributed via GitHub Releases, not the repo)
+# Built executable (~54MB; distributed via GitHub Releases, not the repo)
+/rosu.exe
 /osu-archiver.exe
 *.exe
