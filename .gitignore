@@ -1,0 +1,24 @@
+# Working data folders (never commit the user's music/archives)
+/Packs/
+/Output/
+/Library/
+/Processed/
+/data/
+/logs/
+config.json
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
+# PyInstaller build output
+/build/
+/dist/
+*.spec.bak
+
+# Built executable (53MB; distributed via GitHub Releases, not the repo)
+/osu-archiver.exe
+*.exe

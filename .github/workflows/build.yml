@@ -1,0 +1,39 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+      - name: Run tests
+        run: python -m pytest tests/ -q
+      - name: Build single .exe
+        run: pyinstaller osu-archiver.spec
+      - name: Smoke-test the frozen build
+        run: dist/osu-archiver.exe --selftest
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: osu-archiver-windows
+          path: dist/osu-archiver.exe
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/osu-archiver.exe
+
+  # macOS build is intentionally deferred (see README "Gelecek planları").
+  # Enable later by adding a macos-latest job that runs the same steps and
+  # packages a .app/.dmg with PyInstaller.

@@ -1,0 +1,86 @@
+"""Application bootstrap: build the context, apply the theme, show the window."""
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QIcon, QPixmap
+from PySide6.QtWidgets import QApplication, QSplashScreen
+
+from . import __version__, config, logsvc, theming
+from .db import Database
+from .i18n import I18N
+from .services import Services
+from .ui.main_window import MainWindow
+
+
+def asset_path(name: str) -> str:
+    return str(Path(__file__).resolve().parent / "assets" / name)
+
+
+def load_stylesheet(theme: str) -> str:
+    return theming.stylesheet_for(theme)
+
+
+class AppContext:
+    """Shared, long-lived services handed to every tab."""
+
+    def __init__(self):
+        self.cfg = config.load_config()
+        self.cfg.ensure_dirs()
+        # auto-detect osu! once if not configured
+        if not self.cfg.osu_exe:
+            self.cfg.osu_exe = config.detect_osu_exe()
+            config.save_config(self.cfg)
+        logsvc.write_log_formats_doc(self.cfg.logs_path)
+        self.log = logsvc.LogService(self.cfg.logs_path, __version__)
+        self.db = Database(self.cfg.db_path)
+        self.i18n = I18N(self.cfg.language)
+        self.services = Services(self.cfg, self.db, self.log)
+
+    def t(self, key: str, **kwargs) -> str:
+        return self.i18n.t(key, **kwargs)
+
+    def save_config(self) -> None:
+        config.save_config(self.cfg)
+
+
+def run() -> int:
+    argv = sys.argv[1:]
+    if "--version" in argv:
+        print(__version__)
+        return 0
+
+    app = QApplication(sys.argv)
+    app.setApplicationName("osu! Archive Manager")
+    app.setWindowIcon(QIcon(asset_path("icon.png")))
+    ctx = AppContext()
+    qss = load_stylesheet(ctx.cfg.theme)
+
+    if "--selftest" in argv:
+        # Verify a packaged build boots: theme, icon, db and dirs are available.
+        ok = bool(qss) and ctx.cfg.data_path.exists() and Path(asset_path("icon.png")).exists()
+        print("selftest OK" if ok else "selftest FAIL")
+        ctx.db.close()
+        return 0 if ok else 1
+
+    app.setStyleSheet(qss)
+    ctx.log.info("APP_START", version=__version__, root=str(ctx.cfg.root))
+
+    splash_pix = QPixmap(asset_path("splash.png"))
+    splash = QSplashScreen(splash_pix) if not splash_pix.isNull() else None
+    if splash:
+        splash.show()
+        app.processEvents()
+
+    win = MainWindow(ctx, app)
+    win.setWindowIcon(QIcon(asset_path("icon.png")))
+    win.show()
+    if splash:
+        splash.finish(win)
+    code = app.exec()
+
+    ctx.log.info("APP_STOP", reason="window closed")
+    ctx.db.close()
+    return code
