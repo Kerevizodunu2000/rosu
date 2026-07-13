@@ -7,7 +7,7 @@ from pathlib import Path
 from PySide6.QtCore import QUrl, Signal
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
-    QHBoxLayout, QPlainTextEdit, QPushButton, QVBoxLayout, QWidget,
+    QHBoxLayout, QMessageBox, QPlainTextEdit, QPushButton, QVBoxLayout, QWidget,
 )
 
 
@@ -66,9 +66,16 @@ class LogsTab(QWidget):
         """Live sink called by the LogService (possibly from a worker thread)."""
         self.line_logged.emit(line)
 
-    def _open_formats(self) -> None:
-        path = self.ctx.cfg.logs_path / "log_formats.md"
+    def _open(self, path: Path) -> None:
+        """Open a file, or warn clearly if it isn't there yet (item 5/20)."""
+        if not Path(path).exists():
+            QMessageBox.information(self, self.ctx.t("app_title"),
+                                    self.ctx.t("file_missing", path=path))
+            return
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
 
+    def _open_formats(self) -> None:
+        self._open(self.ctx.cfg.logs_path / "log_formats.md")
+
     def _open_excel(self) -> None:
-        QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.ctx.cfg.excel_path)))
+        self._open(self.ctx.cfg.excel_path)

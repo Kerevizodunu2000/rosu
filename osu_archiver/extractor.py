@@ -17,6 +17,16 @@ from .parsing import parse_osz_entry, parse_pack_name
 
 _CHUNK = 1 << 20  # 1 MiB streaming buffer
 
+# Archive containers we can currently open. Item 24 will extend this to
+# rar/7z/tar/... — everything that reads formats keys off this one list.
+ARCHIVE_EXTS = ("zip",)
+
+
+def archive_dialog_filter() -> str:
+    """A Qt file-dialog filter string covering the supported archive formats."""
+    pats = " ".join(f"*.{e}" for e in ARCHIVE_EXTS)
+    return f"Archives ({pats})"
+
 
 def scan_packs(packs_dir: Path) -> list[tuple[Path, ParsedPack]]:
     """Return ``(zip_path, ParsedPack)`` for every parseable .zip in Packs/."""

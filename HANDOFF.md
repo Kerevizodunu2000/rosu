@@ -11,8 +11,13 @@ osu! beatmap pack archives. Location: **`C:\Desktop\Osu`**. Ships as a single **
 (no install for end users). Will be published on **GitHub, versioned**. macOS is a future goal
 (Qt is cross-platform; add a macOS CI job later — no code rewrite).
 
-**Status: v0.2.0 shipped and verified.** Runnable exe: **`C:\Desktop\Osu\osu-archiver.exe`** (~52MB;
-`--version`→`0.2.0`, `--selftest`→OK). Build output copy in `dist/`.
+**Status: v0.3.0 shipped and verified.** Location moved to **`C:\Desktop\osu_archiver\`**
+(the app now self-heals stale config paths — item 20). Runnable exe:
+**`C:\Desktop\osu_archiver\osu-archiver.exe`** (`--version`→`0.3.0`, `--selftest`→OK).
+
+> **Roadmap & design of record (v0.3→v0.8):**
+> `docs/superpowers/specs/2026-07-13-osu-archiver-v0.3-to-v0.8-roadmap-design.md`.
+> Version history: `CHANGELOG.md`. Repo is now under **git** (tags `v0.2.0`, `v0.3.0`).
 
 UI language: **EN default + TR** (Settings). All background/code/logs are **English only**.
 

@@ -60,7 +60,6 @@ class Config:
     # Behaviour toggles
     library_physical_copy: bool = True   # keep real .osz backups in Library
     clear_output_before_extract: bool = True  # Output only holds the current batch
-    clear_output_after_import: bool = False   # clear Output once imported to osu!
     auto_backup_after_extract: bool = False   # auto-run Copy to Library after extract
     zip_disposal: str = "recycle"
 

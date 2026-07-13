@@ -1,15 +1,17 @@
 """Dashboard tab: scan count, the four action buttons, and progress feedback."""
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QAbstractItemView, QCheckBox, QHBoxLayout, QHeaderView, QLabel, QMessageBox,
-    QProgressBar, QPushButton, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
+    QAbstractItemView, QCheckBox, QFileDialog, QHBoxLayout, QHeaderView, QLabel,
+    QMessageBox, QProgressBar, QPushButton, QTableWidget, QTableWidgetItem,
+    QVBoxLayout, QWidget,
 )
 
-from .. import osu_import
+from .. import extractor, osu_import
 from ..i18n import human_duration
 from ..workers import Worker
 from .progress_panel import ProgressPanel
@@ -196,9 +198,44 @@ class DashboardTab(QWidget):
     # -- Unpack Archives -----------------------------------------------------
     def on_extract(self) -> None:
         if not self._scan:
+            self._handle_empty_packs()
             return
         self._busy_generic("working")
         self._start_worker(self.services.prescan_all, on_success=self._after_prescan)
+
+    def _handle_empty_packs(self) -> None:
+        """Packs is empty: explain, and offer a native picker to import archives
+        from anywhere (item 4). QFileDialog is native on Windows and macOS."""
+        t = self.ctx.t
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Information)
+        box.setWindowTitle(t("app_title"))
+        box.setText(t("packs_empty"))
+        browse = box.addButton(t("btn_browse_archives"), QMessageBox.AcceptRole)
+        box.addButton(t("btn_cancel"), QMessageBox.RejectRole)
+        box.exec()
+        if box.clickedButton() is browse:
+            self._import_external_archives()
+
+    def _import_external_archives(self) -> None:
+        t = self.ctx.t
+        files, _ = QFileDialog.getOpenFileNames(
+            self, t("select_archives"), "", extractor.archive_dialog_filter())
+        if not files:
+            return
+        dest = self.ctx.cfg.packs_path
+        dest.mkdir(parents=True, exist_ok=True)
+        n = 0
+        for f in files:
+            try:
+                shutil.copy2(f, dest / Path(f).name)
+                n += 1
+            except OSError:
+                pass
+        self.status.setText(t("imported_to_packs", n=n))
+        self.refresh_scan()
+        if self._scan:
+            self.on_extract()  # proceed straight into unpacking
 
     def _after_prescan(self, plans) -> None:
         approved = self._resolve_plans(plans)
@@ -261,6 +298,10 @@ class DashboardTab(QWidget):
 
     # -- Copy to Library -----------------------------------------------------
     def on_copy(self) -> None:
+        if not osu_import.output_osz_files(self.ctx.cfg.output_path):
+            QMessageBox.information(self, self.ctx.t("app_title"),
+                                    self.ctx.t("nothing_in_output"))
+            return
         self._busy_generic("working")
         self._start_worker(self.services.copy_library, on_success=self._after_copy)
 

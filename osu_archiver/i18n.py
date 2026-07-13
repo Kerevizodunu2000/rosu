@@ -47,8 +47,22 @@ STRINGS: dict[str, dict[str, str]] = {
         "tr": "{added} eklendi, {enriched} zenginleştirildi, {disappeared} kayboldu, {present} mevcut."},
     "osu_not_found": {"en": "osu! executable not found. Set it in Settings.",
                       "tr": "osu! çalıştırılabilir dosyası bulunamadı. Ayarlar'dan belirtin."},
-    "nothing_in_output": {"en": "Output is empty — extract some packs first.",
-                          "tr": "Output boş — önce arşiv çıkarın."},
+    "nothing_in_output": {"en": "Output is empty — unpack some archives first.",
+                          "tr": "Output boş — önce arşiv açın."},
+
+    # Empty Packs / external import (item 4)
+    "packs_empty": {
+        "en": "The Packs folder is empty. Add archives there and try again, or pick "
+              "archive files to import now.",
+        "tr": "Packs klasörü boş. Oraya arşiv ekleyip tekrar deneyin, ya da şimdi "
+              "içe aktarmak için arşiv dosyaları seçin."},
+    "btn_browse_archives": {"en": "Choose archives…", "tr": "Arşiv seç…"},
+    "select_archives": {"en": "Select archives to import", "tr": "İçe aktarılacak arşivleri seç"},
+    "imported_to_packs": {"en": "Copied {n} archive(s) into Packs.",
+                          "tr": "{n} arşiv Packs klasörüne kopyalandı."},
+    "file_missing": {
+        "en": "File not found:\n{path}\n\nIt may not have been generated yet.",
+        "tr": "Dosya bulunamadı:\n{path}\n\nHenüz oluşturulmamış olabilir."},
 
     # Re-add dialog
     "readd_title": {"en": "Archive already added", "tr": "Arşiv zaten eklenmiş"},

@@ -56,6 +56,17 @@ logs/      app-YYYY-MM-DD.log + log_formats.md
 config.json ayarlar
 ```
 
+> **Kendini onarım:** Uygulamanın klasörünü taşırsan/adını değiştirirsen, açılışta
+> klasörleri exe'nin yanında bulur ve **onayınla** yeni konuma günceller — böylece
+> eski, boş konumları okumaya devam etmez. `Packs/` boşken **Arşivleri Aç**'a
+> basarsan, içe aktarmak için dosya seçmeni sağlayan yerel bir pencere açılır.
+> **Ayarlardaki açma/kapama seçenekleri anında uygulanır** (Kaydet'e gerek yok);
+> "Açtıktan sonra otomatik Library'e kopyala" işaretlenince bir sonraki açımda çalışır.
+
+## Değişiklik günlüğü
+
+Sürüm sürüm değişiklikler: [`CHANGELOG.md`](CHANGELOG.md).
+
 ## Geliştirici olarak çalıştırma
 
 ```bash

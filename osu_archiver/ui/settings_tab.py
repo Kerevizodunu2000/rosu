@@ -57,9 +57,8 @@ class SettingsTab(QWidget):
 
         self.cb_physical = QCheckBox(); self.cb_physical.setChecked(cfg.library_physical_copy)
         self.cb_clear_before = QCheckBox(); self.cb_clear_before.setChecked(cfg.clear_output_before_extract)
-        self.cb_clear_after = QCheckBox(); self.cb_clear_after.setChecked(cfg.clear_output_after_import)
         self.cb_auto_backup = QCheckBox(); self.cb_auto_backup.setChecked(cfg.auto_backup_after_extract)
-        for cb in (self.cb_physical, self.cb_auto_backup, self.cb_clear_before, self.cb_clear_after):
+        for cb in (self.cb_physical, self.cb_auto_backup, self.cb_clear_before):
             root.addWidget(cb)
 
         zip_row = QHBoxLayout()
@@ -71,6 +70,13 @@ class SettingsTab(QWidget):
                                  if cfg.zip_disposal in _ZIP_ORDER else 0)
         zip_row.addWidget(self.lbl_zip); zip_row.addWidget(self.zip); zip_row.addStretch(1)
         root.addLayout(zip_row)
+
+        # Toggles apply immediately (like Language/Theme) so a checked box takes
+        # effect without also pressing Save — fixes "I enabled Auto-copy but it
+        # didn't run" (item 6). Paths still commit via the Save button.
+        for cb in (self.cb_physical, self.cb_auto_backup, self.cb_clear_before):
+            cb.toggled.connect(self._apply_toggles)
+        self.zip.currentIndexChanged.connect(self._apply_toggles)
 
         # osu! API reference
         self.lbl_api = QLabel(objectName="h1")
@@ -148,7 +154,6 @@ class SettingsTab(QWidget):
         self.cb_physical.setText(t("set_physical_copy"))
         self.cb_auto_backup.setText(t("set_auto_backup"))
         self.cb_clear_before.setText(t("set_clear_output_before"))
-        self.cb_clear_after.setText(t("set_clear_output_after"))
         self.lbl_zip.setText(t("set_zip_disposal"))
         self.zip.setItemText(0, t("zip_recycle"))
         self.zip.setItemText(1, t("zip_move"))
@@ -216,18 +221,24 @@ class SettingsTab(QWidget):
         self._refresh_reference_status()
         QMessageBox.critical(self, self.ctx.t("app_title"), msg)
 
-    # -- save ----------------------------------------------------------------
+    # -- live toggle apply ---------------------------------------------------
+    def _apply_toggles(self, *_) -> None:
+        cfg = self.ctx.cfg
+        cfg.library_physical_copy = self.cb_physical.isChecked()
+        cfg.auto_backup_after_extract = self.cb_auto_backup.isChecked()
+        cfg.clear_output_before_extract = self.cb_clear_before.isChecked()
+        cfg.zip_disposal = self.zip.currentData()
+        self.ctx.save_config()
+        self.saved_label.setText(self.ctx.t("saved"))
+
+    # -- save (paths + API) --------------------------------------------------
     def _save(self) -> None:
         cfg = self.ctx.cfg
         cfg.packs_dir = self.packs.text().strip()
         cfg.output_dir = self.output.text().strip()
         cfg.library_dir = self.library.text().strip()
         cfg.osu_exe = self.osu.text().strip()
-        cfg.library_physical_copy = self.cb_physical.isChecked()
-        cfg.auto_backup_after_extract = self.cb_auto_backup.isChecked()
-        cfg.clear_output_before_extract = self.cb_clear_before.isChecked()
-        cfg.clear_output_after_import = self.cb_clear_after.isChecked()
-        cfg.zip_disposal = self.zip.currentData()
+        self._apply_toggles()
         cfg.osu_client_id = self.client_id.text().strip()
         cfg.osu_client_secret = self.client_secret.text().strip()
         cfg.ensure_dirs()

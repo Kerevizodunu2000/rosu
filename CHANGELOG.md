@@ -10,8 +10,41 @@ the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-Roadmap for v0.3.0 → v0.8.0 is tracked in
+Roadmap for v0.4.0 → v0.8.0 is tracked in
 `docs/superpowers/specs/2026-07-13-osu-archiver-v0.3-to-v0.8-roadmap-design.md`.
+
+## [0.3.0] — 2026-07-13
+
+Critical fixes: the app no longer breaks when its folder is moved, and several
+buttons/settings now behave as users expect.
+
+### Added
+- **Folder self-heal (item 20)**: on launch the app validates its working folders
+  and, if it was moved/renamed, compares how much data sits at the configured path
+  vs. the folder next to the exe and offers to re-point to wherever the real data
+  is — with a confirmation dialog. Recovers Library/data/logs after a move,
+  preserves a Library deliberately kept on another drive, and never silently
+  recreates empty folders at a dead path. New pure `pathheal` module + 6 tests.
+- **Empty-Packs helper (item 4)**: pressing "Unpack Archives" with an empty `Packs/`
+  now explains the situation and offers a **native file picker** to import archives
+  from anywhere (copies them into `Packs/`, then unpacks). Native on Windows/macOS.
+
+### Changed
+- **Settings toggles apply immediately (item 6)**: checkboxes (incl. "Auto-copy to
+  Library after unpacking") now take effect the moment you toggle them, like
+  Language/Theme — no separate Save press needed. Fixes auto-copy silently not
+  running because the box was checked but never saved.
+- **Friendlier empty/error states (item 5)**: "Copy to Library" and "Open Excel/
+  log_formats" now show a clear message when there's nothing to act on / the file
+  isn't generated yet, instead of doing nothing.
+
+### Removed
+- **"Clear Output after importing to osu!" option (item 7)**: removed from Settings
+  and config — osu! consumes the `.osz` on import, so Output empties itself.
+
+### Verified
+- BPM/length/mapper metadata is fully populated for all 1225 library tracks via
+  "Refresh Library Data" (item 9 — working as designed, no code change).
 
 ## [0.2.0] — 2026-07-13
 
@@ -63,6 +96,7 @@ Initial release. The core archive-management pipeline.
 - **EN/TR** localization; English-only code/logs.
 - Single-file **PyInstaller** build (`osu-archiver.spec`) + GitHub Actions build workflow.
 
-[Unreleased]: https://example.invalid/compare/v0.2.0...HEAD
+[Unreleased]: https://example.invalid/compare/v0.3.0...HEAD
+[0.3.0]: https://example.invalid/releases/tag/v0.3.0
 [0.2.0]: https://example.invalid/releases/tag/v0.2.0
 [0.1.0]: https://example.invalid/releases/tag/v0.1.0

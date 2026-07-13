@@ -153,8 +153,8 @@ class Services:
         res = osu_import.import_files(exe, files, progress=_prog,
                                       cancel=self._cancel.is_set)
         self.log.info("OSU_IMPORT_DONE", files=res["files"], batches=res["batches"])
-        if not res.get("cancelled") and self.cfg.clear_output_after_import:
-            _clear_osz(self.cfg.output_path)
+        # (Removed the "clear Output after import" option — item 7. osu! consumes the
+        # .osz on import, so Output empties itself; an explicit clear was redundant.)
         return res
 
     # -- reference (osu! API) ------------------------------------------------
