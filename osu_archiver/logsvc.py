@@ -36,6 +36,7 @@ ACTIONS: dict[str, tuple[tuple[str, ...], str]] = {
     "ZIP_MOVED":     (("file", "dest"), "Moved a processed .zip to the Processed/ folder"),
     "ZIP_DELETED":   (("file",), "Permanently deleted a processed .zip"),
     "LIBRARY_COPY":  (("new", "duplicates", "dup_ids"), "Button: Copy to Library finished"),
+    "LIBRARY_PURGE": (("deleted",), "Deleted the Library's physical .osz copies (kept metadata)"),
     "OSU_IMPORT":    (("batch", "files"), "Button: Import to osu! sent a batch to osu!lazer"),
     "OSU_IMPORT_DONE": (("files", "batches"), "Import to osu! finished dispatching"),
     "REFRESH":       (("added", "disappeared", "present"), "Button: Refresh Library Data finished"),

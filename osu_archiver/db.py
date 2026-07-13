@@ -83,7 +83,7 @@ CREATE INDEX IF NOT EXISTS idx_packs_category ON packs(category);
 
 # Columns added after v1, applied via ALTER for databases upgrading in place.
 _MIGRATIONS = {
-    "packs": {"category": "TEXT"},
+    "packs": {"category": "TEXT", "extra_count": "INTEGER DEFAULT 0"},
     "tracks": {
         "creator": "TEXT", "source": "TEXT", "tags": "TEXT", "bpm": "REAL",
         "length_seconds": "INTEGER", "mode": "TEXT", "diff_count": "INTEGER DEFAULT 0",
@@ -164,6 +164,13 @@ class Database:
                 pid = cur.lastrowid
             self._conn.commit()
             return pid
+
+    def set_pack_extra(self, code: str, count: int) -> None:
+        """Record how many non-music files the pack's source archive held (item 25)."""
+        with self._lock:
+            self._conn.execute("UPDATE packs SET extra_count=? WHERE code=?",
+                               (int(count), code))
+            self._conn.commit()
 
     def series_list(self) -> list[str]:
         with self._lock:
@@ -308,6 +315,16 @@ class Database:
                     return r
             return self._conn.execute(
                 "SELECT * FROM tracks WHERE filename=?", (filename,)).fetchone()
+
+    def mark_library_memory(self, when: str) -> int:
+        """After the physical .osz copies are deleted, keep the rows but mark them
+        memory-only (item 17). Returns how many rows changed."""
+        with self._lock:
+            cur = self._conn.execute(
+                "UPDATE tracks SET in_library=0, library_status='memory', "
+                "status_changed_at=? WHERE in_library=1", (when,))
+            self._conn.commit()
+            return cur.rowcount
 
     def library_tracks(self) -> list[dict]:
         with self._lock:

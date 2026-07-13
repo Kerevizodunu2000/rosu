@@ -345,6 +345,9 @@ class DashboardTab(QWidget):
         else:
             self.status.setText(self.ctx.t("import_done", files=res["files"],
                                            batches=res["batches"]))
+            # osu! keeps importing in the background after dispatch (item 18).
+            QMessageBox.information(self, self.ctx.t("app_title"),
+                                    self.ctx.t("osu_keep_open"))
 
     # -- Refresh Library -----------------------------------------------------
     def on_refresh(self) -> None:

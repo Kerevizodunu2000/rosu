@@ -59,8 +59,17 @@ def series_mode(series: str | None) -> str | None:
 _OSZ_RE = re.compile(r"^(\d+)\s+(.+)\.osz$", re.IGNORECASE)
 
 
+# archive suffixes we recognise (longest first so ".tar.gz" wins over ".gz")
+_ARCHIVE_SUFFIXES = (".tar.gz", ".tar.bz2", ".tar.xz", ".tgz", ".tbz2", ".txz",
+                     ".zip", ".7z", ".tar")
+
+
 def _strip_ext(name: str) -> str:
-    return name[:-4] if name.lower().endswith(".zip") else name
+    low = name.lower()
+    for suf in _ARCHIVE_SUFFIXES:
+        if low.endswith(suf):
+            return name[:-len(suf)]
+    return name
 
 
 def parse_pack_name(zip_filename: str) -> ParsedPack:

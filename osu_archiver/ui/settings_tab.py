@@ -2,12 +2,14 @@
 from __future__ import annotations
 
 from PySide6.QtWidgets import (
-    QCheckBox, QComboBox, QFileDialog, QFormLayout, QHBoxLayout, QLabel, QLineEdit,
-    QMessageBox, QPushButton, QScrollArea, QVBoxLayout, QWidget,
+    QCheckBox, QComboBox, QDialog, QFileDialog, QFormLayout, QHBoxLayout, QLabel,
+    QLineEdit, QMessageBox, QPushButton, QScrollArea, QVBoxLayout, QWidget,
 )
 
 from .. import config
 from ..workers import Worker
+from . import wheel_guard
+from .countdown_dialog import CountdownConfirmDialog
 
 _ZIP_ORDER = ["recycle", "move", "delete"]
 
@@ -74,9 +76,14 @@ class SettingsTab(QWidget):
         # Toggles apply immediately (like Language/Theme) so a checked box takes
         # effect without also pressing Save — fixes "I enabled Auto-copy but it
         # didn't run" (item 6). Paths still commit via the Save button.
-        for cb in (self.cb_physical, self.cb_auto_backup, self.cb_clear_before):
+        for cb in (self.cb_auto_backup, self.cb_clear_before):
             cb.toggled.connect(self._apply_toggles)
+        # Turning OFF physical copies deletes files, so it gets a guarded confirm
+        # (item 17) instead of the plain live-apply.
+        self.cb_physical.toggled.connect(self._on_physical_toggled)
         self.zip.currentIndexChanged.connect(self._apply_toggles)
+        # Combos must not change on an accidental wheel scroll (item 16).
+        wheel_guard.guard(self.lang, self.theme, self.zip)
 
         # osu! API reference
         self.lbl_api = QLabel(objectName="h1")
@@ -220,6 +227,34 @@ class SettingsTab(QWidget):
         self.btn_reference.setEnabled(True)
         self._refresh_reference_status()
         QMessageBox.critical(self, self.ctx.t("app_title"), msg)
+
+    # -- physical-copy toggle (guarded delete) -------------------------------
+    def _on_physical_toggled(self, checked: bool) -> None:
+        cfg = self.ctx.cfg
+        if checked:  # turning ON just keeps future copies — nothing to delete
+            cfg.library_physical_copy = True
+            self.ctx.save_config()
+            self.saved_label.setText(self.ctx.t("saved"))
+            return
+        t = self.ctx.t
+        dlg = CountdownConfirmDialog(
+            self, t("physical_off_title"), t("physical_off_body"),
+            t("physical_off_confirm"), t("btn_cancel"))
+        if dlg.exec() != QDialog.Accepted:
+            self.cb_physical.blockSignals(True)   # cancelled -> revert the box
+            self.cb_physical.setChecked(True)
+            self.cb_physical.blockSignals(False)
+            return
+        cfg.library_physical_copy = False
+        self.ctx.save_config()
+        self.saved_label.setText(t("working"))
+        w = Worker(self.ctx.services.purge_library_files)
+        self._threads.append(w)
+        w.succeeded.connect(lambda res: self.saved_label.setText(
+            self.ctx.t("physical_off_done", n=res["deleted"])))
+        w.failed.connect(lambda m: QMessageBox.critical(self, t("app_title"), m))
+        w.finished.connect(lambda: self._threads.remove(w) if w in self._threads else None)
+        w.start()
 
     # -- live toggle apply ---------------------------------------------------
     def _apply_toggles(self, *_) -> None:

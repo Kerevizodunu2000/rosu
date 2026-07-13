@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..gaps import _present_row
+from . import wheel_guard
 from .copy_table import CopyTable, SortItem
 
 _RED_BG = QColor("#FFC7CE")
@@ -31,12 +32,16 @@ class PacksTab(QWidget):
         self.search.textChanged.connect(self._apply_filter)
         self.cb_missing = QCheckBox()
         self.cb_missing.toggled.connect(self._apply_filter)
+        self.cb_extra = QCheckBox()
+        self.cb_extra.toggled.connect(self._apply_filter)
         self.filter = QComboBox()
         self.filter.currentIndexChanged.connect(self._apply_filter)
         top.addWidget(self.search, 1)
         top.addWidget(self.cb_missing)
+        top.addWidget(self.cb_extra)
         top.addWidget(self.filter)
         root.addLayout(top)
+        wheel_guard.guard(self.filter)   # no accidental change on scroll (item 16)
 
         self.hint = QLabel(objectName="status")
         root.addWidget(self.hint)
@@ -49,6 +54,7 @@ class PacksTab(QWidget):
     def retranslate(self) -> None:
         self.search.setPlaceholderText(self.ctx.t("packs_search_placeholder"))
         self.cb_missing.setText(self.ctx.t("only_missing"))
+        self.cb_extra.setText(self.ctx.t("only_extra"))
         self.hint.setText(self.ctx.t("copy_hint"))
         self.table.set_menu_labels(self.ctx.t("copy_names_action"),
                                    self.ctx.t("copy_table_action"))
@@ -100,9 +106,12 @@ class PacksTab(QWidget):
         text = self.search.text().strip().casefold()
         cat = self.filter.currentText() or "All"
         missing_only = self.cb_missing.isChecked()
+        extra_only = self.cb_extra.isChecked()
         shown = []
         for category, gr, full in self._rows:
             if missing_only and gr.present:
+                continue
+            if extra_only and not getattr(gr, "extra_count", 0):
                 continue
             if cat not in ("All", category):
                 continue
@@ -122,8 +131,11 @@ class PacksTab(QWidget):
                 key_txt = " ".join(str(x) for x in (gr.year, gr.season) if x is not None)
             else:
                 key_txt = "" if gr.number is None else str(gr.number)
+            title = gr.title or ""
+            if getattr(gr, "extra_count", 0):
+                title += self.ctx.t("extra_marker", n=gr.extra_count)
             values = [category, gr.series or "", key_txt, gr.code or "",
-                      gr.title or "", gr.mode or "",
+                      title, gr.mode or "",
                       "" if not gr.present else (gr.track_count or ""),
                       gr.extracted_at or ""]
             for c, v in enumerate(values):

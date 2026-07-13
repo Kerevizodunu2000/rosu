@@ -9,7 +9,8 @@ bir kütüphaneye yedekleyen ve tek tuşla osu!lazer'a aktaran masaüstü uygula
 
 ## Ne yapar?
 
-1. **`Packs/`** klasöründeki tüm `.zip` paketleri okur ve sayar.
+1. **`Packs/`** klasöründeki tüm arşiv paketlerini okur ve sayar
+   (**.zip / .7z / .tar(.gz/.bz2/.xz)**). Müzik-dışı dosya içeren arşivler ayrıca işaretlenir.
 2. **Arşivleri Çıkar ve İşle** — hepsini **`Output/`** içine düz (flat) çıkarır
    (Spotlight paketlerindeki `osu!/`, `osu!mania/` alt klasörleri de düzleştirir,
    ama kaynağını hafızaya not eder), paketleri hafızaya işler, **Excel** raporunu

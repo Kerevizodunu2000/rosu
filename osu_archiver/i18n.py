@@ -32,6 +32,8 @@ STRINGS: dict[str, dict[str, str]] = {
     "missing_banner": {"en": "Possibly missing: {items}", "tr": "Eksik olabilir: {items}"},
     "missing_show_link": {"en": "show these →", "tr": "bunları göster →"},
     "only_missing": {"en": "Only missing", "tr": "Sadece eksik"},
+    "only_extra": {"en": "With extra files", "tr": "Ek dosyalı"},
+    "extra_marker": {"en": "  ⚠ +{n} extra files", "tr": "  ⚠ +{n} ek dosya"},
     "no_missing": {"en": "No gaps detected.", "tr": "Boşluk bulunamadı."},
     "ready": {"en": "Ready.", "tr": "Hazır."},
     "working": {"en": "Working…", "tr": "Çalışıyor…"},
@@ -171,6 +173,25 @@ STRINGS: dict[str, dict[str, str]] = {
                          "tr": "Aktarım iptal edildi ({sent}/{total} parti gönderildi)."},
     "import_dispatching": {"en": "Dispatching batch {batch}/{total}…",
                            "tr": "Parti gönderiliyor {batch}/{total}…"},
+    "osu_keep_open": {
+        "en": "Sent to osu!. osu! now imports the beatmaps in the background — "
+              "please DON'T close osu! until it finishes. You can close this window.",
+        "tr": "osu!'ya gönderildi. osu! müzikleri arka planda içe aktarıyor — işlem "
+              "bitene kadar lütfen osu!'yu KAPATMAYIN. Bu pencereyi kapatabilirsiniz."},
+
+    # Physical-copy delete confirmation (item 17)
+    "physical_off_title": {"en": "Delete physical copies?",
+                           "tr": "Fiziksel kopyalar silinsin mi?"},
+    "physical_off_body": {
+        "en": "You're turning off keeping physical .osz copies in Library. The .osz "
+              "files currently in your Library will be moved to the Recycle Bin — "
+              "their info stays in your memory. Are you sure?",
+        "tr": "Library'de fiziksel .osz kopyası tutmayı kapatıyorsunuz. Library'deki "
+              "mevcut .osz dosyaları Geri Dönüşüm Kutusu'na taşınacak — bilgileri "
+              "hafızanızda kalır. Emin misiniz?"},
+    "physical_off_confirm": {"en": "Delete files", "tr": "Dosyaları sil"},
+    "physical_off_done": {"en": "Moved {n} .osz from Library to Recycle Bin (info kept).",
+                          "tr": "{n} .osz Library'den Geri Dönüşüm Kutusu'na taşındı (bilgiler korundu)."},
 
     # Settings additions
     "set_auto_backup": {"en": "Auto-copy to Library after unpacking",

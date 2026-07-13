@@ -7,6 +7,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..i18n import human_duration
+from . import wheel_guard
 from .copy_table import CopyTable, SortItem
 
 
@@ -27,6 +28,7 @@ class ArtistsTab(QWidget):
         self.sort_label = QLabel(objectName="status")
         self.sort = QComboBox()
         self.sort.currentIndexChanged.connect(self.reload)
+        wheel_guard.guard(self.sort)   # no accidental change on scroll (item 16)
         top.addWidget(self.sort_label)
         top.addWidget(self.sort)
         top.addStretch(1)

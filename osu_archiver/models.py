@@ -88,6 +88,7 @@ class GapRow:
     track_count: int | None = None
     extracted_at: str | None = None
     status: str | None = None
+    extra_count: int = 0   # non-music files the source archive also held (item 25)
 
 
 @dataclass

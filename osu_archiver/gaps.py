@@ -56,7 +56,7 @@ def _present_row(series: str, p: dict) -> GapRow:
         code=p.get("code"), title=p.get("title"), mode=p.get("mode"),
         year=p.get("year"), season=p.get("season"),
         track_count=p.get("track_count"), extracted_at=p.get("extracted_at"),
-        status=p.get("status"),
+        status=p.get("status"), extra_count=p.get("extra_count") or 0,
     )
 
 
@@ -68,6 +68,7 @@ def build_spotlight_rows(present: list[dict]) -> list[GapRow]:
         year=p.get("year"), season=p.get("season"), mode=p.get("mode"),
         code=p.get("code"), title=p.get("title"),
         track_count=p.get("track_count"), extracted_at=p.get("extracted_at"),
+        extra_count=p.get("extra_count") or 0,
     ) for p in present]
 
     rows.sort(key=lambda r: (

@@ -10,8 +10,32 @@ the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-Roadmap for v0.6.0 → v0.8.0 is tracked in
+Roadmap for v0.7.0 → v0.8.0 is tracked in
 `docs/superpowers/specs/2026-07-13-osu-archiver-v0.3-to-v0.8-roadmap-design.md`.
+
+## [0.6.0] — 2026-07-13
+
+Safer confirmations and more archive formats.
+
+### Added
+- **More archive formats (item 24)**: unpack **7z** (py7zr) and **tar/tar.gz/
+  tar.bz2/tar.xz** in addition to zip. A new `archives` module hides the per-format
+  differences; the "choose archives" picker filters to all supported types.
+- **Archives with extra files (item 25)**: if a pack archive also held non-music
+  files (readmes, images…), the pack is flagged with how many, and the Packs tab
+  has a new "With extra files" filter to review them (music is still extracted).
+- **Mouse-wheel guard on dropdowns (item 16)**: scrolling over a combo box no longer
+  changes its value by accident — after a short pause it opens the list so you pick
+  deliberately. Applied to Language/Theme/zip-action and the Packs/Artists dropdowns.
+- **osu! close warning (item 18)**: after dispatching an import, a reminder that osu!
+  keeps importing in the background — don't close osu! until it finishes (the window
+  is fine to close).
+
+### Changed
+- **Deleting Library copies is guarded (item 17)**: turning off "keep physical .osz
+  copies in Library" now asks for confirmation behind a visible 3·2·1 countdown that
+  actually waits ~4.2 s, then moves the Library's `.osz` to the Recycle Bin while
+  keeping their info in memory.
 
 ## [0.5.0] — 2026-07-13
 
@@ -146,7 +170,8 @@ Initial release. The core archive-management pipeline.
 - **EN/TR** localization; English-only code/logs.
 - Single-file **PyInstaller** build (`osu-archiver.spec`) + GitHub Actions build workflow.
 
-[Unreleased]: https://github.com/Kerevizodunu2000/rosu/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/Kerevizodunu2000/rosu/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/Kerevizodunu2000/rosu/releases/tag/v0.6.0
 [0.5.0]: https://github.com/Kerevizodunu2000/rosu/releases/tag/v0.5.0
 [0.4.0]: https://github.com/Kerevizodunu2000/rosu/releases/tag/v0.4.0
 [0.3.0]: https://github.com/Kerevizodunu2000/rosu/releases/tag/v0.3.0

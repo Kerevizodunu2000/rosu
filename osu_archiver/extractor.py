@@ -7,48 +7,39 @@ each beatmap came from.
 """
 from __future__ import annotations
 
-import zipfile
 from pathlib import Path
-from typing import Callable
+from typing import BinaryIO, Callable
 
+from . import archives
 from .models import ExtractPlan, ParsedPack, ParsedTrack
 from .osz_meta import read_osz_meta
 from .parsing import parse_osz_entry, parse_pack_name
 
 _CHUNK = 1 << 20  # 1 MiB streaming buffer
 
-# Archive containers we can currently open. Item 24 will extend this to
-# rar/7z/tar/... — everything that reads formats keys off this one list.
-ARCHIVE_EXTS = ("zip",)
-
 
 def archive_dialog_filter() -> str:
     """A Qt file-dialog filter string covering the supported archive formats."""
-    pats = " ".join(f"*.{e}" for e in ARCHIVE_EXTS)
-    return f"Archives ({pats})"
+    return archives.dialog_filter()
 
 
 def scan_packs(packs_dir: Path) -> list[tuple[Path, ParsedPack]]:
-    """Return ``(zip_path, ParsedPack)`` for every parseable .zip in Packs/."""
-    packs_dir = Path(packs_dir)
+    """Return ``(path, ParsedPack)`` for every parseable archive in Packs/
+    (zip / 7z / tar.* — item 24)."""
     out: list[tuple[Path, ParsedPack]] = []
-    if not packs_dir.exists():
-        return out
-    for entry in sorted(packs_dir.glob("*.zip")):
+    for entry in archives.iter_archives(packs_dir):
         parsed = parse_pack_name(entry.name)
         if parsed is not None:
             out.append((entry, parsed))
     return out
 
 
-def read_osz_entries(zip_path: Path) -> list[ParsedTrack]:
+def read_osz_entries(archive_path: Path) -> list[ParsedTrack]:
     """List the .osz entries of a pack without extracting them."""
     tracks: list[ParsedTrack] = []
-    with zipfile.ZipFile(zip_path) as zf:
-        for info in zf.infolist():
-            if info.is_dir():
-                continue
-            t = parse_osz_entry(info.filename, info.file_size)
+    with archives.open_reader(archive_path) as r:
+        for m in r.members():
+            t = parse_osz_entry(m.name, m.size)
             if t is not None:
                 tracks.append(t)
     return tracks
@@ -80,7 +71,7 @@ def prescan_pack(zip_path: Path, parsed: ParsedPack,
     )
 
 
-def extract_pack(zip_path: Path, parsed: ParsedPack, output_dir: Path, db,
+def extract_pack(archive_path: Path, parsed: ParsedPack, output_dir: Path, db,
                  when: str,
                  progress: Callable[[str, str], None] | None = None,
                  read_meta: bool = True, log=None) -> dict:
@@ -88,28 +79,32 @@ def extract_pack(zip_path: Path, parsed: ParsedPack, output_dir: Path, db,
 
     ``progress`` is called as ``progress(pack_name, osz_name)`` for each file.
     Each .osz is best-effort: a broken entry is logged and skipped, never
-    stopping the extraction. Returns ``{"tracks": int, "subfolders": [..]}``.
+    stopping the extraction. Non-``.osz`` members are noted as ``extra_files``
+    so a pack that also carried readmes/images can be flagged (item 25).
+    Returns ``{"tracks": int, "subfolders": [..], "extra_files": [..]}``.
     """
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    entries = read_osz_entries(zip_path)
-    pack_id = db.upsert_pack(parsed, len(entries), when)
-
     subfolders: set[str] = set()
-    with zipfile.ZipFile(zip_path) as zf:
-        for info in zf.infolist():
-            if info.is_dir():
-                continue
-            t = parse_osz_entry(info.filename, info.file_size)
+    extra_files: list[str] = []
+    with archives.open_reader(archive_path) as r:
+        members = r.members()
+        osz = [m for m in members if m.name.lower().endswith(".osz")]
+        extra_files = [m.name for m in members if not m.name.lower().endswith(".osz")]
+        pack_id = db.upsert_pack(parsed, len(osz), when)
+
+        for m in osz:
+            t = parse_osz_entry(m.name, m.size)
             if t is None:
                 continue
             try:
                 if t.subfolder:
                     subfolders.add(t.subfolder)
                 target = output_dir / t.filename
-                if not (target.exists() and target.stat().st_size == info.file_size):
-                    _stream_extract(zf, info, target)
+                if not (target.exists() and target.stat().st_size == m.size):
+                    with r.open(m.name) as src:
+                        _stream_copy(src, target)
                 meta = read_osz_meta(target) if read_meta else None
                 track_id, _is_new = db.upsert_track(t, when, meta)
                 db.add_track_source(track_id, pack_id, t.subfolder, when)
@@ -120,12 +115,13 @@ def extract_pack(zip_path: Path, parsed: ParsedPack, output_dir: Path, db,
             if progress:
                 progress(parsed.full_name, t.filename)
 
-    return {"tracks": len(entries), "subfolders": sorted(subfolders)}
+    return {"tracks": len(osz), "subfolders": sorted(subfolders),
+            "extra_files": extra_files}
 
 
-def _stream_extract(zf: zipfile.ZipFile, info: zipfile.ZipInfo, target: Path) -> None:
+def _stream_copy(src: BinaryIO, target: Path) -> None:
     tmp = target.with_suffix(target.suffix + ".part")
-    with zf.open(info) as src, tmp.open("wb") as dst:
+    with tmp.open("wb") as dst:
         while True:
             chunk = src.read(_CHUNK)
             if not chunk:
