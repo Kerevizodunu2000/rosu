@@ -371,6 +371,7 @@ class SettingsTab(QWidget):
         if self.ctx.services.drive_status()["connected"]:
             self.ctx.services.disconnect_drive()
             self._refresh_drive_status()
+            self.lbl_drive_status.setText(t("drive_disconnected_done"))
             return
         self.btn_drive.setEnabled(False)
         self.lbl_drive_status.setText(t("drive_connecting"))
@@ -390,6 +391,11 @@ class SettingsTab(QWidget):
                 self.lbl_drive_status.setText(res["detail"])
             else:
                 self.lbl_drive_status.setText(self.ctx.t("drive_login_failed"))
+            return
+        # Success: the browser had focus — bring Rosu back to the front so the
+        # user "returns to the app" automatically (the tab also self-closes).
+        self.mw.raise_()
+        self.mw.activateWindow()
 
     def _drive_failed(self, msg) -> None:
         self._refresh_drive_status()

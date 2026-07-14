@@ -378,6 +378,8 @@ STRINGS: dict[str, dict[str, str]] = {
     "btn_drive_disconnect": {"en": "Disconnect", "tr": "Bağlantıyı Kes"},
     "drive_connected": {"en": "Connected.", "tr": "Bağlı."},
     "drive_disconnected": {"en": "Not connected.", "tr": "Bağlı değil."},
+    "drive_disconnected_done": {"en": "✓ Disconnected from Google Drive.",
+                                "tr": "✓ Google Drive bağlantısı kesildi."},
     "drive_connecting": {"en": "Opening browser for Google sign-in…",
                          "tr": "Google girişi için tarayıcı açılıyor…"},
     "drive_not_configured": {

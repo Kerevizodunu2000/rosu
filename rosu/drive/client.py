@@ -108,11 +108,16 @@ class DriveClient:
     def upload_file(self, path: Path, name: str, parent: str,
                     progress: Callable[[int, int], None] | None = None,
                     cancel: Callable[[], bool] | None = None,
-                    chunk_size: int = 8 * 1024 * 1024) -> str:
+                    chunk_size: int = 32 * 1024 * 1024) -> str:
         """Resumable-upload ``path`` as ``name`` into ``parent``; return file id.
 
         ``cancel`` (if given) is polled between blocks so a long upload aborts
         promptly with :class:`DriveCancelled` instead of blocking shutdown.
+
+        ``chunk_size`` is the resumable block size (must be a multiple of 256 KiB).
+        urllib opens a fresh HTTPS/TLS connection per block, so a larger block
+        means far fewer handshakes and noticeably higher throughput; 32 MiB keeps
+        memory modest while cutting round-trips 4x vs the old 8 MiB.
         """
         path = Path(path)
         size = path.stat().st_size

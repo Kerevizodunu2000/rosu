@@ -191,11 +191,15 @@ def _result_page(status: str | None) -> str:
     elif status == "ok":
         icon, accent = "&#10003;", "#28c76f"   # ✓
         title = "Connected to Google Drive"
-        msg = "You're all set. Close this tab and return to Rosu."
+        msg = "You're all set — returning to Rosu. You can close this tab."
     else:
         icon, accent = "&#9679;", "#ff4f92"     # ●
         title = "Rosu — Google Drive"
         msg = "You can close this tab and return to Rosu."
+    # Best-effort auto-close once the flow completed (some browsers permit it for
+    # the OAuth tab); harmless where blocked. Rosu also raises its own window.
+    script = ("<script>setTimeout(function(){try{window.close();}catch(e){}},1200);</script>"
+              if status else "")
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Rosu — Google Drive</title>
@@ -222,7 +226,7 @@ def _result_page(status: str | None) -> str:
   <h1>{title}</h1>
   <p>{msg}</p>
   <div class="brand">Rosu</div>
-</div></body></html>"""
+</div>{script}</body></html>"""
 
 
 def _make_handler(expected_state: str, sink: dict):
