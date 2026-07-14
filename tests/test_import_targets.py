@@ -87,6 +87,20 @@ def test_stage_for_stable_falls_back_without_songs(tmp_path, monkeypatch):
     db.close()
 
 
+def test_stage_for_stable_uses_exe_install_dir(tmp_path, monkeypatch):
+    cfg, db, svc = _make_services(tmp_path)
+    install = tmp_path / "custom_osu"          # a custom install path (not %LOCALAPPDATA%)
+    install.mkdir()
+    exe = install / "osu!.exe"
+    exe.write_bytes(b"")
+    src = cfg.output_path / "777 A - B.osz"
+    src.write_bytes(b"osz")
+    staged = svc._stage_for_stable([src], str(exe))
+    assert staged[0].parent == install / "_rosu_import"
+    assert staged[0].exists() and src.exists()   # copied to the install drive
+    db.close()
+
+
 def test_stage_for_stable_copies_to_songs_drive(tmp_path, monkeypatch):
     cfg, db, svc = _make_services(tmp_path)
     songs = tmp_path / "osu!" / "Songs"

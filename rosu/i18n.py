@@ -422,6 +422,8 @@ STRINGS: dict[str, dict[str, str]] = {
               "paketlenip aşamalı yüklenir."},
     "backup_opts_count": {"en": "Upload this run", "tr": "Bu turda yükle"},
     "backup_opts_chunk": {"en": "Chunk size", "tr": "Chunk boyutu"},
+    "backup_opts_individual": {"en": "Individual (one file per set — slower)",
+                               "tr": "Tek tek (set başına bir dosya — daha yavaş)"},
     "backup_opts_start": {"en": "Start backup", "tr": "Yedeklemeyi başlat"},
     "drive_backup_done": {
         "en": "Backed up {uploaded} tracks in {chunks} archive(s) to Drive.",

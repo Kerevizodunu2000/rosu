@@ -38,6 +38,7 @@ class BackupOptionsDialog(QDialog):
         self.chunk = QComboBox()
         for mb in _CHUNK_CHOICES_MB:
             self.chunk.addItem(_fmt_mb(mb * 1024 * 1024), mb * 1024 * 1024)
+        self.chunk.addItem(t("backup_opts_individual"), 0)   # one Drive file per set
         idx = self.chunk.findData(chunk_bytes)
         self.chunk.setCurrentIndex(idx if idx >= 0 else 2)   # default 1 GB
         form.addRow(t("backup_opts_chunk"), self.chunk)

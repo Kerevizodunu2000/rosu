@@ -179,6 +179,21 @@ def test_backup_max_sets_limits_upload(tmp_path, monkeypatch):
     db.close()
 
 
+def test_backup_individual_uploads_each_file(tmp_path, monkeypatch):
+    cfg, db, svc = _make_services(tmp_path, monkeypatch)
+    for bid, fn in [(1, "a.osz"), (2, "b.osz")]:
+        _add_library_track(cfg, db, bid, fn)
+    fake = FakeClient()
+    svc._make_drive_client = lambda: fake
+    res = svc.backup_to_drive(chunk_bytes=0)   # individual mode
+    assert res["uploaded"] == 2 and res["chunks"] == 0
+    assert "a.osz" in fake.uploads and "b.osz" in fake.uploads   # by .osz name
+    # each set is recorded as stored under its own filename (not a chunk archive)
+    row = db.find_track_row(1, "a.osz")
+    assert row["in_drive"] == 1 and row["drive_chunk"] == "a.osz"
+    db.close()
+
+
 def test_connect_drive_does_not_wipe_import_cancel(tmp_path, monkeypatch):
     cfg, db, svc = _make_services(tmp_path, monkeypatch)
 

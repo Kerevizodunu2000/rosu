@@ -348,10 +348,10 @@ class Services:
             exe = self.cfg.osu_stable_exe or config.detect_stable_exe()
             # osu!(stable) *moves* each .osz into its Songs folder on import; a
             # cross-drive move (Output on a different drive than Songs) fails with
-            # "Error moving file". Hand it copies staged on the Songs drive instead
-            # — the move becomes a same-drive rename, and Output is left intact so
-            # the same batch can also be sent to lazer.
-            files = self._stage_for_stable(files)
+            # "Error moving file". Hand it copies staged on the install drive
+            # instead — the move becomes a same-drive rename, and Output is left
+            # intact so the same batch can also be sent to lazer.
+            files = self._stage_for_stable(files, exe)
         else:
             exe = self.cfg.osu_lazer_exe or config.detect_osu_exe()
 
@@ -377,17 +377,28 @@ class Services:
         # .osz on import, so Output empties itself; an explicit clear was redundant.)
         return res
 
-    def _stage_for_stable(self, files):
-        """Copy the Output .osz into a staging folder on osu!(stable)'s Songs
+    def _stage_for_stable(self, files, exe=None):
+        """Copy the Output .osz into a staging folder on the osu!(stable) install
         drive, so stable can move them into Songs (same-drive rename) without the
         cross-drive "Error moving file", and Output survives for a later lazer
-        import. Falls back to the Output paths if Songs can't be located."""
+        import. Derives the install dir from the configured exe (so custom install
+        paths work), falling back to auto-detection; returns the Output paths
+        unchanged if neither can be located."""
+        import os
         import shutil
         from . import client_import
-        songs = client_import.stable_songs_dir()
-        if not songs:
+        install = None
+        if exe:
+            try:
+                install = Path(exe).resolve().parent
+            except OSError:
+                install = None
+        if install is None or not install.exists():
+            songs = client_import.stable_songs_dir()
+            install = songs.parent if songs else None
+        if install is None:
             return files
-        stage = songs.parent / "_rosu_import"
+        stage = install / "_rosu_import"
         try:
             if stage.exists():
                 for old in stage.glob("*.osz"):   # clear leftovers osu already took
@@ -403,6 +414,10 @@ class Services:
             dst = stage / f.name
             try:
                 shutil.copy2(f, dst)
+                try:
+                    os.chmod(dst, 0o666)   # clear read-only so osu can move it
+                except OSError:
+                    pass
                 staged.append(dst)
             except OSError:
                 staged.append(f)   # fall back to the original for this one
@@ -611,6 +626,11 @@ class Services:
                 self.cfg.drive_folder_id = folder
                 config.save_config(self.cfg)
 
+            if chunk_bytes == 0:   # "individual" mode — one Drive file per set
+                return self._backup_individual(
+                    client, folder, to_upload, entries, shard_path, len(local),
+                    progress)
+
             start = self._drive_next_chunk_index(client, folder, entries)
             items = [{"track": t, "path": t["_path"], "size": t["size"]}
                      for t in to_upload]
@@ -669,6 +689,48 @@ class Services:
         except DriveError as exc:
             self.log.error("drive:backup", str(exc)[:300])
             return {"error": "drive", "detail": str(exc)[:300]}
+
+    def _backup_individual(self, client, folder, to_upload, entries, shard_path,
+                           local_count, progress) -> dict:
+        """Upload each .osz as its own Drive file (no chunk archive) so sets are
+        browsable individually in Drive. Slower (one upload per set) but each file
+        stands alone. Raises DriveError to the caller's handler on transport
+        failure; DriveCancelled stops early keeping partial progress."""
+        from .drive import bundle, manifest
+        from .drive.auth import DriveCancelled
+        total = len(to_upload)
+        done = uploaded = 0
+        cancelled = False
+        for t in to_upload:
+            if self._drive_cancel.is_set():
+                cancelled = True
+                break
+            path = t["_path"]
+            name = t.get("filename") or path.name
+            try:
+                client.upload_file(path, name, folder,
+                                   cancel=self._drive_cancel.is_set)
+            except DriveCancelled:
+                cancelled = True
+                break
+            sha = bundle.sha256_file(path)
+            entries[manifest.track_key(t)] = manifest.entry_from_track(
+                t, name, t["size"], sha)
+            row = self.db.find_track_row(t.get("beatmapset_id"), t.get("filename"))
+            if row:
+                self.db.set_drive_state(row["id"], True, name, sha)
+            uploaded += 1
+            done += 1
+            if progress:
+                progress({"kind": "backup", "name": name,
+                          "done": done, "total": total})
+            manifest.save_shard(shard_path, self.cfg.device_id, entries)
+        if uploaded:
+            self._push_shard(client, shard_path, folder)
+        self.log.info("DRIVE_BACKUP", uploaded=uploaded, chunks=0, individual=True,
+                      skipped=local_count - total, cancelled=cancelled)
+        return {"uploaded": uploaded, "chunks": 0,
+                "skipped": local_count - total, "cancelled": cancelled}
 
     def _push_shard(self, client, shard_path, folder) -> None:
         """Publish this device's manifest shard to Drive (replace the prior copy
