@@ -188,6 +188,8 @@ STRINGS: dict[str, dict[str, str]] = {
     "zip_recycle": {"en": "Move to Recycle Bin", "tr": "Geri Dönüşüm Kutusu'na taşı"},
     "zip_move": {"en": "Move to Processed/", "tr": "Processed/ klasörüne taşı"},
     "zip_delete": {"en": "Delete permanently", "tr": "Kalıcı sil"},
+    "zip_drive": {"en": "Upload to Drive & remove locally",
+                  "tr": "Drive'a yükle & lokalden kaldır"},
     "btn_browse": {"en": "Browse…", "tr": "Gözat…"},
     "btn_save": {"en": "Save", "tr": "Kaydet"},
     "saved": {"en": "Settings saved.", "tr": "Ayarlar kaydedildi."},

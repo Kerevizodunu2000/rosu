@@ -22,7 +22,9 @@ THEMES = (
     "solarized-dark", "solarized-light",
 )
 # What to do with a .zip once its contents have been extracted to Output.
-ZIP_DISPOSAL = ("recycle", "move", "delete")  # Recycle Bin / move to Processed / permanent
+# "drive" = upload the original archive to Drive then remove it locally; it is
+# only offered in Settings while Drive is connected.
+ZIP_DISPOSAL = ("recycle", "move", "delete", "drive")
 
 
 def app_root() -> Path:

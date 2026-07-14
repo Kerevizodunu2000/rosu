@@ -75,10 +75,7 @@ class SettingsTab(QWidget):
         zip_row = QHBoxLayout()
         self.lbl_zip = QLabel()
         self.zip = QComboBox()
-        for v in _ZIP_ORDER:
-            self.zip.addItem("", v)
-        self.zip.setCurrentIndex(_ZIP_ORDER.index(cfg.zip_disposal)
-                                 if cfg.zip_disposal in _ZIP_ORDER else 0)
+        self._reload_zip_options()   # recycle/move/delete (+ drive when connected)
         zip_row.addWidget(self.lbl_zip); zip_row.addWidget(self.zip); zip_row.addStretch(1)
         root.addLayout(zip_row)
 
@@ -295,9 +292,7 @@ class SettingsTab(QWidget):
         self.cb_check_updates.setText(t("set_check_updates"))
         self.cb_check_updates.setToolTip(t("tip_check_updates"))
         self.lbl_zip.setText(t("set_zip_disposal"))
-        self.zip.setItemText(0, t("zip_recycle"))
-        self.zip.setItemText(1, t("zip_move"))
-        self.zip.setItemText(2, t("zip_delete"))
+        self._reload_zip_options()
         self.lbl_api.setText(t("set_osu_api"))
         self.lbl_api_help.setText(t("reference_help"))
         self.lbl_cid.setText(t("set_client_id"))
@@ -343,8 +338,28 @@ class SettingsTab(QWidget):
             self.lbl_ref_status.setText(self.ctx.t("reference_none"))
 
     # -- Google Drive (item 11) ---------------------------------------------
+    def _reload_zip_options(self) -> None:
+        """Rebuild the Processed-.zip-action combo. The 'Upload to Drive & remove'
+        option is offered only while Drive is connected; rebuilt on retranslate and
+        whenever the Drive connection changes."""
+        t = self.ctx.t
+        cur = self.zip.currentData() or self.ctx.cfg.zip_disposal
+        try:
+            connected = self.ctx.services.drive_status().get("connected")
+        except Exception:
+            connected = False
+        order = ["recycle", "move", "delete"] + (["drive"] if connected else [])
+        self.zip.blockSignals(True)
+        self.zip.clear()
+        for v in order:
+            self.zip.addItem(t(f"zip_{v}"), v)
+        idx = self.zip.findData(cur if cur in order else "recycle")
+        self.zip.setCurrentIndex(idx if idx >= 0 else 0)
+        self.zip.blockSignals(False)
+
     def _refresh_drive_status(self) -> None:
         t = self.ctx.t
+        self._reload_zip_options()   # offer/remove the Drive disposal option
         st = self.ctx.services.drive_status()
         if not st["configured"]:
             self.btn_drive.setEnabled(False)

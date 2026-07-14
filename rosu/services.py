@@ -114,7 +114,11 @@ class Services:
                 self.db.set_pack_extra(parsed.code, len(res["extra_files"]))
             self.log.info("EXTRACT_PACK", code=parsed.code, tracks=res["tracks"],
                           subfolders=res["subfolders"])
-            action = extractor.dispose_zip(zip_path, self.cfg.zip_disposal, processed_dir)
+            if self.cfg.zip_disposal == "drive":
+                action = self._dispose_archive_to_drive(zip_path)
+            else:
+                action = extractor.dispose_zip(zip_path, self.cfg.zip_disposal,
+                                               processed_dir)
             fields = {"file": zip_path.name}
             if action == "ZIP_MOVED":
                 fields["dest"] = str(processed_dir)
@@ -175,6 +179,31 @@ class Services:
         if moved:
             self.log.info("LOOSE_OSZ", moved=moved)
         return moved
+
+    def _dispose_archive_to_drive(self, zip_path) -> str:
+        """'Processed .zip action = Upload to Drive & remove': back the original
+        pack archive up to a Packs/ subfolder in Drive and delete it locally to
+        free disk. Falls back to moving it to Processed/ (never deleted) if Drive
+        can't be reached, so an archive is never lost."""
+        from .drive.auth import DriveError
+        processed = self.cfg.root_path / "Processed"
+        zip_path = Path(zip_path)
+        if not self._drive_auth().is_connected():
+            return extractor.dispose_zip(zip_path, "move", processed)
+        try:
+            client = self._make_drive_client()
+            folder = self.cfg.drive_folder_id or client.ensure_folder("Rosu")
+            if folder != self.cfg.drive_folder_id:
+                self.cfg.drive_folder_id = folder
+                config.save_config(self.cfg)
+            packs_folder = client.ensure_folder("Packs", folder)
+            client.upload_file(zip_path, zip_path.name, packs_folder)
+            zip_path.unlink(missing_ok=True)   # uploaded -> reclaim local disk
+            self.log.info("ZIP_TO_DRIVE", file=zip_path.name)
+            return "ZIP_TO_DRIVE"
+        except (DriveError, OSError) as exc:
+            self.log.error("zip:drive", str(exc)[:200])
+            return extractor.dispose_zip(zip_path, "move", processed)
 
     def _quarantine(self, zip_path: Path) -> Path | None:
         """Move a rejected (unsafe) pack aside so it is never re-scanned or

@@ -179,6 +179,36 @@ def test_backup_max_sets_limits_upload(tmp_path, monkeypatch):
     db.close()
 
 
+def test_dispose_archive_to_drive_uploads_and_removes(tmp_path, monkeypatch):
+    cfg, db, svc = _make_services(tmp_path, monkeypatch)
+    zip_path = cfg.packs_path / "S1 - Pack.zip"
+    zip_path.write_bytes(b"archive-bytes")
+    fake = FakeClient()
+    svc._make_drive_client = lambda: fake
+    action = svc._dispose_archive_to_drive(zip_path)
+    assert action == "ZIP_TO_DRIVE"
+    assert "S1 - Pack.zip" in fake.uploads     # uploaded to Drive
+    assert not zip_path.exists()               # removed locally to reclaim disk
+    db.close()
+
+
+def test_dispose_archive_to_drive_falls_back_when_disconnected(tmp_path, monkeypatch):
+    cfg, db, svc = _make_services(tmp_path, monkeypatch)
+    zip_path = cfg.packs_path / "S2 - Pack.zip"
+    zip_path.write_bytes(b"archive-bytes")
+
+    class NC:
+        def is_connected(self):
+            return False
+
+    svc._drive_auth = lambda: NC()
+    action = svc._dispose_archive_to_drive(zip_path)
+    assert action == "ZIP_MOVED"                                    # safe fallback
+    assert not zip_path.exists()
+    assert (cfg.root_path / "Processed" / "S2 - Pack.zip").exists()  # never lost
+    db.close()
+
+
 def test_backup_individual_uploads_each_file(tmp_path, monkeypatch):
     cfg, db, svc = _make_services(tmp_path, monkeypatch)
     for bid, fn in [(1, "a.osz"), (2, "b.osz")]:
