@@ -156,7 +156,7 @@ class SearchTab(QWidget):
                     if c in (0, 1) and text:
                         item.setToolTip(text)      # full name/artist on hover (item 15)
                     if c in (2, 3, 4, 9):
-                        item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+                        item.setTextAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
                     self.table.setItem(r, c, item)
                 self.table.set_clean_name(r, row.get("display_name", ""))
                 full = row.get("source_full") or []

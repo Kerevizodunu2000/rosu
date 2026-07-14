@@ -108,7 +108,7 @@ class ArtistsTab(QWidget):
                 self.artists.setItem(r, 3, SortItem(
                     f"{avg_bpm:.0f}" if avg_bpm else "", avg_bpm or 0.0))
                 for c in (1, 2, 3):
-                    self.artists.item(r, c).setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+                    self.artists.item(r, c).setTextAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
         finally:
             self.artists.setSortingEnabled(True)
             self.artists.setUpdatesEnabled(True)
@@ -149,7 +149,7 @@ class ArtistsTab(QWidget):
                     if c == 0 and text:
                         item.setToolTip(text)      # full title on hover (item 15)
                     if c in (1, 2, 3):
-                        item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+                        item.setTextAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
                     self.songs.setItem(r, c, item)
                 self.songs.set_clean_name(r, row.get("display_name", ""))
                 full = row.get("source_full") or []

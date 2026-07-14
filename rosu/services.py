@@ -346,6 +346,12 @@ class Services:
         files = osu_import.output_osz_files(self.cfg.output_path)
         if target == "stable":
             exe = self.cfg.osu_stable_exe or config.detect_stable_exe()
+            # osu!(stable) *moves* each .osz into its Songs folder on import; a
+            # cross-drive move (Output on a different drive than Songs) fails with
+            # "Error moving file". Hand it copies staged on the Songs drive instead
+            # — the move becomes a same-drive rename, and Output is left intact so
+            # the same batch can also be sent to lazer.
+            files = self._stage_for_stable(files)
         else:
             exe = self.cfg.osu_lazer_exe or config.detect_osu_exe()
 
@@ -370,6 +376,37 @@ class Services:
         # (Removed the "clear Output after import" option — item 7. osu! consumes the
         # .osz on import, so Output empties itself; an explicit clear was redundant.)
         return res
+
+    def _stage_for_stable(self, files):
+        """Copy the Output .osz into a staging folder on osu!(stable)'s Songs
+        drive, so stable can move them into Songs (same-drive rename) without the
+        cross-drive "Error moving file", and Output survives for a later lazer
+        import. Falls back to the Output paths if Songs can't be located."""
+        import shutil
+        from . import client_import
+        songs = client_import.stable_songs_dir()
+        if not songs:
+            return files
+        stage = songs.parent / "_rosu_import"
+        try:
+            if stage.exists():
+                for old in stage.glob("*.osz"):   # clear leftovers osu already took
+                    try:
+                        old.unlink()
+                    except OSError:
+                        pass
+            stage.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            return files
+        staged = []
+        for f in files:
+            dst = stage / f.name
+            try:
+                shutil.copy2(f, dst)
+                staged.append(dst)
+            except OSError:
+                staged.append(f)   # fall back to the original for this one
+        return staged or files
 
     # -- reference (osu! API) ------------------------------------------------
     def _reference(self):

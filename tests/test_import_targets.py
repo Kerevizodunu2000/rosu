@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Tests for the stable/lazer import-target split (item C, v1.0)."""
-from rosu import client_import, config, osu_import
+from rosu import client_import, config, library, osu_import
 from rosu.db import Database
 from rosu.services import Services
 
@@ -73,6 +73,42 @@ def test_import_osu_defaults_to_lazer(tmp_path, monkeypatch):
 def test_import_osu_target_stable(tmp_path, monkeypatch):
     cfg, db, svc = _make_services(tmp_path)
     captured = _capture_exe(monkeypatch)
+    monkeypatch.setattr(client_import, "stable_songs_dir", lambda: None)  # skip staging
     svc.import_osu(target="stable")
     assert captured["exe"] == "C:/stable/osu!.exe"
+    db.close()
+
+
+def test_stage_for_stable_falls_back_without_songs(tmp_path, monkeypatch):
+    cfg, db, svc = _make_services(tmp_path)
+    monkeypatch.setattr(client_import, "stable_songs_dir", lambda: None)
+    files = [tmp_path / "a.osz", tmp_path / "b.osz"]
+    assert svc._stage_for_stable(files) == files
+    db.close()
+
+
+def test_stage_for_stable_copies_to_songs_drive(tmp_path, monkeypatch):
+    cfg, db, svc = _make_services(tmp_path)
+    songs = tmp_path / "osu!" / "Songs"
+    songs.mkdir(parents=True)
+    monkeypatch.setattr(client_import, "stable_songs_dir", lambda: songs)
+    src = cfg.output_path / "555 A - B.osz"
+    src.write_bytes(b"osz")
+    staged = svc._stage_for_stable([src])
+    assert len(staged) == 1
+    assert staged[0].parent == songs.parent / "_rosu_import"
+    assert staged[0].exists()
+    assert src.exists()          # Output preserved (copied, not moved)
+    db.close()
+
+
+def test_import_from_osu_client_marks_in_osu(tmp_path):
+    cfg = config.Config(root=str(tmp_path))
+    cfg = config._fill_defaults(cfg)
+    cfg.ensure_dirs()
+    db = Database(cfg.db_path)
+    (cfg.output_path / "321 X - Y.osz").write_bytes(b"osz")
+    library.copy_to_library(cfg.output_path, cfg.library_path, db, "when",
+                            physical_copy=True, source_label="local_osu_lazer")
+    assert db.find_track_row(321, "")["in_osu"] == 1
     db.close()

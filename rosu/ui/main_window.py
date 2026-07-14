@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from PySide6.QtWidgets import (
-    QLabel, QMainWindow, QTabWidget, QVBoxLayout, QWidget,
+    QLabel, QMainWindow, QMessageBox, QTabWidget, QVBoxLayout, QWidget,
 )
 
 from .. import __version__, theming
@@ -25,7 +25,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.ctx = ctx
         self.app = app
-        self.resize(1040, 680)
+        self.resize(1280, 760)   # wider default so wide tables (Search) fit better
 
         # central column: a thin update banner (hidden until relevant) + tabs
         central = QWidget()
@@ -119,6 +119,19 @@ class MainWindow(QMainWindow):
             tab.retranslate()
         self._render_update_banner()   # banner text follows the language
 
+    def _operation_running(self) -> bool:
+        """True if a tab has a live background worker (import / Drive backup /
+        client export / scan) — used to confirm before quitting mid-operation.
+        The main window's own (trivial, quick) update-check worker is excluded."""
+        for tab in self._ordered_tabs:
+            for w in list(getattr(tab, "_threads", [])):
+                try:
+                    if w.isRunning():
+                        return True
+                except RuntimeError:
+                    pass
+        return False
+
     def _on_tab_changed(self, index: int) -> None:
         # Guard leaving the Settings tab with unsaved path/API edits (item 11).
         prev = (self.tabs.widget(self._prev_index)
@@ -145,6 +158,14 @@ class MainWindow(QMainWindow):
         if hasattr(self.settings, "confirm_leave") and not self.settings.confirm_leave():
             event.ignore()      # unsaved Settings edits, user chose Cancel (item 11)
             return
+        if self._operation_running():
+            t = self.ctx.t
+            reply = QMessageBox.question(
+                self, t("app_title"), t("op_running_quit"),
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+            if reply != QMessageBox.Yes:
+                event.ignore()   # a Drive upload / import is still running
+                return
         try:
             self.ctx.services.request_cancel()
         except Exception:

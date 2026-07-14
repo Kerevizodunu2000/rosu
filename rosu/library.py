@@ -50,6 +50,7 @@ def copy_to_library(output_dir: Path, library_dir: Path, db, when: str,
     library_dir.mkdir(parents=True, exist_ok=True)
 
     local_pack_id = None
+    from_osu = bool(source_label and source_label.startswith("local_osu"))
     if source_label:
         # Use the stable code itself as the label (language-neutral; shown verbatim in
         # the Sources column). No English pretty-name to leak into other locales.
@@ -68,6 +69,9 @@ def copy_to_library(output_dir: Path, library_dir: Path, db, when: str,
         db.bump_copy_attempt(track_id)
         if local_pack_id is not None:
             db.add_track_source(track_id, local_pack_id, None, when)
+        if from_osu and t.beatmapset_id is not None:
+            # imported straight out of an osu! client -> it IS in osu! (🎮 in Search)
+            db.set_in_osu(t.beatmapset_id)
 
         if physical_copy:
             target = library_dir / t.filename

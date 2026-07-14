@@ -178,7 +178,7 @@ class DashboardTab(QWidget):
             for c, v in enumerate(values):
                 item = QTableWidgetItem(str(v))
                 if c == 3:
-                    item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+                    item.setTextAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
                 self.table.setItem(r, c, item)
         self.table.resizeColumnsToContents()
         self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
@@ -191,7 +191,7 @@ class DashboardTab(QWidget):
         for r, row in enumerate(self._output):
             name_item = QTableWidgetItem(str(row["name"]))
             size_item = QTableWidgetItem(_fmt_size(row["size_bytes"]))
-            size_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            size_item.setTextAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
             self.table.setItem(r, 0, name_item)
             self.table.setItem(r, 1, size_item)
         self.table.resizeColumnsToContents()

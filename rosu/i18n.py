@@ -8,6 +8,11 @@ from __future__ import annotations
 
 STRINGS: dict[str, dict[str, str]] = {
     "app_title": {"en": "Rosu", "tr": "Rosu"},
+    "op_running_quit": {
+        "en": "An operation is still running (import / Drive upload). Cancel it "
+              "and quit Rosu?",
+        "tr": "Bir işlem hâlâ sürüyor (içe aktarma / Drive yükleme). İptal edip "
+              "Rosu'dan çıkılsın mı?"},
 
     # Tabs
     "tab_dashboard": {"en": "Dashboard", "tr": "Panel"},
@@ -308,14 +313,20 @@ STRINGS: dict[str, dict[str, str]] = {
     "lost_maps_count": {"en": "{n} beatmap(s) no longer on osu!.",
                         "tr": "{n} müzik artık osu!'da yok."},
     "reference_help": {
-        "en": "Register an OAuth app at "
+        "en": "Optional — for accurate gap detection. Open "
               "<a href='https://osu.ppy.sh/home/account/edit#oauth'>"
-              "osu.ppy.sh/home/account/edit</a> → paste the Client ID + Secret, "
-              "then update. Lets us flag genuinely missing Featured/Spotlight/etc. packs.",
-        "tr": "<a href='https://osu.ppy.sh/home/account/edit#oauth'>"
-              "osu.ppy.sh/home/account/edit</a> → OAuth uygulaması aç, Client ID + "
-              "Secret'i buraya yapıştır ve güncelle. Featured/Spotlight vb. gerçekten "
-              "eksik paketleri işaretlememizi sağlar."},
+              "osu.ppy.sh/home/account/edit</a> → <b>New OAuth Application</b> → "
+              "Application Name: anything (e.g. Rosu), Callback URL: "
+              "<b>http://localhost</b> → Register. Copy the shown Client ID + Client "
+              "Secret into the two boxes below, then Update. (These are YOUR keys; "
+              "Rosu can't fill them in for you.)",
+        "tr": "İsteğe bağlı — daha doğru boşluk tespiti için. "
+              "<a href='https://osu.ppy.sh/home/account/edit#oauth'>"
+              "osu.ppy.sh/home/account/edit</a> → <b>New OAuth Application</b> → "
+              "Uygulama Adı: herhangi bir şey (ör. Rosu), Geri Çağırma URL'si: "
+              "<b>http://localhost</b> → Kaydet. Görünen Client ID + Client Secret'i "
+              "aşağıdaki iki kutuya yapıştır ve Güncelle. (Bunlar SENİN anahtarların; "
+              "Rosu senin yerine dolduramaz.)"},
 
     # Folder self-heal (item 20)
     "path_heal_title": {"en": "Folder location changed",
