@@ -411,6 +411,18 @@ STRINGS: dict[str, dict[str, str]] = {
                             "tr": "Önce Ayarlar'dan Google Drive'a bağlan."},
     "drive_backing_up": {"en": "Backing up to Google Drive…",
                          "tr": "Google Drive'a yedekleniyor…"},
+    "drive_nothing_new": {
+        "en": "Everything in your Library is already backed up to Drive.",
+        "tr": "Library'ndeki her şey zaten Drive'a yedeklenmiş."},
+    "backup_opts_title": {"en": "Back up to Google Drive", "tr": "Google Drive'a yedekle"},
+    "backup_opts_summary": {
+        "en": "{n} new/changed set(s) to upload ({size}). Bundled into chunk "
+              "archives and uploaded incrementally.",
+        "tr": "Yüklenecek {n} yeni/değişmiş set ({size}). Chunk arşivlerine "
+              "paketlenip aşamalı yüklenir."},
+    "backup_opts_count": {"en": "Upload this run", "tr": "Bu turda yükle"},
+    "backup_opts_chunk": {"en": "Chunk size", "tr": "Chunk boyutu"},
+    "backup_opts_start": {"en": "Start backup", "tr": "Yedeklemeyi başlat"},
     "drive_backup_done": {
         "en": "Backed up {uploaded} tracks in {chunks} archive(s) to Drive.",
         "tr": "{uploaded} müzik {chunks} arşiv halinde Drive'a yedeklendi."},

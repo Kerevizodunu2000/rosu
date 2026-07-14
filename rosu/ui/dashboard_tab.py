@@ -511,13 +511,29 @@ class DashboardTab(QWidget):
         if not st["connected"]:
             QMessageBox.information(self, t("app_title"), t("drive_connect_first"))
             return
+        plan = self.services.backup_plan()
+        if plan.get("error") == "not_connected":
+            QMessageBox.information(self, t("app_title"), t("drive_connect_first"))
+            return
+        if not plan.get("count"):
+            QMessageBox.information(self, t("app_title"), t("drive_nothing_new"))
+            return
+        from .backup_dialog import BackupOptionsDialog
+        dlg = BackupOptionsDialog(self.ctx, plan["count"], plan["total_bytes"],
+                                  plan["chunk_bytes"], self)
+        if not dlg.exec():
+            return
+        max_sets, chunk_bytes = dlg.choices()
         self._lock(True)
         self.busy_bar.setVisible(False)
         self.progress_panel.start()
         self.status.setText(t("drive_backing_up"))
         self.btn_cancel.setEnabled(True)
         self.btn_cancel.setVisible(True)
-        self._start_worker(self.services.backup_to_drive, on_success=self._after_backup)
+        self._start_worker(
+            lambda progress=None: self.services.backup_to_drive(
+                progress, max_sets=max_sets, chunk_bytes=chunk_bytes),
+            on_success=self._after_backup)
 
     def _after_backup(self, res) -> None:
         self._idle()

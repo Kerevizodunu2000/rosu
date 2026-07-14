@@ -142,6 +142,40 @@ def test_request_cancel_sets_both_tokens(tmp_path, monkeypatch):
     cfg, db, svc = _make_services(tmp_path, monkeypatch)
     svc.request_cancel()
     assert svc._cancel.is_set() and svc._drive_cancel.is_set()
+    assert svc._lostmap_cancel.is_set()
+    db.close()
+
+
+def test_backup_plan_counts_new_sets(tmp_path, monkeypatch):
+    cfg, db, svc = _make_services(tmp_path, monkeypatch)
+    _add_library_track(cfg, db, 555, "a.osz")
+    _add_library_track(cfg, db, 556, "b.osz")
+    plan = svc.backup_plan()
+    assert plan["count"] == 2 and plan["total_bytes"] > 0
+    assert plan["chunk_bytes"] == cfg.drive_chunk_bytes
+    db.close()
+
+
+def test_backup_plan_gated_when_not_connected(tmp_path, monkeypatch):
+    cfg, db, svc = _make_services(tmp_path, monkeypatch)
+
+    class NC:
+        def is_connected(self):
+            return False
+
+    svc._drive_auth = lambda: NC()
+    assert svc.backup_plan() == {"error": "not_connected"}
+    db.close()
+
+
+def test_backup_max_sets_limits_upload(tmp_path, monkeypatch):
+    cfg, db, svc = _make_services(tmp_path, monkeypatch)
+    for bid, fn in [(1, "a.osz"), (2, "b.osz"), (3, "c.osz")]:
+        _add_library_track(cfg, db, bid, fn)
+    fake = FakeClient()
+    svc._make_drive_client = lambda: fake
+    res = svc.backup_to_drive(max_sets=1)
+    assert res["uploaded"] == 1          # capped, not all 3
     db.close()
 
 

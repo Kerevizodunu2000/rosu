@@ -535,11 +535,41 @@ class Services:
         self.log.info("DRIVE_DISCONNECT")
         return {"connected": False}
 
-    def backup_to_drive(self, progress=None) -> dict:
+    def backup_plan(self) -> dict:
+        """Preview a Drive backup (read-only): how many new/changed Library sets
+        are not yet in this device's shard, and their total size. Feeds the
+        pre-backup options dialog. ``{"count", "total_bytes", "chunk_bytes"}`` or
+        ``{"error": "not_connected"}``."""
+        from .drive import manifest
+        if not self._drive_auth().is_connected():
+            return {"error": "not_connected"}
+        lib = self.cfg.library_path
+        local = []
+        for t in self.db.library_tracks():
+            if t.get("library_status") == "memory":
+                continue
+            fn = t.get("filename")
+            p = (lib / fn) if fn else None
+            if p and p.exists():
+                local.append({"size": p.stat().st_size, **{k: t.get(k) for k in
+                             ("beatmapset_id", "filename", "drive_hash")}})
+        shard_dir = self.cfg.drive_cache_path
+        shard_dir.mkdir(parents=True, exist_ok=True)
+        shard_path = shard_dir / manifest.shard_name(self.cfg.device_id)
+        entries = manifest.load_shard(shard_path)
+        to_upload = manifest.diff_to_upload(local, entries)
+        return {"count": len(to_upload),
+                "total_bytes": sum(int(t["size"]) for t in to_upload),
+                "chunk_bytes": self.cfg.drive_chunk_bytes}
+
+    def backup_to_drive(self, progress=None, max_sets: int | None = None,
+                        chunk_bytes: int | None = None) -> dict:
         """Back up new Library .osz to Google Drive as append-only chunk
         archives, updating this device's manifest shard.
 
-        Returns ``{"uploaded", "chunks", "skipped"}`` or ``{"error": ...}``.
+        ``max_sets`` caps how many new sets to upload this run (None = all);
+        ``chunk_bytes`` overrides the per-chunk size for this run. Returns
+        ``{"uploaded", "chunks", "skipped"}`` or ``{"error": ...}``.
         """
         from .drive import bundle, manifest
         from .drive.auth import DriveCancelled, DriveError
@@ -568,6 +598,8 @@ class Services:
         shard_path = shard_dir / manifest.shard_name(self.cfg.device_id)
         entries = manifest.load_shard(shard_path)
         to_upload = manifest.diff_to_upload(local, entries)
+        if max_sets is not None and max_sets >= 0:
+            to_upload = to_upload[:max_sets]   # user chose a per-run cap
         if not to_upload:
             self.log.info("DRIVE_BACKUP", uploaded=0, skipped=len(local), chunks=0)
             return {"uploaded": 0, "skipped": len(local), "chunks": 0}
@@ -582,8 +614,8 @@ class Services:
             start = self._drive_next_chunk_index(client, folder, entries)
             items = [{"track": t, "path": t["_path"], "size": t["size"]}
                      for t in to_upload]
-            chunks = bundle.plan_chunks(items, self.cfg.drive_chunk_bytes, start,
-                                        self.cfg.device_id)
+            chunks = bundle.plan_chunks(items, chunk_bytes or self.cfg.drive_chunk_bytes,
+                                        start, self.cfg.device_id)
 
             total = len(to_upload)
             done = 0
