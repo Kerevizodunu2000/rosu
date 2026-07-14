@@ -34,13 +34,17 @@ def output_osz_files(output_dir: Path) -> list[Path]:
     return sorted(Path(output_dir).glob("*.osz"))
 
 
-def batches(files: list[Path]) -> list[list[Path]]:
+def batches(files: list[Path], max_files: int = _MAX_BATCH_FILES) -> list[list[Path]]:
+    """Group files into command-line batches. ``max_files`` per launch — osu!lazer
+    accepts many at once (IPC-forwarded); osu!(stable) only reliably imports ONE
+    file per launch (multiple args make it fail with "Error moving file"), so the
+    stable path passes ``max_files=1``."""
     out: list[list[Path]] = []
     batch: list[Path] = []
     length = 0
     for f in files:
         cost = len(str(f)) + 3  # quotes + space
-        if batch and (len(batch) >= _MAX_BATCH_FILES or length + cost > _MAX_BATCH_CHARS):
+        if batch and (len(batch) >= max_files or length + cost > _MAX_BATCH_CHARS):
             out.append(batch)
             batch, length = [], 0
         batch.append(f)
@@ -59,8 +63,10 @@ def estimate_seconds(n_files: int, n_batches: int) -> int:
 def import_files(osu_exe: str, files: list[Path],
                  progress: Callable[[int, int, int], None] | None = None,
                  cancel: Callable[[], bool] | None = None,
-                 delay_s: float = _BATCH_DELAY_S) -> dict:
-    """Send ``files`` to osu!lazer in batches.
+                 delay_s: float = _BATCH_DELAY_S,
+                 max_batch_files: int = _MAX_BATCH_FILES) -> dict:
+    """Send ``files`` to an osu! client in batches (``max_batch_files`` per
+    launch; pass 1 for osu!(stable), which imports one file per launch).
 
     ``cancel`` is polled between batches; when it returns True dispatch stops
     (batches already handed to osu! keep importing on its side). Returns
@@ -71,7 +77,7 @@ def import_files(osu_exe: str, files: list[Path],
     if not files:
         return {"files": 0, "batches": 0, "sent": 0, "cancelled": False}
 
-    all_batches = batches(files)
+    all_batches = batches(files, max_batch_files)
     total = len(all_batches)
     sent = 0
     for i, batch in enumerate(all_batches, start=1):

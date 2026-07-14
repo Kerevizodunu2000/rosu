@@ -462,7 +462,7 @@ class DashboardTab(QWidget):
             key = "import_no_stable_exe" if target == "stable" else "import_no_lazer_exe"
             QMessageBox.warning(self, self.ctx.t("app_title"), self.ctx.t(key))
             return
-        plan = self.services.import_plan()
+        plan = self.services.import_plan(target)
         reply = QMessageBox.question(
             self, self.ctx.t("import_confirm_title"),
             self.ctx.t("import_confirm_body", files=plan["files"],

@@ -79,6 +79,42 @@ def test_import_osu_target_stable(tmp_path, monkeypatch):
     db.close()
 
 
+def test_batches_single_file_mode():
+    from pathlib import Path
+    files = [Path(f"{i} A - B.osz") for i in range(5)]
+    # osu!(stable): one file per launch; osu!lazer: batched together
+    assert len(osu_import.batches(files, 1)) == 5
+    assert len(osu_import.batches(files)) == 1
+
+
+def _capture_kwargs(monkeypatch):
+    captured = {}
+
+    def fake_import_files(exe, files, **kw):
+        captured.update(kw)
+        return {"files": 0, "batches": 0, "sent": 0, "cancelled": False}
+
+    monkeypatch.setattr(osu_import, "import_files", fake_import_files)
+    return captured
+
+
+def test_import_osu_stable_sends_one_file_per_launch(tmp_path, monkeypatch):
+    cfg, db, svc = _make_services(tmp_path)
+    monkeypatch.setattr(client_import, "stable_songs_dir", lambda: None)  # skip staging
+    kw = _capture_kwargs(monkeypatch)
+    svc.import_osu(target="stable")
+    assert kw.get("max_batch_files") == 1     # the "Error moving file" fix
+    db.close()
+
+
+def test_import_osu_lazer_uses_default_batching(tmp_path, monkeypatch):
+    cfg, db, svc = _make_services(tmp_path)
+    kw = _capture_kwargs(monkeypatch)
+    svc.import_osu(target="lazer")
+    assert "max_batch_files" not in kw        # many files per launch (default)
+    db.close()
+
+
 def test_stage_for_stable_falls_back_without_songs(tmp_path, monkeypatch):
     cfg, db, svc = _make_services(tmp_path)
     monkeypatch.setattr(client_import, "stable_songs_dir", lambda: None)

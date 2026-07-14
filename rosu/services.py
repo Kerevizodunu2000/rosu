@@ -318,12 +318,14 @@ class Services:
                       disappeared=res["disappeared"], present=res["present"])
         return res
 
-    def import_plan(self) -> dict:
-        """Info for the pre-import confirmation dialog (no side effects)."""
+    def import_plan(self, target: str = "lazer") -> dict:
+        """Info for the pre-import confirmation dialog (no side effects). Batch
+        count depends on the target (osu!(stable) is one file per launch)."""
         files = osu_import.output_osz_files(self.cfg.output_path)
-        batches = len(list(osu_import.batches(files)))
-        return {"files": len(files), "batches": batches,
-                "eta_s": osu_import.estimate_seconds(len(files), batches)}
+        max_files = 1 if target == "stable" else osu_import._MAX_BATCH_FILES
+        n_batches = len(osu_import.batches(files, max_files))
+        return {"files": len(files), "batches": n_batches,
+                "eta_s": osu_import.estimate_seconds(len(files), n_batches)}
 
     def output_listing(self) -> list[dict]:
         """Every .osz currently in Output (name + size). Lets the Dashboard show
@@ -360,8 +362,11 @@ class Services:
             if progress:
                 progress({"kind": "import", "batch": i, "total": total, "files": n})
 
+        # osu!(stable) imports one file per launch — batching (as lazer uses)
+        # makes it fail with "Error moving file"; send it one at a time.
+        batch_kw = {"max_batch_files": 1} if target == "stable" else {}
         res = osu_import.import_files(exe, files, progress=_prog,
-                                      cancel=self._cancel.is_set)
+                                      cancel=self._cancel.is_set, **batch_kw)
         # Optimistically flag the dispatched sets as present in osu! so the Search
         # 'Where' column shows the 🎮 marker (item F2 / user feedback).
         sent = res.get("sent", len(files))
