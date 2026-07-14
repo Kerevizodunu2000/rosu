@@ -103,6 +103,13 @@ class DashboardTab(QWidget):
         self.btn_backup.setText(t("btn_backup_drive"))
         self.btn_rescan.setText(t("btn_rescan"))
         self.btn_cancel.setText(t("btn_cancel"))
+        self.btn_extract.setToolTip(t("tip_extract"))
+        self.btn_copy.setToolTip(t("tip_copy_library"))
+        self.btn_import.setToolTip(t("tip_import_osu"))
+        self.btn_refresh.setToolTip(t("tip_refresh"))
+        self.btn_backup.setToolTip(t("tip_backup_drive"))
+        self.btn_rescan.setToolTip(t("tip_rescan"))
+        self.btn_cancel.setToolTip(t("tip_cancel"))
         self.table.setHorizontalHeaderLabels([
             t("col_code"), t("col_series"), t("col_title"), t("col_size"), t("col_state")])
         self._update_count()
@@ -306,6 +313,7 @@ class DashboardTab(QWidget):
         self.status.setText(msg)
         self.refresh_scan()
         self.mw.packs.reload()
+        self.mw.search.reload()          # reflect newly-added tracks live (item 7)
 
     # -- Copy to Library -----------------------------------------------------
     def on_copy(self) -> None:
@@ -319,6 +327,7 @@ class DashboardTab(QWidget):
     def _after_copy(self, res) -> None:
         self._idle()
         self.status.setText(self.ctx.t("library_done", new=res["new"], dup=res["duplicates"]))
+        self.mw.search.reload()          # reflect the new library rows live (item 7)
 
     # -- Import to osu! ------------------------------------------------------
     def on_import(self) -> None:
@@ -369,6 +378,7 @@ class DashboardTab(QWidget):
                                        disappeared=res["disappeared"],
                                        present=res["present"]))
         self._update_banner()
+        self.mw.search.reload()          # reflect refreshed library rows live (item 7)
 
     # -- Back up to Google Drive (item 11) -----------------------------------
     def on_backup(self) -> None:

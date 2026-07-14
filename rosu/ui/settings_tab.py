@@ -2,6 +2,8 @@
 """Settings tab: language, theme, folders, osu! path, toggles and API reference."""
 from __future__ import annotations
 
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QDialog, QFileDialog, QFormLayout, QHBoxLayout, QLabel,
     QLineEdit, QMessageBox, QPushButton, QScrollArea, QVBoxLayout, QWidget,
@@ -35,6 +37,8 @@ class SettingsTab(QWidget):
         root.setSpacing(10)
         form = QFormLayout()
         form.setSpacing(10)
+        # Fields fill the column so combos and path pickers share the same width (item 22).
+        form.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
         root.addLayout(form)
 
         self.lang = QComboBox()
@@ -43,7 +47,7 @@ class SettingsTab(QWidget):
         self.lang.setCurrentIndex(0 if cfg.language == "en" else 1)
         self.lang.currentIndexChanged.connect(self._apply_language)
         self.lbl_lang = QLabel()
-        form.addRow(self.lbl_lang, self.lang)
+        form.addRow(self.lbl_lang, self._combo_holder(self.lang, "lang"))
 
         self.theme = QComboBox()
         for name in config.THEMES:
@@ -51,7 +55,7 @@ class SettingsTab(QWidget):
         self._select_theme(cfg.theme)
         self.theme.currentIndexChanged.connect(self._apply_theme)
         self.lbl_theme = QLabel()
-        form.addRow(self.lbl_theme, self.theme)
+        form.addRow(self.lbl_theme, self._combo_holder(self.theme, "theme"))
 
         self.packs = self._path_row(form, cfg.packs_dir, is_dir=True)
         self.output = self._path_row(form, cfg.output_dir, is_dir=True)
@@ -148,6 +152,13 @@ class SettingsTab(QWidget):
         bottom.addWidget(self.btn_save)
         root.addLayout(bottom)
 
+        # Ctrl+S saves (item 18); snapshot the deferred fields (paths + API creds) so
+        # leaving with unsaved edits can warn (item 11). Live-applied fields
+        # (language/theme/toggles) already persist, so they're excluded.
+        save_sc = QShortcut(QKeySequence.Save, self, activated=self._save)
+        save_sc.setContext(Qt.WidgetWithChildrenShortcut)  # only when Settings is focused
+        self._baseline = self._snapshot()
+
     def _select_theme(self, theme: str) -> None:
         idx = self.theme.findData(theme)
         self.theme.setCurrentIndex(idx if idx >= 0 else 0)
@@ -176,6 +187,58 @@ class SettingsTab(QWidget):
         form.addRow(label, container)
         return field
 
+    def _combo_holder(self, combo, key: str) -> QWidget:
+        """Wrap a settings combo like a path row (field + trailing widget) so its
+        right edge lines up with the path fields above the Browse buttons (item 22).
+        The trailing spacer is sized to the Browse button in retranslate()."""
+        holder = QHBoxLayout()
+        holder.addWidget(combo, 1)
+        spacer = QWidget()
+        holder.addWidget(spacer)
+        container = QWidget()
+        container.setLayout(holder)
+        setattr(self, f"_{key}_spacer", spacer)
+        return container
+
+    # -- unsaved-changes guard (items 11 & 18) -------------------------------
+    def _snapshot(self) -> dict:
+        return {"packs": self.packs.text(), "output": self.output.text(),
+                "library": self.library.text(), "osu": self.osu.text(),
+                "client_id": self.client_id.text(),
+                "client_secret": self.client_secret.text()}
+
+    def _is_dirty(self) -> bool:
+        return self._snapshot() != self._baseline
+
+    def _restore(self, snap: dict) -> None:
+        self.packs.setText(snap["packs"]); self.output.setText(snap["output"])
+        self.library.setText(snap["library"]); self.osu.setText(snap["osu"])
+        self.client_id.setText(snap["client_id"])
+        self.client_secret.setText(snap["client_secret"])
+
+    def confirm_leave(self) -> bool:
+        """Called before leaving Settings / on quit. Returns True when it's OK to
+        proceed (saved, discarded, or nothing unsaved); False vetoes the switch."""
+        if not self._is_dirty():
+            return True
+        t = self.ctx.t
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Warning)
+        box.setWindowTitle(t("unsaved_title"))
+        box.setText(t("unsaved_body"))
+        save = box.addButton(t("btn_save_now"), QMessageBox.AcceptRole)
+        discard = box.addButton(t("btn_discard"), QMessageBox.DestructiveRole)
+        box.addButton(t("btn_cancel"), QMessageBox.RejectRole)
+        box.setDefaultButton(save)   # Enter = Save (Ctrl+S muscle memory, item 18)
+        box.exec()
+        clicked = box.clickedButton()
+        if clicked is save:
+            return self._save()   # False if save failed (bad path) -> stay on Settings
+        if clicked is discard:
+            self._restore(self._baseline)
+            return True
+        return False   # Cancel
+
     # -- i18n ----------------------------------------------------------------
     def retranslate(self) -> None:
         t = self.ctx.t
@@ -190,6 +253,10 @@ class SettingsTab(QWidget):
         self.osu._label.setText(t("set_osu_exe"))
         for f in (self.packs, self.output, self.library, self.osu):
             f._browse.setText(t("btn_browse"))
+        # Match the combo spacers to the (localized) Browse button width (item 22).
+        bw = self.packs._browse.sizeHint().width()
+        self._lang_spacer.setFixedWidth(bw)
+        self._theme_spacer.setFixedWidth(bw)
         self.cb_physical.setText(t("set_physical_copy"))
         self.cb_auto_backup.setText(t("set_auto_backup"))
         self.cb_clear_before.setText(t("set_clear_output_before"))
@@ -209,6 +276,20 @@ class SettingsTab(QWidget):
         self.lbl_drive.setText(t("set_drive"))
         self.lbl_drive_help.setText(t("set_drive_help"))
         self.btn_save.setText(t("btn_save"))
+        self.lang.setToolTip(t("tip_language"))
+        self.theme.setToolTip(t("tip_theme"))
+        self.packs.setToolTip(t("tip_packs_dir"))
+        self.output.setToolTip(t("tip_output_dir"))
+        self.library.setToolTip(t("tip_library_dir"))
+        self.osu.setToolTip(t("tip_osu_exe"))
+        self.cb_physical.setToolTip(t("tip_physical_copy"))
+        self.cb_auto_backup.setToolTip(t("tip_auto_backup"))
+        self.cb_clear_before.setToolTip(t("tip_clear_before"))
+        self.btn_reference.setToolTip(t("tip_update_reference"))
+        self.btn_import_stable.setToolTip(t("tip_import_stable"))
+        self.btn_import_lazer.setToolTip(t("tip_import_lazer"))
+        self.btn_drive.setToolTip(t("tip_drive"))
+        self.btn_save.setToolTip(t("tip_save"))
         self._refresh_reference_status()
         self._refresh_drive_status()
 
@@ -230,11 +311,18 @@ class SettingsTab(QWidget):
             self.btn_drive.setText(t("btn_drive_connect"))
             self.lbl_drive_status.setText(t("drive_not_configured"))
             return
-        self.btn_drive.setEnabled(True)
         if st["connected"]:
+            self.btn_drive.setEnabled(True)
             self.btn_drive.setText(t("btn_drive_disconnect"))
             self.lbl_drive_status.setText(t("drive_connected"))
+        elif not st.get("can_store", True):
+            # Configured, but no keyring backend to store the token — guard the whole
+            # OAuth flow up front instead of failing after consent (item 1b).
+            self.btn_drive.setEnabled(False)
+            self.btn_drive.setText(t("btn_drive_connect"))
+            self.lbl_drive_status.setText(t("drive_no_keyring"))
         else:
+            self.btn_drive.setEnabled(True)
             self.btn_drive.setText(t("btn_drive_connect"))
             self.lbl_drive_status.setText(t("drive_disconnected"))
 
@@ -349,6 +437,7 @@ class SettingsTab(QWidget):
                                        new=res.get("new", 0), dup=res.get("duplicates", 0)))
         self.mw.dashboard.refresh_scan()
         self.mw.packs.reload()
+        self.mw.search.reload()          # reflect the new library rows live (item 7)
 
     def _on_import_failed(self, msg) -> None:
         self.btn_import_stable.setEnabled(True)
@@ -394,17 +483,23 @@ class SettingsTab(QWidget):
         self.saved_label.setText(self.ctx.t("saved"))
 
     # -- save (paths + API) --------------------------------------------------
-    def _save(self) -> None:
+    def _save(self) -> bool:
         cfg = self.ctx.cfg
         cfg.packs_dir = self.packs.text().strip()
         cfg.output_dir = self.output.text().strip()
         cfg.library_dir = self.library.text().strip()
         cfg.osu_exe = self.osu.text().strip()
-        self._apply_toggles()
         cfg.osu_client_id = self.client_id.text().strip()
         cfg.osu_client_secret = self.client_secret.text().strip()
-        cfg.ensure_dirs()
-        self.ctx.save_config()
+        try:
+            cfg.ensure_dirs()   # can raise on an invalid/unreachable path the user typed
+        except OSError as exc:
+            QMessageBox.critical(self, self.ctx.t("app_title"),
+                                 self.ctx.t("settings_save_failed", err=str(exc)))
+            return False
+        self._apply_toggles()   # persists cfg (now-validated paths + toggles + API)
         self.ctx.log.info("SETTINGS_SAVE", changed="paths,toggles,api")
         self.saved_label.setText(self.ctx.t("saved"))
+        self._baseline = self._snapshot()   # edits are now saved — clear dirty (item 11)
         self.mw.dashboard.refresh_scan()
+        return True

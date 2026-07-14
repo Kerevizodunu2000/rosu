@@ -144,12 +144,23 @@ class Services:
         return res
 
     # -- auto-import from installed osu! clients (item 15) -------------------
-    def import_osz_folder(self, folder, progress=None) -> dict:
-        """Dedup every .osz/.olz in ``folder`` into the Library (shared by the
-        stable, lazer and manual import paths)."""
-        cb = (lambda name: progress({"kind": "import", "name": name})) if progress else None
-        res = library.copy_to_library(folder, self.cfg.library_path, self.db,
-                                      now_iso(), self.cfg.library_physical_copy, cb)
+    def import_osz_folder(self, folder, progress=None, source_label=None) -> dict:
+        """Dedup every .osz in ``folder`` into the Library (shared by the stable,
+        lazer and manual import paths). Emits k/n import progress (item 3) and, when
+        ``source_label`` is set, tags each set with its origin (item 9)."""
+        folder = Path(folder)
+        total = sum(1 for _ in folder.glob("*.osz")) if folder.exists() else 0
+        done = [0]
+
+        def cb(name):
+            done[0] += 1
+            progress({"kind": "import", "name": name,
+                      "done": done[0], "total": total})
+
+        res = library.copy_to_library(
+            folder, self.cfg.library_path, self.db, now_iso(),
+            self.cfg.library_physical_copy, cb if progress else None,
+            source_label=source_label)
         self.rebuild()
         self.log.info("LIBRARY_COPY", new=res["new"], duplicates=res["duplicates"],
                       dup_ids=res["dup_ids"][:50])
@@ -175,7 +186,8 @@ class Services:
             made += 1
             if progress:
                 progress({"kind": "import", "done": i, "total": len(folders)})
-        res = self.import_osz_folder(self.cfg.output_path, progress)
+        res = self.import_osz_folder(self.cfg.output_path, progress,
+                                     source_label="local_osu_stable")
         self.log.info("CLIENT_IMPORT", client="stable", added=res["new"], made=made)
         return {"source": "stable", "found": True, "made": made, **res}
 
@@ -202,7 +214,8 @@ class Services:
                 self.log.error("import:lazer", (proc.stderr or "helper failed")[:300])
                 return {"source": "lazer", "found": True, "error": "helper_failed",
                         "detail": (proc.stderr or "")[:300]}
-            res = self.import_osz_folder(out, progress)
+            res = self.import_osz_folder(out, progress,
+                                         source_label="local_osu_lazer")
             self.log.info("CLIENT_IMPORT", client="lazer", added=res["new"], made=0)
             return {"source": "lazer", "found": True, **res}
         finally:
@@ -319,6 +332,11 @@ class Services:
         self.log.info("SEARCH", query=query or "(all)", results=len(rows))
         return rows
 
+    def data_generation(self) -> int:
+        """Monotonic counter bumped on track writes — the Artists tab uses it to
+        skip a costly rebuild when nothing changed (item 10)."""
+        return self.db.data_generation()
+
     def artists(self, metric: str = "count", descending: bool = True) -> list[dict]:
         return self.db.artists_ranked(metric, descending)
 
@@ -343,7 +361,8 @@ class Services:
     def drive_status(self) -> dict:
         auth = self._drive_auth()
         return {"configured": auth.is_configured(),
-                "connected": auth.is_connected()}
+                "connected": auth.is_connected(),
+                "can_store": auth.can_store_token()}
 
     def connect_drive(self, progress=None) -> dict:
         """Run the Google OAuth consent flow (off-thread) and remember it."""

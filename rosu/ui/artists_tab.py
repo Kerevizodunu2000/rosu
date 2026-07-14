@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QComboBox, QHBoxLayout, QHeaderView, QLabel, QSplitter, QVBoxLayout, QWidget,
+    QComboBox, QHBoxLayout, QLabel, QSplitter, QVBoxLayout, QWidget,
 )
 
 from ..i18n import human_duration
@@ -49,6 +49,9 @@ class ArtistsTab(QWidget):
 
         self.selected = QLabel(objectName="status")
         root.addWidget(self.selected)
+        # (data_generation, metric, descending) of the last build — lets on_shown
+        # skip a full rebuild when nothing changed (item 10).
+        self._built_key = None
 
     _SORTS = (
         ("sort_most", ("count", True)),
@@ -69,6 +72,7 @@ class ArtistsTab(QWidget):
             self.sort.addItem(t(key), data)
         self.sort.setCurrentIndex(cur if cur >= 0 else 0)
         self.sort.blockSignals(False)
+        self.sort.setToolTip(t("tip_artists_sort"))
         self.artists.setHorizontalHeaderLabels(
             [t("col_artist"), t("col_songs"), t("col_avg_length"), t("col_avg_bpm")])
         self.artists.set_menu_labels(t("copy_names_action"), t("copy_table_action"))
@@ -76,31 +80,42 @@ class ArtistsTab(QWidget):
         self.songs.set_menu_labels(t("copy_names_action"), t("copy_table_action"))
 
     def on_shown(self) -> None:
-        self.reload()
+        # Rebuilding the (up to ~1000-row) artists table is expensive and used to run
+        # synchronously on EVERY tab focus, freezing the app (item 10). Skip it when
+        # neither the data nor the chosen sort changed since the last build.
+        metric, descending = self.sort.currentData() or ("count", True)
+        key = (self.ctx.services.data_generation(), metric, descending)
+        if key != self._built_key:
+            self.reload()
 
     def reload(self) -> None:
         metric, descending = self.sort.currentData() or ("count", True)
+        gen = self.ctx.services.data_generation()
         rows = self.ctx.services.artists(metric, descending)
+        self.artists.setUpdatesEnabled(False)   # coalesce paints during the build
         self.artists.setSortingEnabled(False)
-        self.artists.setRowCount(len(rows))
-        for r, a in enumerate(rows):
-            avg_len = a.get("avg_length")
-            avg_bpm = a.get("avg_bpm")
-            self.artists.setItem(r, 0, SortItem(a["artist"]))
-            self.artists.setItem(r, 1, SortItem(str(a["song_count"]), a["song_count"]))
-            self.artists.setItem(r, 2, SortItem(
-                human_duration(int(avg_len)) if avg_len else "", avg_len or 0))
-            self.artists.setItem(r, 3, SortItem(
-                f"{avg_bpm:.0f}" if avg_bpm else "", avg_bpm or 0.0))
-            for c in (1, 2, 3):
-                self.artists.item(r, c).setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        self.artists.setSortingEnabled(True)
-        header = self.artists.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.Stretch)
-        for c in (1, 2, 3):
-            header.setSectionResizeMode(c, QHeaderView.ResizeToContents)
+        try:
+            self.artists.setRowCount(len(rows))
+            for r, a in enumerate(rows):
+                avg_len = a.get("avg_length")
+                avg_bpm = a.get("avg_bpm")
+                name_item = SortItem(a["artist"])
+                name_item.setToolTip(a["artist"] or "")   # full artist on hover (item 15)
+                self.artists.setItem(r, 0, name_item)
+                self.artists.setItem(r, 1, SortItem(str(a["song_count"]), a["song_count"]))
+                self.artists.setItem(r, 2, SortItem(
+                    human_duration(int(avg_len)) if avg_len else "", avg_len or 0))
+                self.artists.setItem(r, 3, SortItem(
+                    f"{avg_bpm:.0f}" if avg_bpm else "", avg_bpm or 0.0))
+                for c in (1, 2, 3):
+                    self.artists.item(r, c).setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        finally:
+            self.artists.setSortingEnabled(True)
+            self.artists.setUpdatesEnabled(True)
+        self.artists.seed_widths_once(name_min=220)
         self.songs.setRowCount(0)
         self.selected.setText("")
+        self._built_key = (gen, metric, descending)
 
     def _on_artist(self, row: int, _col: int) -> None:
         item = self.artists.item(row, 0)
@@ -112,29 +127,35 @@ class ArtistsTab(QWidget):
         self._populate_songs(tracks)
 
     def _populate_songs(self, tracks: list[dict]) -> None:
+        self.songs.setUpdatesEnabled(False)
         self.songs.setSortingEnabled(False)
-        self.songs.setRowCount(len(tracks))
-        for r, row in enumerate(tracks):
-            bpm = row.get("bpm")
-            length = row.get("length_seconds")
-            bid = row.get("beatmapset_id")
-            cells = [
-                (row.get("title") or row.get("display_name", ""), None),
-                (str(bid) if bid is not None else "-", bid or 0),
-                (f"{bpm:g}" if bpm else "", bpm or 0.0),
-                (human_duration(length), length or 0),
-                (row.get("creator") or "", None),
-                (row.get("mode") or "", None),
-                (", ".join(row.get("sources", [])), None),
-            ]
-            for c, (text, sort_val) in enumerate(cells):
-                item = SortItem(text, sort_val)
-                if c in (1, 2, 3):
-                    item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
-                self.songs.setItem(r, c, item)
-            self.songs.set_clean_name(r, row.get("display_name", ""))
-            full = row.get("source_full") or []
-            if full:
-                self.songs.set_copy_value(r, 6, "; ".join(full))
-        self.songs.setSortingEnabled(True)
-        self.songs.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        try:
+            self.songs.setRowCount(len(tracks))
+            for r, row in enumerate(tracks):
+                bpm = row.get("bpm")
+                length = row.get("length_seconds")
+                bid = row.get("beatmapset_id")
+                cells = [
+                    (row.get("title") or row.get("display_name", ""), None),
+                    (str(bid) if bid is not None else "-", bid or 0),
+                    (f"{bpm:g}" if bpm else "", bpm or 0.0),
+                    (human_duration(length), length or 0),
+                    (row.get("creator") or "", None),
+                    (row.get("mode") or "", None),
+                    (", ".join(row.get("sources", [])), None),
+                ]
+                for c, (text, sort_val) in enumerate(cells):
+                    item = SortItem(text, sort_val)
+                    if c == 0 and text:
+                        item.setToolTip(text)      # full title on hover (item 15)
+                    if c in (1, 2, 3):
+                        item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+                    self.songs.setItem(r, c, item)
+                self.songs.set_clean_name(r, row.get("display_name", ""))
+                full = row.get("source_full") or []
+                if full:
+                    self.songs.set_copy_value(r, 6, "; ".join(full))
+        finally:
+            self.songs.setSortingEnabled(True)
+            self.songs.setUpdatesEnabled(True)
+        self.songs.seed_widths_once(name_min=240)

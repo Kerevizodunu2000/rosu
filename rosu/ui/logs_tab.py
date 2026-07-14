@@ -46,6 +46,8 @@ class LogsTab(QWidget):
     def retranslate(self) -> None:
         self.btn_formats.setText(self.ctx.t("open_formats"))
         self.btn_excel.setText(self.ctx.t("open_excel"))
+        self.btn_formats.setToolTip(self.ctx.t("tip_open_formats"))
+        self.btn_excel.setToolTip(self.ctx.t("tip_open_excel"))
 
     def on_shown(self) -> None:
         self._load_today()

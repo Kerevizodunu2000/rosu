@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from PySide6.QtGui import QBrush, QColor
 from PySide6.QtWidgets import (
-    QCheckBox, QComboBox, QHBoxLayout, QHeaderView, QLabel, QLineEdit,
-    QVBoxLayout, QWidget,
+    QCheckBox, QComboBox, QHBoxLayout, QLabel, QLineEdit, QVBoxLayout, QWidget,
 )
 
 from ..gaps import _present_row
@@ -59,6 +58,10 @@ class PacksTab(QWidget):
         self.hint.setText(self.ctx.t("copy_hint"))
         self.table.set_menu_labels(self.ctx.t("copy_names_action"),
                                    self.ctx.t("copy_table_action"))
+        self.search.setToolTip(self.ctx.t("tip_packs_search"))
+        self.cb_missing.setToolTip(self.ctx.t("tip_only_missing"))
+        self.cb_extra.setToolTip(self.ctx.t("tip_only_extra"))
+        self.filter.setToolTip(self.ctx.t("tip_packs_filter"))
         self._reload_filter_options()
 
     def on_shown(self) -> None:
@@ -125,29 +128,31 @@ class PacksTab(QWidget):
         self._render(shown)
 
     def _render(self, rows: list) -> None:
+        self.table.setUpdatesEnabled(False)
         self.table.setSortingEnabled(False)
-        self.table.setRowCount(len(rows))
-        for r, (category, gr, full) in enumerate(rows):
-            if gr.series == "R" or gr.year is not None:
-                key_txt = " ".join(str(x) for x in (gr.year, gr.season) if x is not None)
-            else:
-                key_txt = "" if gr.number is None else str(gr.number)
-            title = gr.title or ""
-            if getattr(gr, "extra_count", 0):
-                title += self.ctx.t("extra_marker", n=gr.extra_count)
-            values = [category, gr.series or "", key_txt, gr.code or "",
-                      title, gr.mode or "",
-                      "" if not gr.present else (gr.track_count or ""),
-                      gr.extracted_at or ""]
-            for c, v in enumerate(values):
-                sort_val = gr.number if c == 2 and gr.number is not None else None
-                item = SortItem("" if v is None else str(v), sort_val)
-                if not gr.present:
-                    item.setBackground(QBrush(_RED_BG))
-                    item.setForeground(QBrush(_RED_FG))
-                self.table.setItem(r, c, item)
-            self.table.set_clean_name(r, full if (gr.present and full) else (gr.code or ""))
-        self.table.setSortingEnabled(True)
-        header = self.table.horizontalHeader()
-        self.table.resizeColumnsToContents()
-        header.setSectionResizeMode(4, QHeaderView.Stretch)
+        try:
+            self.table.setRowCount(len(rows))
+            for r, (category, gr, full) in enumerate(rows):
+                if gr.series == "R" or gr.year is not None:
+                    key_txt = " ".join(str(x) for x in (gr.year, gr.season) if x is not None)
+                else:
+                    key_txt = "" if gr.number is None else str(gr.number)
+                title = gr.title or ""
+                if getattr(gr, "extra_count", 0):
+                    title += self.ctx.t("extra_marker", n=gr.extra_count)
+                values = [category, gr.series or "", key_txt, gr.code or "",
+                          title, gr.mode or "",
+                          "" if not gr.present else (gr.track_count or ""),
+                          gr.extracted_at or ""]
+                for c, v in enumerate(values):
+                    sort_val = gr.number if c == 2 and gr.number is not None else None
+                    item = SortItem("" if v is None else str(v), sort_val)
+                    if not gr.present:
+                        item.setBackground(QBrush(_RED_BG))
+                        item.setForeground(QBrush(_RED_FG))
+                    self.table.setItem(r, c, item)
+                self.table.set_clean_name(r, full if (gr.present and full) else (gr.code or ""))
+        finally:
+            self.table.setSortingEnabled(True)
+            self.table.setUpdatesEnabled(True)
+        self.table.seed_widths_once(name_min=0)   # content-fit once, then resizable (item 16)

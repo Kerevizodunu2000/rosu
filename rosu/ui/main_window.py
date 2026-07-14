@@ -42,6 +42,7 @@ class MainWindow(QMainWindow):
         # live-log mirror into the Logs tab
         self.ctx.log.ui_sink = self.logs.append_line
 
+        self._prev_index = self.tabs.currentIndex()
         self.tabs.currentChanged.connect(self._on_tab_changed)
         self.retranslate()
 
@@ -69,6 +70,16 @@ class MainWindow(QMainWindow):
             tab.retranslate()
 
     def _on_tab_changed(self, index: int) -> None:
+        # Guard leaving the Settings tab with unsaved path/API edits (item 11).
+        prev = (self.tabs.widget(self._prev_index)
+                if 0 <= self._prev_index < self.tabs.count() else None)
+        if prev is self.settings and index != self._prev_index \
+                and not self.settings.confirm_leave():
+            self.tabs.blockSignals(True)          # veto: bounce back, don't re-enter
+            self.tabs.setCurrentIndex(self._prev_index)
+            self.tabs.blockSignals(False)
+            return
+        self._prev_index = index
         widget = self.tabs.widget(index)
         if hasattr(widget, "on_shown"):
             widget.on_shown()
@@ -81,6 +92,9 @@ class MainWindow(QMainWindow):
         (``Cannot operate on a closed database``) or delivering a signal to an
         already-deleted widget.
         """
+        if hasattr(self.settings, "confirm_leave") and not self.settings.confirm_leave():
+            event.ignore()      # unsaved Settings edits, user chose Cancel (item 11)
+            return
         try:
             self.ctx.services.request_cancel()
         except Exception:

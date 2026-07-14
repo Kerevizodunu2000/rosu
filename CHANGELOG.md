@@ -10,6 +10,44 @@ the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-07-14
+
+Bug-fix and polish batch from live testing of v0.8.0.
+
+### Fixed
+- **Artists tab no longer freezes.** It rebuilt the entire (~1000-row) table
+  synchronously on *every* tab focus. It now rebuilds only when the data or the
+  chosen sort actually changed (a `data_generation` counter), coalesces paint
+  updates, uses resizable fixed-width columns instead of per-row auto-measurement,
+  and its per-artist song list no longer runs an N+1 query.
+- **Import "N added, 0 already had" miscount.** Re-importing beatmaps already in your
+  Library counted every one as "new" because it compared file bytes (an osu!lazer
+  re-export never byte-matches the stored copy). New-vs-duplicate is now decided by
+  beatmapset id.
+- **Search refreshes live** after an import / Copy to Library / Refresh, instead of
+  showing stale rows until you leave and re-open the tab.
+- **Blank Source for maps already in osu!.** Beatmaps imported from an installed osu!
+  client are now tagged `local_osu_lazer` / `local_osu_stable` in the Sources column
+  (via a hidden synthetic source pack).
+
+### Changed
+- **osu! import batch size 40 → 64** files per launch (still well within the Windows
+  command-line limit). The "one-by-one" tail some users saw is osu!lazer's own serial
+  import, not Rosu's batching.
+- **Resizable table columns** (Search, Packs, Artists) — drag a header border to
+  resize; long names/artists now show a full-text tooltip and rows are a touch taller.
+- **Google Drive:** the browser "you can close this tab" page is now a branded,
+  theme-aware page with distinct success/error states; the Connect button is disabled
+  up front (with a clear message) when the `keyring` package is missing, instead of
+  failing only after the whole sign-in completes.
+
+### Added
+- **Unsaved-settings guard** — leaving Settings (or quitting) with unsaved path/API
+  edits warns with Save / Discard / Cancel; **Ctrl+S** saves.
+- **Hover tooltips** on the main controls across every tab (translated, theme-aware).
+- Settings Language/Theme dropdowns now line up with the folder pickers.
+- README contact e-mail.
+
 ## [0.8.0] - 2026-07-14
 
 Google Drive backup: log in once and back up your Library to the cloud as
@@ -244,7 +282,8 @@ Initial release. The core archive-management pipeline.
 - **EN/TR** localization; English-only code/logs.
 - Single-file **PyInstaller** build (`osu-archiver.spec`) + GitHub Actions build workflow.
 
-[Unreleased]: https://github.com/Kerevizodunu2000/rosu/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/Kerevizodunu2000/rosu/compare/v0.8.1...HEAD
+[0.8.1]: https://github.com/Kerevizodunu2000/rosu/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/Kerevizodunu2000/rosu/releases/tag/v0.8.0
 [0.7.1]: https://github.com/Kerevizodunu2000/rosu/releases/tag/v0.7.1
 [0.7.0]: https://github.com/Kerevizodunu2000/rosu/releases/tag/v0.7.0

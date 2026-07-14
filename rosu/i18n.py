@@ -126,6 +126,18 @@ STRINGS: dict[str, dict[str, str]] = {
     "btn_browse": {"en": "Browse…", "tr": "Gözat…"},
     "btn_save": {"en": "Save", "tr": "Kaydet"},
     "saved": {"en": "Settings saved.", "tr": "Ayarlar kaydedildi."},
+
+    # Unsaved-changes guard (items 11 & 18)
+    "unsaved_title": {"en": "Unsaved changes", "tr": "Kaydedilmemiş değişiklikler"},
+    "unsaved_body": {
+        "en": "You changed some settings but didn't save them. Save your changes "
+              "before leaving? (Tip: Ctrl+S saves.)",
+        "tr": "Bazı ayarları değiştirdiniz ama kaydetmediniz. Ayrılmadan önce "
+              "kaydedilsin mi? (İpucu: Ctrl+S kaydeder.)"},
+    "btn_save_now": {"en": "Save", "tr": "Kaydet"},
+    "btn_discard": {"en": "Discard", "tr": "Vazgeç"},
+    "settings_save_failed": {"en": "Couldn't save settings: {err}",
+                             "tr": "Ayarlar kaydedilemedi: {err}"},
     "open_formats": {"en": "Open log_formats.md", "tr": "log_formats.md dosyasını aç"},
     "open_excel": {"en": "Open Excel report", "tr": "Excel raporunu aç"},
 
@@ -282,6 +294,11 @@ STRINGS: dict[str, dict[str, str]] = {
     "drive_not_configured": {
         "en": "Google Drive is not available in this build (no OAuth client).",
         "tr": "Bu sürümde Google Drive kullanılamıyor (OAuth istemcisi yok)."},
+    "drive_no_keyring": {
+        "en": "Needs the 'keyring' package to store your login "
+              "(pip install -r requirements.txt).",
+        "tr": "Girişini saklamak için 'keyring' paketi gerekli "
+              "(pip install -r requirements.txt)."},
     "drive_login_failed": {"en": "Google sign-in failed or was cancelled.",
                            "tr": "Google girişi başarısız oldu veya iptal edildi."},
     "btn_backup_drive": {"en": "Back up to Drive", "tr": "Drive'a Yedekle"},
@@ -296,6 +313,89 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "Backup cancelled — {uploaded} tracks in {chunks} archive(s) uploaded.",
         "tr": "Yedek iptal edildi — {uploaded} müzik {chunks} arşiv yüklendi."},
     "drive_backup_failed": {"en": "Drive backup failed.", "tr": "Drive yedeği başarısız."},
+
+    # Tooltips (item 14)
+    "tip_extract": {"en": "Unpack the archives in your Packs folder into Output.",
+                    "tr": "Packs klasöründeki arşivleri Output'a çıkarır."},
+    "tip_copy_library": {"en": "Copy the unpacked beatmaps from Output into your Library.",
+                         "tr": "Output'taki çıkarılmış müzikleri Library'e kopyalar."},
+    "tip_import_osu": {"en": "Send the beatmaps in Output to osu!.",
+                       "tr": "Output'taki müzikleri osu!'ya gönderir."},
+    "tip_refresh": {
+        "en": "Rescan your osu! library and update its records (added, enriched, "
+              "disappeared, present).",
+        "tr": "osu! kütüphanenizi yeniden tarayıp kayıtlarını günceller (eklenen, "
+              "zenginleştirilen, kaybolan, mevcut)."},
+    "tip_backup_drive": {"en": "Back up your Library to Google Drive.",
+                        "tr": "Library'nizi Google Drive'a yedekler."},
+    "tip_rescan": {"en": "Rescan the Packs folder for new or updated archives.",
+                  "tr": "Packs klasörünü yeni veya güncellenmiş arşivler için yeniden tarar."},
+    "tip_cancel": {"en": "Cancel the operation currently in progress.",
+                  "tr": "Devam eden işlemi iptal eder."},
+
+    "tip_language": {"en": "Choose the app's display language.",
+                     "tr": "Uygulamanın görüntü dilini seçer."},
+    "tip_theme": {"en": "Choose the app's color theme.",
+                  "tr": "Uygulamanın renk temasını seçer."},
+    "tip_packs_dir": {"en": "Folder Rosu scans for archive packs to unpack.",
+                      "tr": "Rosu'nun açılacak arşiv paketlerini taradığı klasör."},
+    "tip_output_dir": {
+        "en": "Folder where unpacked beatmaps land before being copied to Library "
+              "or imported to osu!.",
+        "tr": "Çıkarılan müziklerin Library'e kopyalanmadan veya osu!'ya "
+              "aktarılmadan önce konduğu klasör."},
+    "tip_library_dir": {"en": "Folder where your permanent beatmap library is kept.",
+                        "tr": "Kalıcı müzik kütüphanenizin tutulduğu klasör."},
+    "tip_osu_exe": {"en": "Path to the osu! executable used to import beatmaps.",
+                    "tr": "Müzik aktarımında kullanılan osu! çalıştırılabilir dosyasının yolu."},
+    "tip_physical_copy": {
+        "en": "Keep an actual .osz file copy in Library instead of tracking it in "
+              "memory only.",
+        "tr": "Library'de yalnızca hafızada değil, gerçek bir .osz dosya kopyası da tutar."},
+    "tip_auto_backup": {
+        "en": "Automatically copy newly unpacked beatmaps to Library right after "
+              "extraction.",
+        "tr": "Çıkarma işleminden hemen sonra yeni müzikleri otomatik olarak "
+              "Library'e kopyalar."},
+    "tip_clear_before": {"en": "Empty the Output folder before each new extraction.",
+                        "tr": "Her yeni çıkarmadan önce Output klasörünü boşaltır."},
+    "tip_update_reference": {
+        "en": "Fetch the current official pack list from the osu! API to detect "
+              "genuinely missing packs.",
+        "tr": "Gerçekten eksik paketleri tespit etmek için osu! API'sinden güncel "
+              "resmi paket listesini çeker."},
+    "tip_import_stable": {"en": "Import beatmaps already installed in your osu!(stable) client.",
+                         "tr": "osu!(stable) istemcinizde zaten yüklü olan müzikleri içe aktarır."},
+    "tip_import_lazer": {"en": "Import beatmaps already installed in your osu!lazer client.",
+                        "tr": "osu!lazer istemcinizde zaten yüklü olan müzikleri içe aktarır."},
+    "tip_drive": {"en": "Connect or disconnect your Google Drive account for backups.",
+                 "tr": "Yedekleme için Google Drive hesabınızı bağlar veya bağlantısını keser."},
+    "tip_save": {"en": "Save your folder, path and API settings.",
+                "tr": "Klasör, yol ve API ayarlarınızı kaydeder."},
+
+    "tip_search_box": {"en": "Type to search your library by artist, title or beatmap id.",
+                      "tr": "Kütüphanenizde sanatçı, başlık veya beatmap id'sine göre "
+                            "arama yapmak için yazın."},
+    "tip_search_btn": {"en": "Run the search now.", "tr": "Aramayı şimdi çalıştırır."},
+
+    "tip_packs_search": {"en": "Filter packs by code, title or category.",
+                        "tr": "Arşivleri koda, başlığa veya kategoriye göre süzer."},
+    "tip_only_missing": {"en": "Show only packs that are missing from your collection.",
+                        "tr": "Yalnızca koleksiyonunuzda eksik olan arşivleri gösterir."},
+    "tip_only_extra": {
+        "en": "Show only packs that contain extra files beyond the expected tracks.",
+        "tr": "Yalnızca beklenenden fazla dosya içeren arşivleri gösterir."},
+    "tip_packs_filter": {"en": "Filter packs by category.",
+                        "tr": "Arşivleri kategoriye göre süzer."},
+
+    "tip_artists_sort": {"en": "Choose how the artist list is sorted.",
+                        "tr": "Sanatçı listesinin nasıl sıralanacağını seçer."},
+
+    "tip_open_formats": {
+        "en": "Open log_formats.md, which explains the log entry formats.",
+        "tr": "Log girdisi biçimlerini açıklayan log_formats.md dosyasını açar."},
+    "tip_open_excel": {"en": "Open the Excel report of your library.",
+                      "tr": "Kütüphanenizin Excel raporunu açar."},
 }
 
 

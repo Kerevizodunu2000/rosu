@@ -159,4 +159,6 @@ Rosu is free software, licensed under the **[GNU General Public License v3.0 or 
 
 Copyright © 2026 Halil Şafak Şimşek.
 
+**Contact:** halilsafaksimsek@gmail.com
+
 Rosu is distributed in the hope that it will be useful, but **WITHOUT ANY WARRANTY** — see the [GNU GPL v3](LICENSE) for details. Bundled third-party components keep their own licenses; see [THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md).

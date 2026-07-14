@@ -163,6 +163,8 @@ QLabel#banner {{ background-color: {banner_bg}; color: {banner_text};
     border: 1px solid {banner_border}; border-radius: 6px; padding: 8px 12px; }}
 QLabel#h1 {{ font-size: 20px; font-weight: 700; color: {text}; }}
 QLabel#status {{ color: {muted}; }}
+QToolTip {{ background-color: {surface}; color: {text};
+    border: 1px solid {accent}; border-radius: 4px; padding: 4px 8px; }}
 QScrollBar:vertical {{ background: {bg}; width: 12px; margin: 0; }}
 QScrollBar::handle:vertical {{ background: {border}; border-radius: 6px; min-height: 24px; }}
 QScrollBar::add-line, QScrollBar::sub-line {{ height: 0; }}

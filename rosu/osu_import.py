@@ -15,8 +15,11 @@ from pathlib import Path
 from typing import Callable
 
 # Keep well under the Windows command-line limit (~32767 chars) and cap the
-# number of files per launch so a single invocation stays snappy.
-_MAX_BATCH_FILES = 40
+# number of files per launch so a single invocation stays snappy. 64 files at
+# ~250 chars/path ≈ 16k chars — still comfortably under the char budget below
+# (item 19). The "one-by-one" tail some users see afterwards is osu!lazer's own
+# serial per-set import, not our batching.
+_MAX_BATCH_FILES = 64
 _MAX_BATCH_CHARS = 24000
 _BATCH_DELAY_S = 0.3        # once osu! is running, forwarding is cheap
 _FIRST_BATCH_DELAY_S = 6.0  # extra time so a cold-starting osu! can boot first

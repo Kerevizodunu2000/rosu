@@ -19,7 +19,8 @@ from __future__ import annotations
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
-    QAbstractItemView, QApplication, QMenu, QTableWidget, QTableWidgetItem,
+    QAbstractItemView, QApplication, QHeaderView, QMenu, QTableWidget,
+    QTableWidgetItem,
 )
 
 _CLEAN_ROLE = Qt.UserRole + 11  # per-row clean copy name (single-click copy)
@@ -44,11 +45,18 @@ class CopyTable(QTableWidget):
         self._name_column = name_column
         self._menu_names = "Copy names"          # overridable via set_menu_labels
         self._menu_table = "Copy as table (Ctrl+C)"
+        self._widths_seeded = False
         self.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.verticalHeader().setVisible(False)
+        self.verticalHeader().setDefaultSectionSize(30)  # a touch taller = legible (item 15)
         self.setAlternatingRowColors(True)
         self.setSortingEnabled(True)
+        # Columns are user-resizable: keep sections Interactive (Qt's default, which
+        # Stretch/ResizeToContents used to disable) and let the last one fill leftover
+        # width, so drag-to-resize works in every table (item 16).
+        self.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
+        self.horizontalHeader().setStretchLastSection(True)
         self.cellClicked.connect(self._on_cell_clicked)
         self.cellDoubleClicked.connect(self._on_cell_double_clicked)
         self.setContextMenuPolicy(Qt.CustomContextMenu)
@@ -57,6 +65,17 @@ class CopyTable(QTableWidget):
     def set_menu_labels(self, copy_names: str, copy_table: str) -> None:
         self._menu_names = copy_names
         self._menu_table = copy_table
+
+    def seed_widths_once(self, name_min: int = 260) -> None:
+        """Set sensible initial column widths the first time rows exist, then leave
+        them alone so the user's manual drags (item 16) survive later re-populates."""
+        if self._widths_seeded or self.rowCount() == 0:
+            return
+        self.resizeColumnsToContents()
+        nc = self._name_column
+        if 0 <= nc < self.columnCount() and self.columnWidth(nc) < name_min:
+            self.setColumnWidth(nc, name_min)
+        self._widths_seeded = True
 
     def set_clean_name(self, row: int, name: str) -> None:
         """Set the clean name copied when the row is clicked."""

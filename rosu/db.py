@@ -104,6 +104,9 @@ class Database:
         self.path = Path(db_path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.RLock()
+        # Monotonic "data changed" counter — views (e.g. the Artists tab) read it
+        # to skip an expensive rebuild when nothing relevant changed (item 10).
+        self._generation = 0
         self._conn = sqlite3.connect(str(self.path), check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA journal_mode=WAL")
@@ -124,8 +127,11 @@ class Database:
     def _backfill_category(self) -> None:
         """Fill category for packs recorded before the column existed."""
         from .parsing import pack_category
+        # Synthetic "local library" packs (status='local', item 9) are deliberately
+        # left category-less so they never surface in the Packs tab — don't backfill them.
         rows = self._conn.execute(
-            "SELECT id, series FROM packs WHERE category IS NULL").fetchall()
+            "SELECT id, series FROM packs "
+            "WHERE category IS NULL AND (status IS NULL OR status <> 'local')").fetchall()
         for r in rows:
             self._conn.execute("UPDATE packs SET category=? WHERE id=?",
                                (pack_category(r["series"]), r["id"]))
@@ -139,6 +145,14 @@ class Database:
                 if name not in existing:
                     self._conn.execute(
                         f"ALTER TABLE {table} ADD COLUMN {name} {decl}")
+
+    def data_generation(self) -> int:
+        """A counter bumped on every write that changes the track set or its
+        metadata, so views can cheaply detect staleness (item 10)."""
+        return self._generation
+
+    def _bump(self) -> None:
+        self._generation += 1
 
     def close(self) -> None:
         with self._lock:
@@ -179,6 +193,22 @@ class Database:
             self._conn.execute("UPDATE packs SET extra_count=? WHERE code=?",
                                (int(count), code))
             self._conn.commit()
+
+    def get_or_create_local_pack(self, code: str, full_name: str | None = None) -> int:
+        """A synthetic "source" pack for beatmaps imported from an installed osu!
+        client (item 9), so their provenance (e.g. ``local_osu_lazer``) shows in the
+        Sources column. Kept series/category NULL and status='local' so it never
+        appears in the Packs tab or as a gap (see ``_backfill_category``)."""
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT id FROM packs WHERE code=?", (code,)).fetchone()
+            if row:
+                return row["id"]
+            cur = self._conn.execute(
+                "INSERT INTO packs(code, series, number, category, full_name, status) "
+                "VALUES(?, NULL, NULL, NULL, ?, 'local')", (code, full_name or code))
+            self._conn.commit()
+            return cur.lastrowid
 
     def series_list(self) -> list[str]:
         with self._lock:
@@ -271,6 +301,7 @@ class Database:
                      m_creator, m_source, m_tags, m_bpm, m_len, m_mode,
                      m_diff, m_diff, t.size_bytes, t.size_bytes, tid))
                 self._conn.commit()
+                self._bump()
                 return tid, False
             cur = self._conn.execute(
                 """INSERT INTO tracks(beatmapset_id, filename, artist, title,
@@ -282,6 +313,7 @@ class Database:
                  m_creator, m_source, m_tags, m_bpm, m_len, m_mode, m_diff,
                  seen_at, seen_at, t.size_bytes))
             self._conn.commit()
+            self._bump()
             return cur.lastrowid, True
 
     def add_track_source(self, track_id: int, pack_id: int | None,
@@ -292,6 +324,7 @@ class Database:
                    subfolder, seen_at) VALUES(?,?,?,?)""",
                 (track_id, pack_id, subfolder, seen_at))
             self._conn.commit()
+            self._bump()
 
     def bump_copy_attempt(self, track_id: int) -> int:
         with self._lock:
@@ -459,9 +492,8 @@ class Database:
             cur = self._conn.execute(
                 "SELECT * FROM tracks WHERE artist=? ORDER BY title", (artist,))
             rows = [dict(r) for r in cur.fetchall()]
-            for r in rows:
-                self._attach_sources(r)
-            return rows
+            self.attach_sources_bulk(rows)   # RLock re-entrant: keep the read atomic (item 10)
+        return rows
 
     def counts(self) -> dict:
         with self._lock:

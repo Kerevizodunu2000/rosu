@@ -29,13 +29,31 @@ def _scan_osz(folder: Path):
 
 def copy_to_library(output_dir: Path, library_dir: Path, db, when: str,
                     physical_copy: bool = True,
-                    progress: Callable[[str], None] | None = None) -> dict:
+                    progress: Callable[[str], None] | None = None,
+                    source_label: str | None = None) -> dict:
     """Copy new beatmaps from Output into Library; dedup the rest.
+
+    A set counts as a duplicate when it is already in the Library either by
+    beatmapset-id membership (the ``already`` flag) OR by a byte-identical file
+    already present at the target. The id check catches client re-exports (osu!lazer
+    produces different bytes/filenames than the stored copy, which a size-only check
+    would miscount as "new"); the byte check catches files already on disk whose DB
+    row isn't flagged yet, e.g. manual/restored copies (item 7).
+
+    When ``source_label`` is given (e.g. ``local_osu_lazer``), each imported set is
+    tagged with a synthetic source pack so its provenance shows in the Sources
+    column (item 9).
 
     Returns ``{"new": int, "duplicates": int, "dup_ids": [...]}``.
     """
     library_dir = Path(library_dir)
     library_dir.mkdir(parents=True, exist_ok=True)
+
+    local_pack_id = None
+    if source_label:
+        # Use the stable code itself as the label (language-neutral; shown verbatim in
+        # the Sources column). No English pretty-name to leak into other locales.
+        local_pack_id = db.get_or_create_local_pack(source_label)
 
     new = 0
     duplicates = 0
@@ -45,32 +63,31 @@ def copy_to_library(output_dir: Path, library_dir: Path, db, when: str,
         # Ensure the track is in memory (adds the name even if physical copy off).
         track_id, _is_new = db.upsert_track(t, when)
         row = db.find_track_row(t.beatmapset_id, t.filename)
-        already = bool(row and row["in_library"] == 1)
+        already = bool(row and row["in_library"] == 1)  # library membership per the DB
 
         db.bump_copy_attempt(track_id)
+        if local_pack_id is not None:
+            db.add_track_source(track_id, local_pack_id, None, when)
 
         if physical_copy:
             target = library_dir / t.filename
-            # Treat as an up-to-date duplicate only when the sizes match; a
-            # same-named file of a different size is a re-upload and must be
-            # refreshed (mirrors extractor.extract_pack's size guard).
-            if target.exists() and target.stat().st_size == src_path.stat().st_size:
-                duplicates += 1
-                dup_ids.append(t.beatmapset_id if t.beatmapset_id is not None
-                               else t.filename)
-                db.set_library_state(track_id, True, "present", when)
-            else:
-                shutil.copy2(src_path, target)  # new, or refreshed on size change
-                new += 1
-                db.set_library_state(track_id, True, "present", when)
-        else:  # memory-only mode
-            if already:
-                duplicates += 1
-                dup_ids.append(t.beatmapset_id if t.beatmapset_id is not None
-                               else t.filename)
-            else:
-                new += 1
-                db.set_library_state(track_id, True, "memory", when)
+            same_file = (target.exists()
+                         and target.stat().st_size == src_path.stat().st_size)
+            if not same_file:
+                shutil.copy2(src_path, target)   # new file, or refreshed on size change
+            db.set_library_state(track_id, True, "present", when)
+            # A byte-identical file already in Library is an existing copy even if the
+            # DB row wasn't flagged yet (manual/restored files) — don't count it new.
+            already = already or same_file
+        elif not already:  # memory-only mode: only newly-tracked sets change state
+            db.set_library_state(track_id, True, "memory", when)
+
+        if already:
+            duplicates += 1
+            dup_ids.append(t.beatmapset_id if t.beatmapset_id is not None
+                           else t.filename)
+        else:
+            new += 1
 
         if progress:
             progress(t.filename)

@@ -150,6 +150,18 @@ def _keyring():
         ) from exc
 
 
+def keyring_available() -> bool:
+    """Whether the OS keyring backend is importable, i.e. whether the refresh token
+    can actually be persisted. A cheap import probe kept off the startup path (called
+    only from ``drive_status``), so a user without keyring is warned BEFORE running
+    the whole OAuth browser flow instead of failing at the final store step (item 1b)."""
+    try:
+        import keyring  # noqa: F401
+        return True
+    except Exception:
+        return False
+
+
 class _KeyringStore:
     """Refresh-token storage backed by the OS credential store."""
 
@@ -166,27 +178,74 @@ class _KeyringStore:
             pass   # not present / already gone — logout is best-effort
 
 
+def _result_page(status: str | None) -> str:
+    """A small, self-contained branded page for the loopback redirect (item 5).
+
+    No external assets (served by the stdlib loopback server) and adapts to the OS
+    light/dark theme. ``status`` is ``"ok"`` (consent granted), ``"error"`` (denied /
+    state mismatch), or ``None`` (an unrelated request such as favicon)."""
+    if status == "error":
+        icon, accent = "&#10007;", "#e0405e"   # ✗
+        title = "Sign-in didn't complete"
+        msg = "Something went wrong. Close this tab and try Connect again in Rosu."
+    elif status == "ok":
+        icon, accent = "&#10003;", "#28c76f"   # ✓
+        title = "Connected to Google Drive"
+        msg = "You're all set. Close this tab and return to Rosu."
+    else:
+        icon, accent = "&#9679;", "#ff4f92"     # ●
+        title = "Rosu — Google Drive"
+        msg = "You can close this tab and return to Rosu."
+    return f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rosu — Google Drive</title>
+<style>
+  :root {{ color-scheme: light dark; }}
+  * {{ box-sizing: border-box; }}
+  body {{ margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
+    font-family:"Segoe UI",system-ui,-apple-system,sans-serif; background:#f6f6fb; color:#1e1e2e; }}
+  .card {{ background:#fff; border-radius:16px; padding:40px 44px; max-width:420px; width:90%;
+    text-align:center; box-shadow:0 10px 40px rgba(0,0,0,.12); }}
+  .badge {{ width:72px; height:72px; border-radius:50%; margin:0 auto 20px; display:flex;
+    align-items:center; justify-content:center; font-size:38px; color:#fff; background:{accent}; }}
+  h1 {{ font-size:21px; margin:0 0 10px; }}
+  p {{ margin:0; color:#6b6b80; line-height:1.5; }}
+  .brand {{ margin-top:22px; font-weight:700; color:{accent}; letter-spacing:.5px; }}
+  @media (prefers-color-scheme: dark) {{
+    body {{ background:#15151f; color:#e6e6f0; }}
+    .card {{ background:#20202e; box-shadow:0 10px 40px rgba(0,0,0,.5); }}
+    p {{ color:#a8a8c0; }}
+  }}
+</style></head>
+<body><div class="card">
+  <div class="badge">{icon}</div>
+  <h1>{title}</h1>
+  <p>{msg}</p>
+  <div class="brand">Rosu</div>
+</div></body></html>"""
+
+
 def _make_handler(expected_state: str, sink: dict):
     class _Handler(BaseHTTPRequestHandler):
         def do_GET(self):  # noqa: N802 (BaseHTTPRequestHandler API)
             qs = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            status = None   # "ok" / "error" for THIS request (drives the shown page)
             # Only the real OAuth redirect carries code/error; ignore favicon etc.
             if "code" in qs or "error" in qs:
                 if qs.get("state", [None])[0] == expected_state:
                     if "code" in qs:
                         sink["code"] = qs["code"][0]
+                        status = "ok"
                     else:
                         sink["error"] = qs["error"][0]
+                        status = "error"
                 else:
                     sink["error"] = "state mismatch"
+                    status = "error"
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.end_headers()
-            self.wfile.write(
-                b"<html><body style='font-family:sans-serif'>"
-                b"<h2>Rosu &mdash; Google Drive</h2>"
-                b"<p>You can close this tab and return to Rosu.</p>"
-                b"</body></html>")
+            self.wfile.write(_result_page(status).encode("utf-8"))
 
         def log_message(self, *args):  # silence: GUI app, no console
             pass
@@ -227,6 +286,11 @@ class DriveAuth:
             return bool(self._store.get())
         except Exception:
             return False
+
+    def can_store_token(self) -> bool:
+        """Whether a refresh token can be persisted (keyring backend present).
+        The Connect button is disabled when this is False (item 1b)."""
+        return keyring_available()
 
     def logout(self) -> None:
         with self._lock:
