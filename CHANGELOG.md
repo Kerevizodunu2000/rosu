@@ -10,6 +10,46 @@ the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-07-14
+
+First public release. Rounds Rosu out into a safe, legal, presentable app: it
+now imports to either osu! client, never shows a broken/empty screen, hardens
+archive handling, and can flag maps that no longer exist on osu!.
+
+### Added
+- **Import to both osu! clients.** The single "Import to osu!" button is now two
+  explicit targets — **Import → osu!lazer** and **Import → osu!(stable)** — each
+  enabled/validated against its own configured executable (auto-detected on first
+  run). Settings gained a second path picker for the osu!(stable) executable.
+- **Dashboard Output view.** After unpacking (when `Packs/` is consumed) the
+  Dashboard now lists the unpacked beatmaps in `Output/` with a count, instead of
+  going blank.
+- **In-app About / Licenses** (Settings → About / Licenses): app version, the
+  GPL-3.0 summary with a no-warranty + osu!/ppy non-affiliation notice, and the
+  full bundled third-party license notices.
+- **Lost-map detection** (optional, needs osu! API credentials): a "Scan for lost
+  maps" action flags owned beatmapsets that no longer exist on osu! (deleted /
+  taken down) — Rosu is the only pack-level archiver that can tell you what's
+  already unrecoverable.
+- **Startup update check** against GitHub Releases with a non-intrusive banner and
+  one-click download; toggle in Settings (on by default, fails silently offline).
+- **Release integrity:** each release `.exe` is now published with a matching
+  SHA-256 checksum.
+
+### Changed
+- **Archive-security hardening.** A single shared guard now validates every
+  format (zip / tar / 7z) up front — combined uncompressed-size ceiling,
+  entry-count cap, decompression-ratio cap, and path-traversal / absolute /
+  drive-relative member-name rejection — before anything is written to disk.
+- **Third-party notices** now list every component actually bundled in the exe
+  (keyring + its backend, py7zr's codec dependencies, the embedded .NET runtime).
+
+### Security
+- **Hostile archives are refused and quarantined.** A zip-bomb (by total size,
+  entry count, or decompression ratio) or a path-traversal archive is rejected
+  before extraction and moved to a `Quarantine/` folder (never silently deleted,
+  never overwriting a previously quarantined file), with a clear in-app message.
+
 ## [0.8.1] - 2026-07-14
 
 Bug-fix and polish batch from live testing of v0.8.0.
@@ -282,7 +322,8 @@ Initial release. The core archive-management pipeline.
 - **EN/TR** localization; English-only code/logs.
 - Single-file **PyInstaller** build (`osu-archiver.spec`) + GitHub Actions build workflow.
 
-[Unreleased]: https://github.com/Kerevizodunu2000/rosu/compare/v0.8.1...HEAD
+[Unreleased]: https://github.com/Kerevizodunu2000/rosu/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/Kerevizodunu2000/rosu/compare/v0.8.1...v1.0.0
 [0.8.1]: https://github.com/Kerevizodunu2000/rosu/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/Kerevizodunu2000/rosu/releases/tag/v0.8.0
 [0.7.1]: https://github.com/Kerevizodunu2000/rosu/releases/tag/v0.7.1
