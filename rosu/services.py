@@ -13,7 +13,8 @@ import time
 from pathlib import Path
 
 from . import (
-    config, excel_report, extractor, gaps, library, osu_api, osu_import, search,
+    archives, config, excel_report, extractor, gaps, library, osu_api,
+    osu_import, search,
 )
 from .models import ExtractPlan, ParsedPack
 
@@ -90,9 +91,20 @@ class Services:
 
         total_tracks = 0
         processed_dir = self.cfg.root_path / "Processed"
+        rejected: list[dict] = []
         for zip_path, parsed in approved:
-            res = extractor.extract_pack(zip_path, parsed, self.cfg.output_path,
-                                         self.db, when, _cb, log=self.log)
+            try:
+                res = extractor.extract_pack(zip_path, parsed, self.cfg.output_path,
+                                             self.db, when, _cb, log=self.log)
+            except archives.UnsafeArchive as exc:
+                # A zip-bomb / path-traversal pack: quarantine it (don't delete —
+                # the owner may want to inspect it) and keep processing the rest.
+                reason = getattr(exc, "reason", "unsafe")
+                self._quarantine(zip_path)
+                self.log.info("EXTRACT_REJECT", code=parsed.code, reason=reason,
+                              detail=str(exc)[:200])
+                rejected.append({"code": parsed.code, "reason": reason})
+                continue
             total_tracks += res["tracks"]
             if res.get("extra_files"):
                 self.db.set_pack_extra(parsed.code, len(res["extra_files"]))
@@ -106,14 +118,32 @@ class Services:
 
         info = self.rebuild()
         duration = int(time.time() - start)
-        self.log.info("EXTRACT_DONE", packs=len(approved), tracks=total_tracks,
+        self.log.info("EXTRACT_DONE", packs=len(approved) - len(rejected),
+                      tracks=total_tracks, rejected=len(rejected),
                       duration_s=duration)
-        result = {"packs": len(approved), "tracks": total_tracks, **info}
+        result = {"packs": len(approved) - len(rejected), "tracks": total_tracks,
+                  "rejected": rejected, **info}
 
         if self.cfg.auto_backup_after_extract:
             backup = self.copy_library(progress)
             result["backup"] = backup
         return result
+
+    def _quarantine(self, zip_path: Path) -> Path | None:
+        """Move a rejected (unsafe) pack aside so it is never re-scanned or
+        extracted, without deleting it — the owner may want to inspect it.
+        Returns the new path, or ``None`` if the move failed."""
+        qdir = self.cfg.root_path / "Quarantine"
+        try:
+            qdir.mkdir(parents=True, exist_ok=True)
+            dest = qdir / Path(zip_path).name
+            if dest.exists():
+                dest.unlink()
+            Path(zip_path).replace(dest)
+            return dest
+        except OSError as exc:
+            self.log.error("extract:quarantine", str(exc)[:200])
+            return None
 
     def rebuild(self) -> dict:
         # Serialize report writes so two workers (e.g. a Dashboard extract and a

@@ -55,6 +55,23 @@ STRINGS: dict[str, dict[str, str]] = {
     "nothing_in_output": {"en": "Output is empty — unpack some archives first.",
                           "tr": "Output boş — önce arşiv açın."},
 
+    # Archive security — rejected (zip-bomb / path-traversal) packs
+    "archive_rejected": {
+        "en": "⚠ {n} unsafe archive(s) rejected and moved to Quarantine.",
+        "tr": "⚠ {n} güvensiz arşiv reddedildi ve Karantina'ya taşındı."},
+    "archive_rejected_title": {"en": "Unsafe archive rejected",
+                               "tr": "Güvensiz arşiv reddedildi"},
+    "archive_rejected_body": {
+        "en": "These archives were refused as potentially malicious and moved to "
+              "the Quarantine folder (not deleted):\n\n{items}",
+        "tr": "Bu arşivler kötü amaçlı olabileceği için reddedildi ve Karantina "
+              "klasörüne taşındı (silinmedi):\n\n{items}"},
+    "archive_reason_total": {"en": "too large", "tr": "çok büyük"},
+    "archive_reason_entries": {"en": "too many files", "tr": "çok fazla dosya"},
+    "archive_reason_ratio": {"en": "suspicious compression", "tr": "şüpheli sıkıştırma"},
+    "archive_reason_path": {"en": "unsafe file path", "tr": "güvensiz dosya yolu"},
+    "archive_reason_unsafe": {"en": "unsafe", "tr": "güvensiz"},
+
     # Empty Packs / external import (item 4)
     "packs_empty": {
         "en": "The Packs folder is empty. Add archives there and try again, or pick "

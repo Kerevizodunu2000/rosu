@@ -29,6 +29,44 @@ from typing import BinaryIO
 MAX_STAGE_BYTES = 30 * 1024 ** 3
 _MAX_STAGE_BYTES = MAX_STAGE_BYTES  # backwards-compatible private alias
 
+# Aggregate anti-zip-bomb limits, enforced up-front for EVERY format by
+# ``security_scan`` before a single byte is written to disk. 7z already had a
+# total-uncompressed ceiling; zip and tar had only a per-entry stream cap, so a
+# many-entry or high-ratio archive slipped through unchecked until extraction.
+MAX_TOTAL_BYTES = MAX_STAGE_BYTES        # combined uncompressed ceiling (30 GiB)
+MAX_ENTRIES = 50_000                     # refuse absurd member counts
+MAX_RATIO = 200                          # uncompressed:compressed blow-up cap
+
+
+class UnsafeArchive(Exception):
+    """An archive was refused by the security scan (distinct from a read error).
+
+    ``reason`` is a short machine tag (``entries`` / ``total`` / ``ratio`` /
+    ``path``) so a caller can quarantine the pack and show a translated message.
+    """
+    reason = "unsafe"
+
+    def __init__(self, message: str, *, reason: str | None = None):
+        super().__init__(message)
+        if reason:
+            self.reason = reason
+
+
+class ArchiveTooLarge(UnsafeArchive):
+    """Total uncompressed size, entry count, or decompression ratio too high."""
+
+
+class ArchiveUnsafePath(UnsafeArchive):
+    """A member name tried to escape the extraction dir (traversal / absolute)."""
+    reason = "path"
+
+
+def _unsafe_member_name(name: str) -> bool:
+    """True if a member path would escape the target dir (``..`` / absolute /
+    drive-relative). Shared by ``security_scan`` and the 7z staging guard."""
+    norm = (name or "").replace("\\", "/")
+    return norm.startswith("/") or ".." in norm.split("/") or ":" in (name or "")
+
 # suffix -> family. Longest suffixes are matched first (see archive_kind).
 _SUFFIXES = {
     ".zip": "zip",
@@ -81,6 +119,10 @@ class _ZipReader:
         return [Member(i.filename, i.file_size)
                 for i in self._z.infolist() if not i.is_dir()]
 
+    def compressed_size(self) -> int:
+        # zip stores per-entry compressed sizes — the tightest ratio signal.
+        return sum(i.compress_size for i in self._z.infolist())
+
     def open(self, name: str) -> BinaryIO:
         return self._z.open(name)
 
@@ -90,10 +132,16 @@ class _ZipReader:
 
 class _TarReader:
     def __init__(self, path: Path):
+        self._path = Path(path)
         self._t = tarfile.open(path)  # mode "r:*" auto-detects compression
 
     def members(self) -> list[Member]:
         return [Member(m.name, m.size) for m in self._t.getmembers() if m.isfile()]
+
+    def compressed_size(self) -> int:
+        # tar has no per-entry compressed size; use the on-disk archive size
+        # (covers .tar.gz/.bz2/.xz stream compression) as the ratio denominator.
+        return self._path.stat().st_size
 
     def open(self, name: str) -> BinaryIO:
         fh = self._t.extractfile(name)
@@ -120,23 +168,27 @@ class _SevenReader:
                 out.append(Member(f.filename, getattr(f, "uncompressed", 0) or 0))
             return out
 
+    def compressed_size(self) -> int:
+        return self._path.stat().st_size
+
     def _stage(self) -> None:
         import py7zr
         # Defense-in-depth against py7zr path-traversal CVEs (CVE-2022-44900,
         # CVE-2026-23879): validate every member name and the total size BEFORE
-        # extracting, since extractall() writes the whole archive at once.
+        # extracting, since extractall() writes the whole archive at once. Uses
+        # the same shared checks as security_scan so all formats stay consistent.
         total = 0
         with py7zr.SevenZipFile(self._path) as z:
             for f in z.list():
                 if getattr(f, "is_directory", False):
                     continue
                 name = f.filename or ""
-                norm = name.replace("\\", "/")
-                if norm.startswith("/") or ".." in norm.split("/") or ":" in name:
-                    raise ValueError(f"unsafe 7z member: {name!r}")
+                if _unsafe_member_name(name):
+                    raise ArchiveUnsafePath(f"unsafe 7z member: {name!r}")
                 total += getattr(f, "uncompressed", 0) or 0
-        if total > _MAX_STAGE_BYTES:
-            raise ValueError(f"7z archive too large to unpack ({total} bytes)")
+        if total > MAX_TOTAL_BYTES:
+            raise ArchiveTooLarge(
+                f"7z archive too large to unpack ({total} bytes)", reason="total")
         self._tmp = Path(tempfile.mkdtemp(prefix="rosu7z_"))
         with py7zr.SevenZipFile(self._path) as z:
             z.extractall(path=str(self._tmp))
@@ -169,6 +221,9 @@ class ArchiveReader:
     def members(self) -> list[Member]:
         return self._r.members()
 
+    def compressed_size(self) -> int:
+        return self._r.compressed_size()
+
     def open(self, name: str) -> BinaryIO:
         return self._r.open(name)
 
@@ -184,3 +239,50 @@ class ArchiveReader:
 
 def open_reader(path: Path) -> ArchiveReader:
     return ArchiveReader(path)
+
+
+@dataclass
+class ScanResult:
+    entries: int
+    total_bytes: int
+    compressed_bytes: int
+    ratio: float
+
+
+def security_scan(reader, *, members: list[Member] | None = None,
+                  max_total: int = MAX_TOTAL_BYTES,
+                  max_entries: int = MAX_ENTRIES,
+                  max_ratio: int = MAX_RATIO) -> ScanResult:
+    """Reject an archive *before* extraction if it looks like a zip-bomb or a
+    path-traversal attempt; return a ``ScanResult`` when it is safe.
+
+    Format-agnostic — works on any reader exposing ``members()`` +
+    ``compressed_size()``. Raises ``ArchiveUnsafePath`` for an escaping member
+    name and ``ArchiveTooLarge`` for an excessive entry count, uncompressed
+    total, or decompression ratio. Reading metadata does not extract anything,
+    so this stays cheap and never materialises the (potentially huge) payload.
+    """
+    if members is None:
+        members = reader.members()
+    count = len(members)
+    if count > max_entries:
+        raise ArchiveTooLarge(
+            f"too many entries: {count} > {max_entries}", reason="entries")
+    total = 0
+    for m in members:
+        if _unsafe_member_name(m.name):
+            raise ArchiveUnsafePath(f"unsafe member path: {m.name!r}")
+        total += m.size or 0
+    if total > max_total:
+        raise ArchiveTooLarge(
+            f"uncompressed total {total} > {max_total}", reason="total")
+    try:
+        compressed = reader.compressed_size()
+    except OSError:
+        compressed = 0
+    ratio = (total / compressed) if compressed > 0 else 0.0
+    if compressed > 0 and ratio > max_ratio:
+        raise ArchiveTooLarge(
+            f"decompression ratio {ratio:.0f}:1 exceeds {max_ratio}:1",
+            reason="ratio")
+    return ScanResult(count, total, compressed, ratio)

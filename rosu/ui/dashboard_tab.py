@@ -310,10 +310,25 @@ class DashboardTab(QWidget):
         if "backup" in result:
             b = result["backup"]
             msg += "  " + self.ctx.t("library_done", new=b["new"], dup=b["duplicates"])
+        rejected = result.get("rejected") or []
+        if rejected:
+            msg += "  " + self.ctx.t("archive_rejected", n=len(rejected))
         self.status.setText(msg)
         self.refresh_scan()
         self.mw.packs.reload()
         self.mw.search.reload()          # reflect newly-added tracks live (item 7)
+        if rejected:
+            self._warn_rejected(rejected)
+
+    def _warn_rejected(self, rejected: list) -> None:
+        """Show which packs were refused as unsafe (zip-bomb / traversal) and why."""
+        t = self.ctx.t
+        lines = []
+        for r in rejected:
+            reason = t(f"archive_reason_{r.get('reason', 'unsafe')}")
+            lines.append(f"• {r.get('code', '?')} — {reason}")
+        QMessageBox.warning(self, t("archive_rejected_title"),
+                            t("archive_rejected_body", items="\n".join(lines)))
 
     # -- Copy to Library -----------------------------------------------------
     def on_copy(self) -> None:

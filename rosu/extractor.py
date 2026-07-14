@@ -93,6 +93,9 @@ def extract_pack(archive_path: Path, parsed: ParsedPack, output_dir: Path, db,
     extra_files: list[str] = []
     with archives.open_reader(archive_path) as r:
         members = r.members()
+        # Reject zip-bombs / path-traversal up front, before any DB write or
+        # disk output, for every format (raises archives.UnsafeArchive).
+        archives.security_scan(r, members=members)
         osz = [m for m in members if m.name.lower().endswith(".osz")]
         extra_files = [m.name for m in members if not m.name.lower().endswith(".osz")]
         pack_id = db.upsert_pack(parsed, len(osz), when)
