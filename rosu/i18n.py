@@ -94,6 +94,24 @@ STRINGS: dict[str, dict[str, str]] = {
         "tr": "Packs klasörü boş. Oraya arşiv ekleyip tekrar deneyin, ya da şimdi "
               "içe aktarmak için arşiv dosyaları seçin."},
     "btn_browse_archives": {"en": "Choose archives…", "tr": "Arşiv seç…"},
+    "btn_purge_known": {"en": "Remove already-added", "tr": "Eklenmişleri kaldır"},
+    "tip_purge_known": {
+        "en": "Recycle / move / delete the archives already in your library "
+              "(uses your 'Processed .zip action' setting).",
+        "tr": "Zaten kütüphanende olan arşivleri geri dönüşüme taşı / sil "
+              "('İşlenen .zip işlemi' ayarını kullanır)."},
+    "purge_known_confirm": {
+        "en": "Remove {n} already-added archive(s) from Packs? Uses your "
+              "'Processed .zip action' setting (Recycle Bin by default).",
+        "tr": "{n} çoktan eklenmiş arşiv Packs'ten kaldırılsın mı? 'İşlenen .zip "
+              "işlemi' ayarını kullanır (varsayılan: Geri Dönüşüm Kutusu)."},
+    "purge_known_done": {"en": "Removed {n} already-added archive(s).",
+                         "tr": "{n} çoktan eklenmiş arşiv kaldırıldı."},
+    "nothing_to_unpack": {
+        "en": "Nothing new to unpack — everything in Packs is already added. "
+              "Choose archives to import, or use 'Remove already-added'.",
+        "tr": "Açılacak yeni bir şey yok — Packs'teki her şey zaten eklenmiş. "
+              "İçe aktarmak için arşiv seç, ya da 'Eklenmişleri kaldır'ı kullan."},
     "select_archives": {"en": "Select archives to import", "tr": "İçe aktarılacak arşivleri seç"},
     "imported_to_packs": {"en": "Moved {n} archive(s) into Packs.",
                           "tr": "{n} arşiv Packs klasörüne taşındı."},

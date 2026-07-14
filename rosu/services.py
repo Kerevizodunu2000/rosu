@@ -156,6 +156,21 @@ class Services:
             self.log.error("extract:quarantine", str(exc)[:200])
             return None
 
+    def dispose_archives(self, paths) -> int:
+        """Recycle / move / delete a set of Packs archives per the user's
+        zip_disposal setting (used by the Dashboard 'Remove already-added' action).
+        Returns how many were disposed."""
+        processed = self.cfg.root_path / "Processed"
+        n = 0
+        for p in paths:
+            try:
+                action = extractor.dispose_zip(Path(p), self.cfg.zip_disposal, processed)
+                self.log.info(action, file=Path(p).name)
+                n += 1
+            except OSError as exc:
+                self.log.error("dispose", str(exc)[:200])
+        return n
+
     def rebuild(self) -> dict:
         # Serialize report writes so two workers (e.g. a Dashboard extract and a
         # Settings import) can't corrupt tracking.xlsx by saving it at once.

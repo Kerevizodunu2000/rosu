@@ -31,6 +31,7 @@ class DashboardTab(QWidget):
         self._threads: list[Worker] = []
         self._scan: list[tuple[Path, object]] = []
         self._output: list[dict] = []
+        self._known_paths: list[str] = []   # scanned archives already in the DB
         self._view = "packs"   # "packs" (scan) or "output" (unpacked .osz)
 
         root = QVBoxLayout(self)
@@ -60,6 +61,10 @@ class DashboardTab(QWidget):
                   self.btn_import_stable, self.btn_refresh, self.btn_backup):
             btn_row.addWidget(b)
         btn_row.addStretch(1)
+        self.btn_purge_known = QPushButton(objectName="secondary")
+        self.btn_purge_known.setVisible(False)   # only when known archives are present
+        self.btn_purge_known.clicked.connect(self.on_purge_known)
+        btn_row.addWidget(self.btn_purge_known)
         self.btn_rescan = QPushButton(objectName="secondary")
         btn_row.addWidget(self.btn_rescan)
         root.addLayout(btn_row)
@@ -107,6 +112,7 @@ class DashboardTab(QWidget):
         self.btn_import_stable.setText(t("btn_import_to_stable"))
         self.btn_refresh.setText(t("btn_refresh"))
         self.btn_backup.setText(t("btn_backup_drive"))
+        self.btn_purge_known.setText(t("btn_purge_known"))
         self.btn_rescan.setText(t("btn_rescan"))
         self.btn_cancel.setText(t("btn_cancel"))
         self.btn_extract.setToolTip(t("tip_extract"))
@@ -115,6 +121,7 @@ class DashboardTab(QWidget):
         self.btn_import_stable.setToolTip(t("tip_import_to_stable"))
         self.btn_refresh.setToolTip(t("tip_refresh"))
         self.btn_backup.setToolTip(t("tip_backup_drive"))
+        self.btn_purge_known.setToolTip(t("tip_purge_known"))
         self.btn_rescan.setToolTip(t("tip_rescan"))
         self.btn_cancel.setToolTip(t("tip_cancel"))
         self._populate_table()   # headers + rows follow the current view + language
@@ -136,6 +143,9 @@ class DashboardTab(QWidget):
     # -- scanning ------------------------------------------------------------
     def refresh_scan(self) -> None:
         self._scan = self.services.scan()
+        self._known_paths = [str(p) for p, parsed in self._scan
+                             if self.ctx.db.get_pack_by_code(parsed.code) is not None]
+        self.btn_purge_known.setVisible(bool(self._known_paths))
         if self._scan:
             self._view = "packs"
             self._output = []
@@ -213,7 +223,7 @@ class DashboardTab(QWidget):
     def _lock(self, locked: bool) -> None:
         for b in (self.btn_extract, self.btn_copy, self.btn_import_lazer,
                   self.btn_import_stable, self.btn_refresh, self.btn_backup,
-                  self.btn_rescan):
+                  self.btn_purge_known, self.btn_rescan):
             b.setEnabled(not locked)
 
     def _busy_generic(self, status_key: str) -> None:
@@ -269,6 +279,36 @@ class DashboardTab(QWidget):
         self._busy_generic("working")
         self._start_worker(self.services.prescan_all, on_success=self._after_prescan)
 
+    def on_purge_known(self) -> None:
+        """Recycle/move/delete the archives that are already in the library, per
+        the user's zip_disposal setting — clears clutter so Unpack can offer the
+        picker for new archives (user feedback)."""
+        if not self._known_paths:
+            return
+        t = self.ctx.t
+        reply = QMessageBox.question(
+            self, t("app_title"), t("purge_known_confirm", n=len(self._known_paths)),
+            QMessageBox.Ok | QMessageBox.Cancel, QMessageBox.Ok)
+        if reply != QMessageBox.Ok:
+            return
+        n = self.services.dispose_archives(list(self._known_paths))
+        self.status.setText(t("purge_known_done", n=n))
+        self.refresh_scan()
+
+    def _offer_pick_archives(self) -> None:
+        """Nothing new to unpack — let the user pick archives from elsewhere
+        (so the picker is reachable even when Packs isn't empty)."""
+        t = self.ctx.t
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Information)
+        box.setWindowTitle(t("app_title"))
+        box.setText(t("nothing_to_unpack"))
+        browse = box.addButton(t("btn_browse_archives"), QMessageBox.AcceptRole)
+        box.addButton(t("btn_cancel"), QMessageBox.RejectRole)
+        box.exec()
+        if box.clickedButton() is browse:
+            self._import_external_archives()
+
     def _handle_empty_packs(self) -> None:
         """Packs is empty: explain, and offer a native picker to import archives
         from anywhere (item 4). QFileDialog is native on Windows and macOS."""
@@ -312,6 +352,7 @@ class DashboardTab(QWidget):
             self._idle()
             self.status.setText(self.ctx.t("done"))
             self.refresh_scan()
+            self._offer_pick_archives()   # nothing new to unpack — offer the picker
             return
         self.busy_bar.setVisible(False)
         self.progress_panel.start()

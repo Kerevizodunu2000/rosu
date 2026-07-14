@@ -6,7 +6,8 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QDialog, QFileDialog, QFormLayout, QHBoxLayout, QLabel,
-    QLineEdit, QMessageBox, QPushButton, QScrollArea, QVBoxLayout, QWidget,
+    QLineEdit, QMessageBox, QProgressBar, QPushButton, QScrollArea, QVBoxLayout,
+    QWidget,
 )
 
 from .. import config
@@ -142,6 +143,12 @@ class SettingsTab(QWidget):
         imp_row.addWidget(self.btn_import_lazer)
         imp_row.addWidget(self.lbl_import_status, 1)
         root.addLayout(imp_row)
+        # Busy bar: the osu!lazer export runs a long .NET subprocess with no
+        # incremental progress, so show an indeterminate bar so it's clearly alive.
+        self.import_bar = QProgressBar()
+        self.import_bar.setRange(0, 0)     # marquee / indeterminate
+        self.import_bar.setVisible(False)
+        root.addWidget(self.import_bar)
 
         # Google Drive backup (item 11)
         self.lbl_drive = QLabel(objectName="h1")
@@ -485,6 +492,7 @@ class SettingsTab(QWidget):
     def _run_import(self, client: str) -> None:
         self.btn_import_stable.setEnabled(False)
         self.btn_import_lazer.setEnabled(False)
+        self.import_bar.setVisible(True)
         self.lbl_import_status.setText(self.ctx.t("working"))
         fn = (self.ctx.services.import_from_lazer if client == "lazer"
               else self.ctx.services.import_from_stable)
@@ -505,6 +513,7 @@ class SettingsTab(QWidget):
     def _on_import_done(self, res) -> None:
         self.btn_import_stable.setEnabled(True)
         self.btn_import_lazer.setEnabled(True)
+        self.import_bar.setVisible(False)
         t = self.ctx.t
         client = "osu!lazer" if res.get("source") == "lazer" else "osu!(stable)"
         if not res.get("found"):
@@ -522,6 +531,7 @@ class SettingsTab(QWidget):
     def _on_import_failed(self, msg) -> None:
         self.btn_import_stable.setEnabled(True)
         self.btn_import_lazer.setEnabled(True)
+        self.import_bar.setVisible(False)
         QMessageBox.critical(self, self.ctx.t("app_title"), msg)
 
     # -- physical-copy toggle (guarded delete) -------------------------------
