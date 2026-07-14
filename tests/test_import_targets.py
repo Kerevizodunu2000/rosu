@@ -115,6 +115,26 @@ def test_import_osu_lazer_uses_default_batching(tmp_path, monkeypatch):
     db.close()
 
 
+def test_lazer_import_stages_and_preserves_output(tmp_path, monkeypatch):
+    cfg, db, svc = _make_services(tmp_path)
+    src = cfg.output_path / "888 A - B.osz"
+    src.write_bytes(b"osz")
+    captured = {}
+
+    def fake_import_files(exe, files, **kw):
+        captured["files"] = list(files)
+        return {"files": len(files), "batches": 1, "sent": len(files),
+                "cancelled": False}
+
+    monkeypatch.setattr(osu_import, "import_files", fake_import_files)
+    svc.import_osu(target="lazer")
+    assert src.exists()                                   # Output preserved
+    staged = captured["files"][0]
+    assert staged.parent == cfg.data_path / "_import_stage"   # client got the copy
+    assert staged.exists()
+    db.close()
+
+
 def test_stage_for_stable_falls_back_without_songs(tmp_path, monkeypatch):
     cfg, db, svc = _make_services(tmp_path)
     monkeypatch.setattr(client_import, "stable_songs_dir", lambda: None)

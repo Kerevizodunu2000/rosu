@@ -356,6 +356,9 @@ class Services:
             files = self._stage_for_stable(files, exe)
         else:
             exe = self.cfg.osu_lazer_exe or config.detect_osu_exe()
+            # osu!lazer consumes the source .osz on import (which emptied Output);
+            # stage copies so Output survives too, consistent with stable.
+            files = self._stage_copies(files, self.cfg.data_path / "_import_stage")
 
         def _prog(i, total, n):
             self.log.info("OSU_IMPORT", target=target, batch=f"{i}/{total}", files=n)
@@ -382,28 +385,15 @@ class Services:
         # .osz on import, so Output empties itself; an explicit clear was redundant.)
         return res
 
-    def _stage_for_stable(self, files, exe=None):
-        """Copy the Output .osz into a staging folder on the osu!(stable) install
-        drive, so stable can move them into Songs (same-drive rename) without the
-        cross-drive "Error moving file", and Output survives for a later lazer
-        import. Derives the install dir from the configured exe (so custom install
-        paths work), falling back to auto-detection; returns the Output paths
-        unchanged if neither can be located."""
+    def _stage_copies(self, files, stage_dir):
+        """Copy ``files`` into ``stage_dir`` (clearing prior leftovers first) so the
+        osu! client consumes the COPIES and the Output folder is preserved — the
+        same batch can then also go to the other client. Clears the read-only bit
+        so osu can move each file. Returns the staged paths, or the originals if
+        staging can't be set up (or per-file, on a copy error)."""
         import os
         import shutil
-        from . import client_import
-        install = None
-        if exe:
-            try:
-                install = Path(exe).resolve().parent
-            except OSError:
-                install = None
-        if install is None or not install.exists():
-            songs = client_import.stable_songs_dir()
-            install = songs.parent if songs else None
-        if install is None:
-            return files
-        stage = install / "_rosu_import"
+        stage = Path(stage_dir)
         try:
             if stage.exists():
                 for old in stage.glob("*.osz"):   # clear leftovers osu already took
@@ -427,6 +417,25 @@ class Services:
             except OSError:
                 staged.append(f)   # fall back to the original for this one
         return staged or files
+
+    def _stage_for_stable(self, files, exe=None):
+        """Stage on the osu!(stable) install drive, so its import-move is a
+        same-drive rename. Derives the install dir from the configured exe (custom
+        paths work), falling back to auto-detection; returns the Output paths
+        unchanged if neither can be located."""
+        from . import client_import
+        install = None
+        if exe:
+            try:
+                install = Path(exe).resolve().parent
+            except OSError:
+                install = None
+        if install is None or not install.exists():
+            songs = client_import.stable_songs_dir()
+            install = songs.parent if songs else None
+        if install is None:
+            return files
+        return self._stage_copies(files, install / "_rosu_import")
 
     # -- reference (osu! API) ------------------------------------------------
     def _reference(self):
