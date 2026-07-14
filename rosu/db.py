@@ -18,7 +18,7 @@ from pathlib import Path
 
 from .models import ParsedPack, ParsedTrack
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta (
@@ -119,6 +119,7 @@ class Database:
         with self._lock:
             self._conn.executescript(_SCHEMA)
             self._apply_migrations()
+            self._relax_packs_notnull()
             self._conn.executescript(_POST_INDEXES)
             self._backfill_category()
             self._conn.execute(
@@ -147,6 +148,51 @@ class Database:
                 if name not in existing:
                     self._conn.execute(
                         f"ALTER TABLE {table} ADD COLUMN {name} {decl}")
+
+    def _relax_packs_notnull(self) -> None:
+        """Old schemas declared ``packs.series`` (and number/category) NOT NULL.
+        Synthetic 'local' source packs store those as NULL, so on such a database
+        importing from an installed osu! client raised
+        ``IntegrityError: NOT NULL constraint failed: packs.series``. Rebuild the
+        table with a nullable schema (SQLite can't drop a column constraint in
+        place), preserving all rows. Idempotent: a no-op once already nullable."""
+        info = {r["name"]: r for r in self._conn.execute("PRAGMA table_info(packs)")}
+        if not any(info.get(c) and info[c]["notnull"]
+                   for c in ("series", "number", "category")):
+            return  # already nullable (fresh dbs and post-migration dbs)
+        # Copy only the columns that exist in both the old table and the canonical
+        # schema, so an unexpected extra/missing column can't abort the rebuild.
+        canonical = ["id", "code", "series", "number", "category", "full_name",
+                     "title", "mode", "season", "year", "track_count",
+                     "extracted_at", "source_zip", "status", "extra_count"]
+        shared = ", ".join(c for c in canonical if c in info)
+        self._conn.execute("PRAGMA foreign_keys=OFF")
+        self._conn.executescript(f"""
+            CREATE TABLE packs_new (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                code         TEXT UNIQUE NOT NULL,
+                series       TEXT,
+                number       INTEGER,
+                category     TEXT,
+                full_name    TEXT,
+                title        TEXT,
+                mode         TEXT,
+                season       TEXT,
+                year         INTEGER,
+                track_count  INTEGER DEFAULT 0,
+                extracted_at TEXT,
+                source_zip   TEXT,
+                status       TEXT DEFAULT 'processed',
+                extra_count  INTEGER DEFAULT 0
+            );
+            INSERT INTO packs_new ({shared}) SELECT {shared} FROM packs;
+            DROP TABLE packs;
+            ALTER TABLE packs_new RENAME TO packs;
+            CREATE INDEX IF NOT EXISTS idx_packs_series ON packs(series);
+            CREATE INDEX IF NOT EXISTS idx_packs_category ON packs(category);
+        """)
+        self._conn.execute("PRAGMA foreign_keys=ON")
+        self._conn.commit()
 
     def data_generation(self) -> int:
         """A counter bumped on every write that changes the track set or its
@@ -357,6 +403,15 @@ class Database:
                 """UPDATE tracks SET in_drive=?, drive_chunk=?, drive_hash=?
                    WHERE id=?""",
                 (1 if in_drive else 0, chunk, drive_hash, track_id))
+            self._conn.commit()
+
+    def set_in_osu(self, beatmapset_id: int, in_osu: bool = True) -> None:
+        """Flag a beatmapset as sent to an osu! client (the 🎮 marker in Search)."""
+        if beatmapset_id is None:
+            return
+        with self._lock:
+            self._conn.execute("UPDATE tracks SET in_osu=? WHERE beatmapset_id=?",
+                               (1 if in_osu else 0, beatmapset_id))
             self._conn.commit()
 
     def set_availability(self, beatmapset_id: int, status: str) -> None:

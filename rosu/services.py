@@ -14,7 +14,7 @@ from pathlib import Path
 
 from . import (
     archives, config, excel_report, extractor, gaps, library, osu_api,
-    osu_import, search,
+    osu_import, parsing, search,
 )
 from .models import ExtractPlan, ParsedPack
 
@@ -341,6 +341,15 @@ class Services:
 
         res = osu_import.import_files(exe, files, progress=_prog,
                                       cancel=self._cancel.is_set)
+        # Optimistically flag the dispatched sets as present in osu! so the Search
+        # 'Where' column shows the 🎮 marker (item F2 / user feedback).
+        sent = res.get("sent", len(files))
+        for f in files[:sent]:
+            t = parsing.parse_osz_entry(f.name, 0)
+            if t is not None and t.beatmapset_id is not None:
+                self.db.set_in_osu(t.beatmapset_id)
+        if sent:
+            self.db._bump()   # let Search/Artists see the new 🎮 flags on reload
         self.log.info("OSU_IMPORT_DONE", target=target, files=res["files"],
                       batches=res["batches"])
         # (Removed the "clear Output after import" option — item 7. osu! consumes the

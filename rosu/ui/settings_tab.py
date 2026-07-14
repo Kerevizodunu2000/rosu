@@ -98,6 +98,8 @@ class SettingsTab(QWidget):
         root.addWidget(self.lbl_api)
         self.lbl_api_help = QLabel(objectName="status")
         self.lbl_api_help.setWordWrap(True)
+        self.lbl_api_help.setTextFormat(Qt.RichText)
+        self.lbl_api_help.setOpenExternalLinks(True)   # the osu! link is clickable
         root.addWidget(self.lbl_api_help)
         api_form = QFormLayout()
         self.client_id = QLineEdit(cfg.osu_client_id)

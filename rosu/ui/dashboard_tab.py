@@ -293,8 +293,11 @@ class DashboardTab(QWidget):
         dest.mkdir(parents=True, exist_ok=True)
         n = 0
         for f in files:
+            target = dest / Path(f).name
             try:
-                shutil.copy2(f, dest / Path(f).name)
+                if target.exists():
+                    continue          # already in Packs — don't move over it
+                shutil.move(str(f), str(target))   # move, not copy (user feedback)
                 n += 1
             except OSError:
                 pass

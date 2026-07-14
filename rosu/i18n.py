@@ -95,8 +95,8 @@ STRINGS: dict[str, dict[str, str]] = {
               "içe aktarmak için arşiv dosyaları seçin."},
     "btn_browse_archives": {"en": "Choose archives…", "tr": "Arşiv seç…"},
     "select_archives": {"en": "Select archives to import", "tr": "İçe aktarılacak arşivleri seç"},
-    "imported_to_packs": {"en": "Copied {n} archive(s) into Packs.",
-                          "tr": "{n} arşiv Packs klasörüne kopyalandı."},
+    "imported_to_packs": {"en": "Moved {n} archive(s) into Packs.",
+                          "tr": "{n} arşiv Packs klasörüne taşındı."},
     "file_missing": {
         "en": "File not found:\n{path}\n\nIt may not have been generated yet.",
         "tr": "Dosya bulunamadı:\n{path}\n\nHenüz oluşturulmamış olabilir."},
@@ -290,12 +290,14 @@ STRINGS: dict[str, dict[str, str]] = {
     "lost_maps_count": {"en": "{n} beatmap(s) no longer on osu!.",
                         "tr": "{n} müzik artık osu!'da yok."},
     "reference_help": {
-        "en": "Register an OAuth app at osu.ppy.sh/home/account/edit → paste the "
-              "Client ID + Secret, then update. Lets us flag genuinely missing "
-              "Featured/Spotlight/etc. packs.",
-        "tr": "osu.ppy.sh/home/account/edit → OAuth uygulaması aç, Client ID + Secret'i "
-              "buraya yapıştır ve güncelle. Featured/Spotlight vb. gerçekten eksik "
-              "paketleri işaretlememizi sağlar."},
+        "en": "Register an OAuth app at "
+              "<a href='https://osu.ppy.sh/home/account/edit#oauth'>"
+              "osu.ppy.sh/home/account/edit</a> → paste the Client ID + Secret, "
+              "then update. Lets us flag genuinely missing Featured/Spotlight/etc. packs.",
+        "tr": "<a href='https://osu.ppy.sh/home/account/edit#oauth'>"
+              "osu.ppy.sh/home/account/edit</a> → OAuth uygulaması aç, Client ID + "
+              "Secret'i buraya yapıştır ve güncelle. Featured/Spotlight vb. gerçekten "
+              "eksik paketleri işaretlememizi sağlar."},
 
     # Folder self-heal (item 20)
     "path_heal_title": {"en": "Folder location changed",

@@ -135,7 +135,10 @@ class SearchTab(QWidget):
                               + (2 if row.get("in_library") else 0)
                               + (1 if row.get("in_drive") else 0))
                 cells = [
-                    (row.get("display_name", ""), None),
+                    # Show the title only — the artist is its own column, so
+                    # "Artist - Title" here was redundant and ate width. The full
+                    # "Artist - Title" is still what a click/Ctrl+C copies (below).
+                    (row.get("title") or row.get("display_name", ""), None),
                     (row.get("artist", ""), None),
                     (str(bid) if bid is not None else "-", bid or 0),
                     (f"{bpm:g}" if bpm else "", bpm or 0.0),
@@ -162,4 +165,4 @@ class SearchTab(QWidget):
         finally:
             self.table.setSortingEnabled(True)
             self.table.setUpdatesEnabled(True)
-        self.table.seed_widths_once(name_min=320)   # display names are long
+        self.table.seed_widths_once(name_min=260)   # title-only name column

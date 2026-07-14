@@ -66,12 +66,20 @@ class CopyTable(QTableWidget):
         self._menu_names = copy_names
         self._menu_table = copy_table
 
-    def seed_widths_once(self, name_min: int = 260) -> None:
+    def seed_widths_once(self, name_min: int = 260, col_max: int = 300) -> None:
         """Set sensible initial column widths the first time rows exist, then leave
-        them alone so the user's manual drags (item 16) survive later re-populates."""
+        them alone so the user's manual drags (item 16) survive later re-populates.
+
+        Every column is capped at ``col_max`` so one very long cell (a long artist
+        or source list) can't blow a column out and push the rest off-screen; the
+        name column is then floored at ``name_min``. Users can still drag any
+        column wider, and full text is available on hover."""
         if self._widths_seeded or self.rowCount() == 0:
             return
         self.resizeColumnsToContents()
+        for c in range(self.columnCount()):
+            if self.columnWidth(c) > col_max:
+                self.setColumnWidth(c, col_max)
         nc = self._name_column
         if 0 <= nc < self.columnCount() and self.columnWidth(nc) < name_min:
             self.setColumnWidth(nc, name_min)
