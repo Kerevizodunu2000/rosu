@@ -367,7 +367,10 @@ class DashboardTab(QWidget):
         lines = []
         for r in rejected:
             reason = t(f"archive_reason_{r.get('reason', 'unsafe')}")
-            lines.append(f"• {r.get('code', '?')} — {reason}")
+            line = f"• {r.get('code', '?')} — {reason}"
+            if not r.get("quarantined", True):
+                line += "  " + t("archive_not_moved")
+            lines.append(line)
         QMessageBox.warning(self, t("archive_rejected_title"),
                             t("archive_rejected_body", items="\n".join(lines)))
 

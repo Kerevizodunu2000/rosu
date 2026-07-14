@@ -37,6 +37,49 @@ def test_beatmapset_availability_respects_max_calls(monkeypatch):
     assert len(result) == 2
 
 
+def test_status_code_maps_transport_error_to_zero(monkeypatch):
+    import urllib.error
+
+    def boom(req, timeout=60):
+        raise urllib.error.URLError("connection reset")
+    monkeypatch.setattr(osu_api.urllib.request, "urlopen", boom)
+    assert osu_api._status_code("https://x/1", "tok") == (0, None)
+
+
+def test_beatmapset_availability_transport_error_is_unknown(monkeypatch):
+    # A transport blip on an id must degrade THAT id to 'unknown', not abort the
+    # whole scan or discard results already gathered.
+    monkeypatch.setattr(osu_api, "_token", lambda cid, cs: "tok")
+    monkeypatch.setattr(osu_api, "_status_code", lambda url, token: (0, None))
+    _no_sleep(monkeypatch)
+    assert osu_api.beatmapset_availability([1, 2], "id", "secret") == {
+        1: "unknown", 2: "unknown"}
+
+
+def test_interruptible_sleep_returns_early_on_cancel(monkeypatch):
+    _no_sleep(monkeypatch)
+    calls = {"n": 0}
+
+    def cancel():
+        calls["n"] += 1
+        return True
+    osu_api._interruptible_sleep(60, cancel)   # would be 60s; must return at once
+    assert calls["n"] == 1
+
+
+def test_beatmapset_availability_cancel_during_backoff(monkeypatch):
+    # Passes the outer per-id cancel check, then cancels inside the retry loop.
+    monkeypatch.setattr(osu_api, "_token", lambda cid, cs: "tok")
+    monkeypatch.setattr(osu_api, "_status_code", lambda url, token: (429, None))
+    _no_sleep(monkeypatch)
+    state = {"polls": 0}
+
+    def cancel():
+        state["polls"] += 1
+        return state["polls"] >= 2
+    assert osu_api.beatmapset_availability([1], "id", "secret", cancel=cancel) == {}
+
+
 def test_beatmapset_availability_retries_on_429(monkeypatch):
     # First call 429, then 200 — must retry the same id, not drop it.
     seq = {1: [429, 200]}

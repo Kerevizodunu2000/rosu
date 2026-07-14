@@ -42,14 +42,17 @@ class Services:
         self.log = log
         self._cancel = threading.Event()  # cooperative cancel for osu! import
         self._drive_cancel = threading.Event()  # separate cancel for Drive ops
+        self._lostmap_cancel = threading.Event()  # separate cancel for lost-map scan
         self._rebuild_lock = threading.Lock()  # serialize tracking.xlsx writes
 
     def request_cancel(self) -> None:
-        # Set both so the shared Dashboard/close-window cancel reaches whichever
-        # operation is running; each op clears only its OWN token at start, so a
-        # Drive login can never wipe an in-flight osu!-import cancel (or vice versa).
+        # Set all so the shared Dashboard/close-window cancel reaches whichever
+        # operation is running; each op clears only its OWN token at start, so one
+        # operation can never wipe another's in-flight cancel (import vs Drive vs
+        # lost-map scan can run concurrently from different tabs).
         self._cancel.set()
         self._drive_cancel.set()
+        self._lostmap_cancel.set()
 
     # -- scanning / pre-check ------------------------------------------------
     def scan(self):
@@ -100,10 +103,11 @@ class Services:
                 # A zip-bomb / path-traversal pack: quarantine it (don't delete —
                 # the owner may want to inspect it) and keep processing the rest.
                 reason = getattr(exc, "reason", "unsafe")
-                self._quarantine(zip_path)
+                moved = self._quarantine(zip_path)
                 self.log.info("EXTRACT_REJECT", code=parsed.code, reason=reason,
-                              detail=str(exc)[:200])
-                rejected.append({"code": parsed.code, "reason": reason})
+                              quarantined=bool(moved), detail=str(exc)[:200])
+                rejected.append({"code": parsed.code, "reason": reason,
+                                 "quarantined": bool(moved)})
                 continue
             total_tracks += res["tracks"]
             if res.get("extra_files"):
@@ -131,15 +135,22 @@ class Services:
 
     def _quarantine(self, zip_path: Path) -> Path | None:
         """Move a rejected (unsafe) pack aside so it is never re-scanned or
-        extracted, without deleting it — the owner may want to inspect it.
-        Returns the new path, or ``None`` if the move failed."""
+        extracted, WITHOUT deleting anything already there (the owner may want to
+        inspect it). Uses ``shutil.move`` so it works even when Packs is on a
+        different drive than the app root, and picks a collision-free name so a
+        previously quarantined file of the same name is never overwritten.
+        Returns the new path, or ``None`` if it could not be moved."""
+        import shutil
         qdir = self.cfg.root_path / "Quarantine"
+        src = Path(zip_path)
         try:
             qdir.mkdir(parents=True, exist_ok=True)
-            dest = qdir / Path(zip_path).name
-            if dest.exists():
-                dest.unlink()
-            Path(zip_path).replace(dest)
+            dest = qdir / src.name
+            n = 1
+            while dest.exists():   # never clobber an earlier quarantined file
+                dest = qdir / f"{src.stem}.{n}{src.suffix}"
+                n += 1
+            shutil.move(str(src), str(dest))
             return dest
         except OSError as exc:
             self.log.error("extract:quarantine", str(exc)[:200])
@@ -357,12 +368,13 @@ class Services:
         """
         if not (self.cfg.osu_client_id and self.cfg.osu_client_secret):
             return {"error": "no_api"}
-        self._cancel.clear()
+        self._lostmap_cancel.clear()   # own token: never collides with import/Drive
         ids = [r["beatmapset_id"] for r in self.db.library_tracks()
                if r.get("beatmapset_id")]
         result = osu_api.beatmapset_availability(
             ids, self.cfg.osu_client_id, self.cfg.osu_client_secret,
-            progress=progress, max_calls=max_calls, cancel=self._cancel.is_set)
+            progress=progress, max_calls=max_calls,
+            cancel=self._lostmap_cancel.is_set)
         gone = 0
         for bid, status in result.items():
             self.db.set_availability(bid, status)

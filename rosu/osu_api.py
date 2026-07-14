@@ -59,8 +59,10 @@ def _get(url: str, token: str) -> dict:
 
 
 def _status_code(url: str, token: str) -> tuple[int, int | None]:
-    """GET a URL and return (http_status, retry_after_seconds). Never raises for
-    an HTTP error status — only for a transport failure."""
+    """GET a URL and return ``(http_status, retry_after_seconds)``. Never raises:
+    an HTTP error status is returned as its code, and a transport failure (DNS,
+    reset, timeout, TLS) is returned as ``0`` so a single blip degrades one id to
+    'unknown' instead of aborting a whole scan."""
     req = urllib.request.Request(
         url, headers={"Authorization": f"Bearer {token}", "Accept": "application/json"})
     try:
@@ -69,6 +71,20 @@ def _status_code(url: str, token: str) -> tuple[int, int | None]:
     except urllib.error.HTTPError as exc:
         ra = exc.headers.get("Retry-After") if exc.headers else None
         return exc.code, (int(ra) if (ra and str(ra).isdigit()) else None)
+    except urllib.error.URLError:
+        return 0, None
+
+
+def _interruptible_sleep(seconds: float, cancel=None) -> None:
+    """Sleep up to ``seconds`` in short slices, returning early once ``cancel``
+    turns True — so a rate-limit backoff never delays a Cancel by more than ~0.5s."""
+    slept = 0.0
+    while slept < seconds:
+        if cancel is not None and cancel():
+            return
+        step = min(0.5, seconds - slept)
+        time.sleep(step)
+        slept += step
 
 
 def beatmapset_availability(ids, client_id: str, client_secret: str,
@@ -93,17 +109,21 @@ def beatmapset_availability(ids, client_id: str, client_secret: str,
         url = f"{API_BASE}/beatmapsets/{bid}"
         retries = 0
         while True:
+            if cancel is not None and cancel():
+                return out          # stop promptly, keeping the partial results
             code, retry_after = _status_code(url, token)
             if code == 429 and retries < 5:
-                time.sleep(min(retry_after or 2 ** retries, 60))
+                _interruptible_sleep(min(retry_after or 2 ** retries, 60), cancel)
                 retries += 1
                 continue
             break
+        # 200 = live, 404 = gone for good, anything else (incl. 0 = transport
+        # error) = unknown, so one network blip degrades one id, not the scan.
         out[bid] = ("available" if code == 200
                     else "gone" if code == 404 else "unknown")
         if progress:
             progress({"kind": "lostmap", "done": len(out), "total": total})
-        time.sleep(0.1)  # be a good API citizen
+        _interruptible_sleep(0.1, cancel)  # be a good API citizen
     return out
 
 

@@ -81,6 +81,8 @@ STRINGS: dict[str, dict[str, str]] = {
     "archive_reason_ratio": {"en": "suspicious compression", "tr": "şüpheli sıkıştırma"},
     "archive_reason_path": {"en": "unsafe file path", "tr": "güvensiz dosya yolu"},
     "archive_reason_unsafe": {"en": "unsafe", "tr": "güvensiz"},
+    "archive_not_moved": {"en": "(could not move — left in place)",
+                          "tr": "(taşınamadı — yerinde bırakıldı)"},
 
     # Empty Packs / external import (item 4)
     "packs_empty": {
