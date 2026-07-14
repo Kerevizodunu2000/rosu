@@ -12,7 +12,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout, QWidget,
 )
 
-from .. import extractor, osu_import
+from .. import config, extractor, osu_import
 from ..i18n import human_duration
 from ..workers import Worker
 from .progress_panel import ProgressPanel
@@ -47,13 +47,15 @@ class DashboardTab(QWidget):
         btn_row = QHBoxLayout()
         self.btn_extract = QPushButton()
         self.btn_copy = QPushButton()
-        self.btn_import = QPushButton()
+        self.btn_import_lazer = QPushButton()
+        self.btn_import_stable = QPushButton()
         self.btn_refresh = QPushButton()
         self.btn_backup = QPushButton()
-        for b in (self.btn_copy, self.btn_import, self.btn_refresh, self.btn_backup):
-            b.setObjectName("secondary")
-        for b in (self.btn_extract, self.btn_copy, self.btn_import,
+        for b in (self.btn_copy, self.btn_import_lazer, self.btn_import_stable,
                   self.btn_refresh, self.btn_backup):
+            b.setObjectName("secondary")
+        for b in (self.btn_extract, self.btn_copy, self.btn_import_lazer,
+                  self.btn_import_stable, self.btn_refresh, self.btn_backup):
             btn_row.addWidget(b)
         btn_row.addStretch(1)
         self.btn_rescan = QPushButton(objectName="secondary")
@@ -62,7 +64,8 @@ class DashboardTab(QWidget):
 
         self.btn_extract.clicked.connect(self.on_extract)
         self.btn_copy.clicked.connect(self.on_copy)
-        self.btn_import.clicked.connect(self.on_import)
+        self.btn_import_lazer.clicked.connect(lambda: self.on_import("lazer"))
+        self.btn_import_stable.clicked.connect(lambda: self.on_import("stable"))
         self.btn_refresh.clicked.connect(self.on_refresh)
         self.btn_backup.clicked.connect(self.on_backup)
         self.btn_rescan.clicked.connect(self.refresh_scan)
@@ -98,14 +101,16 @@ class DashboardTab(QWidget):
         self.title.setText(t("app_title"))
         self.btn_extract.setText(t("btn_extract"))
         self.btn_copy.setText(t("btn_copy_library"))
-        self.btn_import.setText(t("btn_import_osu"))
+        self.btn_import_lazer.setText(t("btn_import_to_lazer"))
+        self.btn_import_stable.setText(t("btn_import_to_stable"))
         self.btn_refresh.setText(t("btn_refresh"))
         self.btn_backup.setText(t("btn_backup_drive"))
         self.btn_rescan.setText(t("btn_rescan"))
         self.btn_cancel.setText(t("btn_cancel"))
         self.btn_extract.setToolTip(t("tip_extract"))
         self.btn_copy.setToolTip(t("tip_copy_library"))
-        self.btn_import.setToolTip(t("tip_import_osu"))
+        self.btn_import_lazer.setToolTip(t("tip_import_to_lazer"))
+        self.btn_import_stable.setToolTip(t("tip_import_to_stable"))
         self.btn_refresh.setToolTip(t("tip_refresh"))
         self.btn_backup.setToolTip(t("tip_backup_drive"))
         self.btn_rescan.setToolTip(t("tip_rescan"))
@@ -164,8 +169,9 @@ class DashboardTab(QWidget):
 
     # -- busy state ----------------------------------------------------------
     def _lock(self, locked: bool) -> None:
-        for b in (self.btn_extract, self.btn_copy, self.btn_import,
-                  self.btn_refresh, self.btn_backup, self.btn_rescan):
+        for b in (self.btn_extract, self.btn_copy, self.btn_import_lazer,
+                  self.btn_import_stable, self.btn_refresh, self.btn_backup,
+                  self.btn_rescan):
             b.setEnabled(not locked)
 
     def _busy_generic(self, status_key: str) -> None:
@@ -344,17 +350,23 @@ class DashboardTab(QWidget):
         self.status.setText(self.ctx.t("library_done", new=res["new"], dup=res["duplicates"]))
         self.mw.search.reload()          # reflect the new library rows live (item 7)
 
-    # -- Import to osu! ------------------------------------------------------
-    def on_import(self) -> None:
+    # -- Import to osu! (lazer / stable) -------------------------------------
+    def _import_exe(self, target: str) -> str:
+        cfg = self.ctx.cfg
+        if target == "stable":
+            return cfg.osu_stable_exe or config.detect_stable_exe()
+        return cfg.osu_lazer_exe or config.detect_osu_exe()
+
+    def on_import(self, target: str = "lazer") -> None:
         files = osu_import.output_osz_files(self.ctx.cfg.output_path)
         if not files:
             QMessageBox.information(self, self.ctx.t("app_title"),
                                     self.ctx.t("nothing_in_output"))
             return
-        exe = self.ctx.cfg.osu_exe
+        exe = self._import_exe(target)
         if not exe or not Path(exe).exists():
-            QMessageBox.warning(self, self.ctx.t("app_title"),
-                                self.ctx.t("osu_not_found"))
+            key = "import_no_stable_exe" if target == "stable" else "import_no_lazer_exe"
+            QMessageBox.warning(self, self.ctx.t("app_title"), self.ctx.t(key))
             return
         plan = self.services.import_plan()
         reply = QMessageBox.question(
@@ -367,7 +379,7 @@ class DashboardTab(QWidget):
         self._busy_generic("working")
         self.btn_cancel.setEnabled(True)
         self.btn_cancel.setVisible(True)
-        self._start_worker(self.services.import_osu, on_success=self._after_import)
+        self._start_worker(self.services.import_osu, target, on_success=self._after_import)
 
     def _after_import(self, res) -> None:
         self._idle()

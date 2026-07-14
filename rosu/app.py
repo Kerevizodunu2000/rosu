@@ -31,9 +31,20 @@ class AppContext:
     def __init__(self, cfg: config.Config | None = None):
         self.cfg = cfg if cfg is not None else config.load_config()
         self.cfg.ensure_dirs()
-        # auto-detect osu! once if not configured
-        if not self.cfg.osu_exe:
-            self.cfg.osu_exe = config.detect_osu_exe()
+        # auto-detect the osu! clients once if not configured (import targets)
+        changed = False
+        if not self.cfg.osu_lazer_exe:
+            found = config.detect_osu_exe()
+            if found:
+                self.cfg.osu_lazer_exe = found
+                changed = True
+        if not self.cfg.osu_stable_exe:
+            found = config.detect_stable_exe()
+            if found:
+                self.cfg.osu_stable_exe = found
+                changed = True
+        if changed:
+            self.cfg.osu_exe = self.cfg.osu_lazer_exe or self.cfg.osu_exe
             config.save_config(self.cfg)
         # give this install a stable id for its Drive manifest shard (item 11)
         if not self.cfg.device_id:

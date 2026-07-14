@@ -47,8 +47,12 @@ class Config:
     data_dir: str = ""
     logs_dir: str = ""
 
-    # osu!lazer executable (auto-detected on first run if empty)
+    # osu! client executables — used as import *targets* (Output → osu!).
+    # ``osu_exe`` is the legacy single field (meant osu!lazer); it is migrated
+    # into ``osu_lazer_exe`` and kept mirrored for config backward-compat.
     osu_exe: str = ""
+    osu_lazer_exe: str = ""   # osu!lazer executable (auto-detected if empty)
+    osu_stable_exe: str = ""  # osu!(stable) executable (auto-detected if empty)
 
     # UI preferences
     language: str = "en"      # default English per spec
@@ -142,6 +146,12 @@ def _fill_defaults(cfg: Config) -> Config:
         cfg.theme = "dark"
     if cfg.zip_disposal not in ZIP_DISPOSAL:
         cfg.zip_disposal = "recycle"
+    # osu! client executables: the legacy single osu_exe meant osu!lazer. Migrate
+    # it into osu_lazer_exe once, then keep osu_exe mirrored so an older build
+    # (or a hand-edited config.json) still reads a sensible value.
+    if not cfg.osu_lazer_exe and cfg.osu_exe:
+        cfg.osu_lazer_exe = cfg.osu_exe
+    cfg.osu_exe = cfg.osu_lazer_exe or cfg.osu_exe
     # Drive chunk size is user-editable (and hand-editable in config.json), so
     # coerce and floor it — there is no other validation hook on load.
     try:
@@ -190,4 +200,15 @@ def detect_osu_exe() -> str:
     for c in candidates:
         if c.exists():
             return str(c)
+    return ""
+
+
+def detect_stable_exe() -> str:
+    """Best-effort auto-detection of the osu!(stable) executable on Windows."""
+    from . import client_import
+    base = client_import.stable_install_dir()
+    if base:
+        exe = base / "osu!.exe"
+        if exe.exists():
+            return str(exe)
     return ""

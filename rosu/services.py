@@ -300,19 +300,26 @@ class Services:
                 "eta_s": osu_import.estimate_seconds(len(files), batches)}
 
     # -- osu! import ---------------------------------------------------------
-    def import_osu(self, progress=None) -> dict:
+    def import_osu(self, target: str = "lazer", progress=None) -> dict:
+        """Send the Output .osz files to an installed osu! client. ``target`` is
+        ``"lazer"`` or ``"stable"``; both import an .osz passed on the command
+        line (single-instance forwarding), so the launch path is identical."""
         self._cancel.clear()
         files = osu_import.output_osz_files(self.cfg.output_path)
-        exe = self.cfg.osu_exe or config.detect_osu_exe()
+        if target == "stable":
+            exe = self.cfg.osu_stable_exe or config.detect_stable_exe()
+        else:
+            exe = self.cfg.osu_lazer_exe or config.detect_osu_exe()
 
         def _prog(i, total, n):
-            self.log.info("OSU_IMPORT", batch=f"{i}/{total}", files=n)
+            self.log.info("OSU_IMPORT", target=target, batch=f"{i}/{total}", files=n)
             if progress:
                 progress({"kind": "import", "batch": i, "total": total, "files": n})
 
         res = osu_import.import_files(exe, files, progress=_prog,
                                       cancel=self._cancel.is_set)
-        self.log.info("OSU_IMPORT_DONE", files=res["files"], batches=res["batches"])
+        self.log.info("OSU_IMPORT_DONE", target=target, files=res["files"],
+                      batches=res["batches"])
         # (Removed the "clear Output after import" option — item 7. osu! consumes the
         # .osz on import, so Output empties itself; an explicit clear was redundant.)
         return res

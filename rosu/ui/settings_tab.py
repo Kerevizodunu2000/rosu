@@ -60,7 +60,8 @@ class SettingsTab(QWidget):
         self.packs = self._path_row(form, cfg.packs_dir, is_dir=True)
         self.output = self._path_row(form, cfg.output_dir, is_dir=True)
         self.library = self._path_row(form, cfg.library_dir, is_dir=True)
-        self.osu = self._path_row(form, cfg.osu_exe, is_dir=False)
+        self.osu = self._path_row(form, cfg.osu_lazer_exe, is_dir=False)
+        self.osu_stable = self._path_row(form, cfg.osu_stable_exe, is_dir=False)
 
         self.cb_physical = QCheckBox(); self.cb_physical.setChecked(cfg.library_physical_copy)
         self.cb_clear_before = QCheckBox(); self.cb_clear_before.setChecked(cfg.clear_output_before_extract)
@@ -204,6 +205,7 @@ class SettingsTab(QWidget):
     def _snapshot(self) -> dict:
         return {"packs": self.packs.text(), "output": self.output.text(),
                 "library": self.library.text(), "osu": self.osu.text(),
+                "osu_stable": self.osu_stable.text(),
                 "client_id": self.client_id.text(),
                 "client_secret": self.client_secret.text()}
 
@@ -213,6 +215,7 @@ class SettingsTab(QWidget):
     def _restore(self, snap: dict) -> None:
         self.packs.setText(snap["packs"]); self.output.setText(snap["output"])
         self.library.setText(snap["library"]); self.osu.setText(snap["osu"])
+        self.osu_stable.setText(snap["osu_stable"])
         self.client_id.setText(snap["client_id"])
         self.client_secret.setText(snap["client_secret"])
 
@@ -250,8 +253,9 @@ class SettingsTab(QWidget):
         self.packs._label.setText(t("set_packs_dir"))
         self.output._label.setText(t("set_output_dir"))
         self.library._label.setText(t("set_library_dir"))
-        self.osu._label.setText(t("set_osu_exe"))
-        for f in (self.packs, self.output, self.library, self.osu):
+        self.osu._label.setText(t("set_osu_lazer_exe"))
+        self.osu_stable._label.setText(t("set_osu_stable_exe"))
+        for f in (self.packs, self.output, self.library, self.osu, self.osu_stable):
             f._browse.setText(t("btn_browse"))
         # Match the combo spacers to the (localized) Browse button width (item 22).
         bw = self.packs._browse.sizeHint().width()
@@ -281,7 +285,8 @@ class SettingsTab(QWidget):
         self.packs.setToolTip(t("tip_packs_dir"))
         self.output.setToolTip(t("tip_output_dir"))
         self.library.setToolTip(t("tip_library_dir"))
-        self.osu.setToolTip(t("tip_osu_exe"))
+        self.osu.setToolTip(t("tip_osu_lazer_exe"))
+        self.osu_stable.setToolTip(t("tip_osu_stable_exe"))
         self.cb_physical.setToolTip(t("tip_physical_copy"))
         self.cb_auto_backup.setToolTip(t("tip_auto_backup"))
         self.cb_clear_before.setToolTip(t("tip_clear_before"))
@@ -488,7 +493,9 @@ class SettingsTab(QWidget):
         cfg.packs_dir = self.packs.text().strip()
         cfg.output_dir = self.output.text().strip()
         cfg.library_dir = self.library.text().strip()
-        cfg.osu_exe = self.osu.text().strip()
+        cfg.osu_lazer_exe = self.osu.text().strip()
+        cfg.osu_stable_exe = self.osu_stable.text().strip()
+        cfg.osu_exe = cfg.osu_lazer_exe   # keep the legacy field mirrored
         cfg.osu_client_id = self.client_id.text().strip()
         cfg.osu_client_secret = self.client_secret.text().strip()
         try:

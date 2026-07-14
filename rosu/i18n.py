@@ -21,6 +21,8 @@ STRINGS: dict[str, dict[str, str]] = {
     "btn_extract": {"en": "Unpack Archives", "tr": "Arşivleri Aç"},
     "btn_copy_library": {"en": "Copy to Library", "tr": "Library'e Kopyala"},
     "btn_import_osu": {"en": "Import to osu!", "tr": "osu!'ya Aktar"},
+    "btn_import_to_lazer": {"en": "Import → osu!lazer", "tr": "osu!lazer'a Aktar"},
+    "btn_import_to_stable": {"en": "Import → osu!(stable)", "tr": "osu!(stable)'a Aktar"},
     "btn_refresh": {"en": "Refresh Library Data", "tr": "Arşiv Verisini Yenile"},
     "btn_rescan": {"en": "Rescan Packs", "tr": "Arşivleri Tara"},
     "col_code": {"en": "Code", "tr": "Kod"},
@@ -52,6 +54,12 @@ STRINGS: dict[str, dict[str, str]] = {
         "tr": "{added} eklendi, {enriched} zenginleştirildi, {disappeared} kayboldu, {present} mevcut."},
     "osu_not_found": {"en": "osu! executable not found. Set it in Settings.",
                       "tr": "osu! çalıştırılabilir dosyası bulunamadı. Ayarlar'dan belirtin."},
+    "import_no_lazer_exe": {
+        "en": "osu!lazer executable not found. Set its path in Settings.",
+        "tr": "osu!lazer çalıştırılabilir dosyası bulunamadı. Yolunu Ayarlar'dan belirtin."},
+    "import_no_stable_exe": {
+        "en": "osu!(stable) executable not found. Set its path in Settings.",
+        "tr": "osu!(stable) çalıştırılabilir dosyası bulunamadı. Yolunu Ayarlar'dan belirtin."},
     "nothing_in_output": {"en": "Output is empty — unpack some archives first.",
                           "tr": "Output boş — önce arşiv açın."},
 
@@ -130,6 +138,8 @@ STRINGS: dict[str, dict[str, str]] = {
     "set_output_dir": {"en": "Output folder", "tr": "Output klasörü"},
     "set_library_dir": {"en": "Library folder", "tr": "Library klasörü"},
     "set_osu_exe": {"en": "osu! executable", "tr": "osu! çalıştırılabilir"},
+    "set_osu_lazer_exe": {"en": "osu!lazer executable", "tr": "osu!lazer çalıştırılabilir"},
+    "set_osu_stable_exe": {"en": "osu!(stable) executable", "tr": "osu!(stable) çalıştırılabilir"},
     "set_physical_copy": {"en": "Keep physical .osz copies in Library",
                           "tr": "Library'de fiziksel .osz kopyası tut"},
     "set_clear_output_before": {"en": "Clear Output before each extraction",
@@ -338,6 +348,12 @@ STRINGS: dict[str, dict[str, str]] = {
                          "tr": "Output'taki çıkarılmış müzikleri Library'e kopyalar."},
     "tip_import_osu": {"en": "Send the beatmaps in Output to osu!.",
                        "tr": "Output'taki müzikleri osu!'ya gönderir."},
+    "tip_import_to_lazer": {
+        "en": "Send the unpacked beatmaps in Output to osu!lazer.",
+        "tr": "Output'taki çıkarılmış müzikleri osu!lazer'a gönderir."},
+    "tip_import_to_stable": {
+        "en": "Send the unpacked beatmaps in Output to osu!(stable).",
+        "tr": "Output'taki çıkarılmış müzikleri osu!(stable)'a gönderir."},
     "tip_refresh": {
         "en": "Rescan your osu! library and update its records (added, enriched, "
               "disappeared, present).",
@@ -365,6 +381,12 @@ STRINGS: dict[str, dict[str, str]] = {
                         "tr": "Kalıcı müzik kütüphanenizin tutulduğu klasör."},
     "tip_osu_exe": {"en": "Path to the osu! executable used to import beatmaps.",
                     "tr": "Müzik aktarımında kullanılan osu! çalıştırılabilir dosyasının yolu."},
+    "tip_osu_lazer_exe": {
+        "en": "Path to the osu!lazer executable used to import beatmaps.",
+        "tr": "Müzik aktarımında kullanılan osu!lazer çalıştırılabilir dosyasının yolu."},
+    "tip_osu_stable_exe": {
+        "en": "Path to the osu!(stable) executable used to import beatmaps.",
+        "tr": "Müzik aktarımında kullanılan osu!(stable) çalıştırılabilir dosyasının yolu."},
     "tip_physical_copy": {
         "en": "Keep an actual .osz file copy in Library instead of tracking it in "
               "memory only.",
