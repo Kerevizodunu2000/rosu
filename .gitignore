@@ -39,4 +39,5 @@ tools/RosuLazerExport/FodyWeavers.xml
 # Internal design docs, specs, icon-design galleries, and handoff notes —
 # not for the public repo (they also contain local absolute paths).
 HANDOFF.md
+CLAUDE.md
 docs/
