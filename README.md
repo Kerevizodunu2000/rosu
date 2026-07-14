@@ -40,7 +40,7 @@ Rosu bulk-extracts `.zip`/`.7z`/`.tar` beatmap packs into a deduplicated `.osz` 
 
 **Library & import**
 - **Copy to Library** deduplicates `.osz` files by beatmapset id into a permanent `Library/` backup; re-uploads with a different size are refreshed instead of skipped.
-- **Import to osu!** sends `Output/`'s `.osz` files to osu! in batches through osu!'s own safe import pipeline, with progress, cancel support, and a reminder not to close osu! mid-import.
+- **Import to osu!** sends `Output/`'s `.osz` files to your osu! client in batches through osu!'s own safe import pipeline — with separate **osu!lazer** and **osu!(stable)** targets, progress, cancel support, and a reminder not to close osu! mid-import.
 - **Import already-installed songs** (Settings): pulls beatmaps straight from an existing **osu!(stable)** `Songs/` folder or an **osu!lazer** install (via a bundled, self-contained .NET 8 helper that reads `client.realm` read-only — no .NET install required) and dedupes them into the Library.
 - **Refresh Library Data** rescans `Library/`, backfills metadata, and timestamps files that have disappeared instead of silently dropping them.
 
@@ -100,7 +100,7 @@ Rosu highlights *missing* packs in the Excel report, but only when it can be con
 1. Drop your beatmap-pack archives into the `Packs/` folder created next to `rosu.exe`.
 2. Click **Unpack Archives** to extract them into `Output/` and generate the tracking report.
 3. Click **Copy to Library** to back up the extracted `.osz` files into your permanent `Library/`.
-4. Click **Import to osu!** to hand them off to your osu! client.
+4. Click **Import → osu!lazer** or **Import → osu!(stable)** to hand them off to your osu! client.
 5. Use **Search** to find tracks by artist/title/id, **Artists** to browse aggregates, and **Dashboard** for an at-a-glance summary (including a link straight to any possibly-missing packs).
 6. Already have beatmaps installed? Open **Settings → Import installed songs** to pull them from osu!(stable) or osu!lazer without re-downloading anything.
 
@@ -161,4 +161,6 @@ Copyright © 2026 Halil Şafak Şimşek.
 
 **Contact:** halilsafaksimsek@gmail.com
 
-Rosu is distributed in the hope that it will be useful, but **WITHOUT ANY WARRANTY** — see the [GNU GPL v3](LICENSE) for details. Bundled third-party components keep their own licenses; see [THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md).
+Rosu is distributed in the hope that it will be useful, but **WITHOUT ANY WARRANTY** — see the [GNU GPL v3](LICENSE) for details. Bundled third-party components keep their own licenses; see [THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md). The same notices are available in-app via **Settings → About / Licenses**.
+
+Rosu is an unofficial, fan-made tool — not affiliated with or endorsed by ppy Pty Ltd or osu!. "osu!" is used descriptively; the "Rosu" name and glyphs are the author's own.

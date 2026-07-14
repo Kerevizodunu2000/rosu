@@ -30,6 +30,9 @@ _datas = [
     ('rosu/assets/splash.png', 'rosu/assets'),
     # self-contained .NET helper that re-exports osu!lazer beatmapsets (item 15)
     ('rosu/assets/lazer_export/RosuLazerExport.exe', 'rosu/assets/lazer_export'),
+    # legal notices shown in the in-app About / Licenses screen
+    ('LICENSE', '.'),
+    ('THIRD-PARTY-LICENSES.md', '.'),
 ]
 if os.path.exists(_oauth_client):
     _datas.append((_oauth_client, 'rosu/drive'))

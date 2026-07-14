@@ -305,6 +305,26 @@ STRINGS: dict[str, dict[str, str]] = {
 
     # Google Drive backup (item 11, v0.8)
     "col_location": {"en": "Where", "tr": "Konum"},
+    "btn_about": {"en": "About / Licenses", "tr": "Hakkında / Lisanslar"},
+    "tip_about": {"en": "App version, license, and third-party notices.",
+                  "tr": "Uygulama sürümü, lisansı ve üçüncü taraf bildirimleri."},
+    "about_title": {"en": "About Rosu", "tr": "Rosu Hakkında"},
+    "about_license": {
+        "en": "Rosu is free software, licensed under the "
+              "<a href='https://www.gnu.org/licenses/gpl-3.0.html'>GNU GPL v3.0 or "
+              "later</a>. It comes with ABSOLUTELY NO WARRANTY.<br>"
+              "© 2026 Halil Şafak Şimşek — an unofficial, fan-made tool, not "
+              "affiliated with or endorsed by ppy Pty Ltd or osu!.",
+        "tr": "Rosu özgür bir yazılımdır; "
+              "<a href='https://www.gnu.org/licenses/gpl-3.0.html'>GNU GPL v3.0 veya "
+              "sonrası</a> ile lisanslanmıştır. HİÇBİR GARANTİSİ YOKTUR.<br>"
+              "© 2026 Halil Şafak Şimşek — gayriresmî, hayran yapımı bir araçtır; "
+              "ppy Pty Ltd veya osu! ile bağlantılı ya da onaylı değildir."},
+    "about_third_party": {"en": "Bundled third-party components:",
+                          "tr": "Paketlenmiş üçüncü taraf bileşenleri:"},
+    "about_third_party_missing": {
+        "en": "Third-party license notices file was not found.",
+        "tr": "Üçüncü taraf lisans bildirimleri dosyası bulunamadı."},
     "set_drive": {"en": "Google Drive backup", "tr": "Google Drive yedeği"},
     "set_drive_help": {
         "en": "Log in once to back up your Library to Google Drive as bundled "

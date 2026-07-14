@@ -144,6 +144,14 @@ class SettingsTab(QWidget):
         drive_row.addWidget(self.lbl_drive_status, 1)
         root.addLayout(drive_row)
 
+        # About / licenses
+        about_row = QHBoxLayout()
+        self.btn_about = QPushButton(objectName="secondary")
+        self.btn_about.clicked.connect(self._show_about)
+        about_row.addWidget(self.btn_about)
+        about_row.addStretch(1)
+        root.addLayout(about_row)
+
         root.addStretch(1)
         bottom = QHBoxLayout()
         self.saved_label = QLabel(objectName="status")
@@ -279,6 +287,7 @@ class SettingsTab(QWidget):
         self.btn_import_lazer.setText(t("btn_import_lazer"))
         self.lbl_drive.setText(t("set_drive"))
         self.lbl_drive_help.setText(t("set_drive_help"))
+        self.btn_about.setText(t("btn_about"))
         self.btn_save.setText(t("btn_save"))
         self.lang.setToolTip(t("tip_language"))
         self.theme.setToolTip(t("tip_theme"))
@@ -294,6 +303,7 @@ class SettingsTab(QWidget):
         self.btn_import_stable.setToolTip(t("tip_import_stable"))
         self.btn_import_lazer.setToolTip(t("tip_import_lazer"))
         self.btn_drive.setToolTip(t("tip_drive"))
+        self.btn_about.setToolTip(t("tip_about"))
         self.btn_save.setToolTip(t("tip_save"))
         self._refresh_reference_status()
         self._refresh_drive_status()
@@ -359,6 +369,11 @@ class SettingsTab(QWidget):
     def _drive_failed(self, msg) -> None:
         self._refresh_drive_status()
         QMessageBox.critical(self, self.ctx.t("app_title"), msg)
+
+    # -- About / licenses ----------------------------------------------------
+    def _show_about(self) -> None:
+        from .about_dialog import AboutDialog
+        AboutDialog(self.ctx, self).exec()
 
     # -- live apply ----------------------------------------------------------
     def _apply_language(self) -> None:
