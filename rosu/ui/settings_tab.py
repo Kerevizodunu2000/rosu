@@ -560,6 +560,8 @@ class SettingsTab(QWidget):
         cfg.zip_disposal = self.zip.currentData()
         self.ctx.save_config()
         self.saved_label.setText(self.ctx.t("saved"))
+        # auto-copy toggle changes whether the Dashboard shows its Copy button
+        self.mw.dashboard._sync_auto_copy()
 
     # -- save (paths + API) --------------------------------------------------
     def _save(self) -> bool:

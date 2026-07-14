@@ -120,8 +120,15 @@ class DashboardTab(QWidget):
         self._populate_table()   # headers + rows follow the current view + language
         self._update_count()
         self._update_banner()
+        self._sync_auto_copy()
         if not self.status.text():
             self.status.setText(t("ready"))
+
+    def _sync_auto_copy(self) -> None:
+        """Hide the manual 'Copy to Library' button when auto-copy-after-unpack is
+        enabled — it's redundant then, and hiding it avoids accidental repeat
+        copies. Called on retranslate and whenever the setting is toggled."""
+        self.btn_copy.setVisible(not self.ctx.cfg.auto_backup_after_extract)
 
     def on_shown(self) -> None:
         self.refresh_scan()
@@ -385,7 +392,12 @@ class DashboardTab(QWidget):
 
     def _after_copy(self, res) -> None:
         self._idle()
-        self.status.setText(self.ctx.t("library_done", new=res["new"], dup=res["duplicates"]))
+        if res["new"] == 0 and res["duplicates"] > 0:
+            # Nothing new — everything in Output was already in the Library. Say so
+            # plainly instead of a bare "0 added" (spamming Copy is otherwise silent).
+            self.status.setText(self.ctx.t("library_all_present", n=res["duplicates"]))
+        else:
+            self.status.setText(self.ctx.t("library_done", new=res["new"], dup=res["duplicates"]))
         self.mw.search.reload()          # reflect the new library rows live (item 7)
 
     # -- Import to osu! (lazer / stable) -------------------------------------

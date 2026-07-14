@@ -39,8 +39,11 @@ class SearchTab(QWidget):
         self.box.returnPressed.connect(self.do_search)          # Enter = search now
         self.btn = QPushButton()
         self.btn.clicked.connect(self.do_search)
+        self.btn_reload = QPushButton(objectName="secondary")
+        self.btn_reload.clicked.connect(self.do_search)         # re-pull the list live
         row.addWidget(self.box, 1)
         row.addWidget(self.btn)
+        row.addWidget(self.btn_reload)
         root.addLayout(row)
 
         self.result = QLabel(objectName="status")
@@ -63,9 +66,11 @@ class SearchTab(QWidget):
         t = self.ctx.t
         self.box.setPlaceholderText(t("search_placeholder"))
         self.btn.setText(t("tab_search"))
+        self.btn_reload.setText(t("btn_reload"))
         self.hint.setText(t("copy_hint"))
         self.box.setToolTip(t("tip_search_box"))
         self.btn.setToolTip(t("tip_search_btn"))
+        self.btn_reload.setToolTip(t("tip_reload"))
         self.table.setHorizontalHeaderLabels([t(k) for k in self._KEYS])
         self.table.set_menu_labels(t("copy_names_action"), t("copy_table_action"))
 
@@ -157,4 +162,4 @@ class SearchTab(QWidget):
         finally:
             self.table.setSortingEnabled(True)
             self.table.setUpdatesEnabled(True)
-        self.table.seed_widths_once()
+        self.table.seed_widths_once(name_min=320)   # display names are long

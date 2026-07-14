@@ -33,6 +33,8 @@ archive handling, and can flag maps that no longer exist on osu!.
   already unrecoverable.
 - **Startup update check** against GitHub Releases with a non-intrusive banner and
   one-click download; toggle in Settings (on by default, fails silently offline).
+- **Search "Refresh" button** to re-pull the list from your library on demand
+  (imports already refresh it live; this is a manual trigger).
 - **Release integrity:** each release `.exe` is now published with a matching
   SHA-256 checksum.
 
@@ -43,6 +45,9 @@ archive handling, and can flag maps that no longer exist on osu!.
   drive-relative member-name rejection — before anything is written to disk.
 - **Third-party notices** now list every component actually bundled in the exe
   (keyring + its backend, py7zr's codec dependencies, the embedded .NET runtime).
+- **Dashboard Copy to Library** is hidden when "Auto-copy to Library after
+  unpacking" is enabled (it's redundant then), and a manual copy where everything
+  is already in the Library now says so plainly instead of a bare "0 added".
 
 ### Security
 - **Hostile archives are refused and quarantined.** A zip-bomb (by total size,

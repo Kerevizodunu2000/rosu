@@ -49,6 +49,9 @@ STRINGS: dict[str, dict[str, str]] = {
                      "tr": "{packs} arşiv, {tracks} müzik çıkarıldı."},
     "library_done": {"en": "{new} added, {dup} duplicates — names saved to memory.",
                      "tr": "{new} eklendi, {dup} kopya ile karşılandı — isimler hafızaya eklendi."},
+    "library_all_present": {
+        "en": "All {n} beatmaps are already in your Library — nothing to copy.",
+        "tr": "{n} müziğin tamamı zaten kütüphanende — kopyalanacak bir şey yok."},
     "import_done": {"en": "Sent {files} beatmaps to osu! in {batches} batches.",
                     "tr": "{files} müzik {batches} partide osu!'ya gönderildi."},
     "refresh_done": {
@@ -117,6 +120,7 @@ STRINGS: dict[str, dict[str, str]] = {
     # Search
     "search_placeholder": {"en": "Search artist, title or id…",
                            "tr": "Sanatçı, başlık veya id ara…"},
+    "btn_reload": {"en": "Refresh", "tr": "Yenile"},
     "search_have": {"en": "You have this music ({n} match).",
                     "tr": "Bu müzik sizde yüklü ({n} eşleşme)."},
     "search_none": {"en": "Not found in your memory.", "tr": "Hafızanızda bulunamadı."},
@@ -462,6 +466,8 @@ STRINGS: dict[str, dict[str, str]] = {
                       "tr": "Kütüphanenizde sanatçı, başlık veya beatmap id'sine göre "
                             "arama yapmak için yazın."},
     "tip_search_btn": {"en": "Run the search now.", "tr": "Aramayı şimdi çalıştırır."},
+    "tip_reload": {"en": "Reload the list from your library (reflect new imports).",
+                   "tr": "Listeyi kütüphanenden yeniden yükler (yeni içe aktarımları gösterir)."},
 
     "tip_packs_search": {"en": "Filter packs by code, title or category.",
                         "tr": "Arşivleri koda, başlığa veya kategoriye göre süzer."},
