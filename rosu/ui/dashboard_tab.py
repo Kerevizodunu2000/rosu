@@ -30,6 +30,8 @@ class DashboardTab(QWidget):
         self.services = self.ctx.services
         self._threads: list[Worker] = []
         self._scan: list[tuple[Path, object]] = []
+        self._output: list[dict] = []
+        self._view = "packs"   # "packs" (scan) or "output" (unpacked .osz)
 
         root = QVBoxLayout(self)
         root.setContentsMargins(18, 18, 18, 18)
@@ -115,8 +117,7 @@ class DashboardTab(QWidget):
         self.btn_backup.setToolTip(t("tip_backup_drive"))
         self.btn_rescan.setToolTip(t("tip_rescan"))
         self.btn_cancel.setToolTip(t("tip_cancel"))
-        self.table.setHorizontalHeaderLabels([
-            t("col_code"), t("col_series"), t("col_title"), t("col_size"), t("col_state")])
+        self._populate_table()   # headers + rows follow the current view + language
         self._update_count()
         self._update_banner()
         if not self.status.text():
@@ -128,12 +129,29 @@ class DashboardTab(QWidget):
     # -- scanning ------------------------------------------------------------
     def refresh_scan(self) -> None:
         self._scan = self.services.scan()
+        if self._scan:
+            self._view = "packs"
+            self._output = []
+        else:
+            # Packs is empty (e.g. right after unpacking) — show the Output
+            # beatmaps instead of a blank table (item D).
+            self._output = self.services.output_listing()
+            self._view = "output" if self._output else "packs"
         self._populate_table()
         self._update_count()
         self._update_banner()
 
     def _populate_table(self) -> None:
+        if self._view == "output":
+            self._populate_output_table()
+        else:
+            self._populate_packs_table()
+
+    def _populate_packs_table(self) -> None:
         t = self.ctx.t
+        self.table.setColumnCount(5)
+        self.table.setHorizontalHeaderLabels([
+            t("col_code"), t("col_series"), t("col_title"), t("col_size"), t("col_state")])
         self.table.setRowCount(len(self._scan))
         for r, (path, parsed) in enumerate(self._scan):
             known = self.ctx.db.get_pack_by_code(parsed.code) is not None
@@ -148,8 +166,25 @@ class DashboardTab(QWidget):
         self.table.resizeColumnsToContents()
         self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
 
+    def _populate_output_table(self) -> None:
+        t = self.ctx.t
+        self.table.setColumnCount(2)
+        self.table.setHorizontalHeaderLabels([t("col_title"), t("col_size")])
+        self.table.setRowCount(len(self._output))
+        for r, row in enumerate(self._output):
+            name_item = QTableWidgetItem(str(row["name"]))
+            size_item = QTableWidgetItem(_fmt_size(row["size_bytes"]))
+            size_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            self.table.setItem(r, 0, name_item)
+            self.table.setItem(r, 1, size_item)
+        self.table.resizeColumnsToContents()
+        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+
     def _update_count(self) -> None:
-        self.count_label.setText(self.ctx.t("loaded_count", n=len(self._scan)))
+        if self._view == "output":
+            self.count_label.setText(self.ctx.t("output_count", n=len(self._output)))
+        else:
+            self.count_label.setText(self.ctx.t("loaded_count", n=len(self._scan)))
 
     def _update_banner(self) -> None:
         numbered = self.services.compute_missing()

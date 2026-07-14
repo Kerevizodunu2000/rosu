@@ -18,6 +18,8 @@ STRINGS: dict[str, dict[str, str]] = {
 
     # Dashboard
     "loaded_count": {"en": "Loaded archives: {n}", "tr": "Yüklü arşiv sayısı: {n}"},
+    "output_count": {"en": "Unpacked beatmaps in Output: {n}",
+                     "tr": "Output'taki çıkarılmış müzik: {n}"},
     "btn_extract": {"en": "Unpack Archives", "tr": "Arşivleri Aç"},
     "btn_copy_library": {"en": "Copy to Library", "tr": "Library'e Kopyala"},
     "btn_import_osu": {"en": "Import to osu!", "tr": "osu!'ya Aktar"},

@@ -299,6 +299,18 @@ class Services:
         return {"files": len(files), "batches": batches,
                 "eta_s": osu_import.estimate_seconds(len(files), batches)}
 
+    def output_listing(self) -> list[dict]:
+        """Every .osz currently in Output (name + size). Lets the Dashboard show
+        the unpacked result instead of a blank table once Packs is consumed."""
+        out = []
+        for p in osu_import.output_osz_files(self.cfg.output_path):
+            try:
+                size = p.stat().st_size
+            except OSError:
+                size = 0
+            out.append({"name": p.name, "size_bytes": size})
+        return out
+
     # -- osu! import ---------------------------------------------------------
     def import_osu(self, target: str = "lazer", progress=None) -> dict:
         """Send the Output .osz files to an installed osu! client. ``target`` is
