@@ -66,7 +66,9 @@ class SettingsTab(QWidget):
         self.cb_physical = QCheckBox(); self.cb_physical.setChecked(cfg.library_physical_copy)
         self.cb_clear_before = QCheckBox(); self.cb_clear_before.setChecked(cfg.clear_output_before_extract)
         self.cb_auto_backup = QCheckBox(); self.cb_auto_backup.setChecked(cfg.auto_backup_after_extract)
-        for cb in (self.cb_physical, self.cb_auto_backup, self.cb_clear_before):
+        self.cb_check_updates = QCheckBox(); self.cb_check_updates.setChecked(cfg.check_updates)
+        for cb in (self.cb_physical, self.cb_auto_backup, self.cb_clear_before,
+                   self.cb_check_updates):
             root.addWidget(cb)
 
         zip_row = QHBoxLayout()
@@ -82,7 +84,7 @@ class SettingsTab(QWidget):
         # Toggles apply immediately (like Language/Theme) so a checked box takes
         # effect without also pressing Save — fixes "I enabled Auto-copy but it
         # didn't run" (item 6). Paths still commit via the Save button.
-        for cb in (self.cb_auto_backup, self.cb_clear_before):
+        for cb in (self.cb_auto_backup, self.cb_clear_before, self.cb_check_updates):
             cb.toggled.connect(self._apply_toggles)
         # Turning OFF physical copies deletes files, so it gets a guarded confirm
         # (item 17) instead of the plain live-apply.
@@ -281,6 +283,8 @@ class SettingsTab(QWidget):
         self.cb_physical.setText(t("set_physical_copy"))
         self.cb_auto_backup.setText(t("set_auto_backup"))
         self.cb_clear_before.setText(t("set_clear_output_before"))
+        self.cb_check_updates.setText(t("set_check_updates"))
+        self.cb_check_updates.setToolTip(t("tip_check_updates"))
         self.lbl_zip.setText(t("set_zip_disposal"))
         self.zip.setItemText(0, t("zip_recycle"))
         self.zip.setItemText(1, t("zip_move"))
@@ -552,6 +556,7 @@ class SettingsTab(QWidget):
         cfg.library_physical_copy = self.cb_physical.isChecked()
         cfg.auto_backup_after_extract = self.cb_auto_backup.isChecked()
         cfg.clear_output_before_extract = self.cb_clear_before.isChecked()
+        cfg.check_updates = self.cb_check_updates.isChecked()
         cfg.zip_disposal = self.zip.currentData()
         self.ctx.save_config()
         self.saved_label.setText(self.ctx.t("saved"))

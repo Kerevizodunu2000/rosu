@@ -148,6 +148,11 @@ STRINGS: dict[str, dict[str, str]] = {
                                 "tr": "Her çıkarmadan önce Output'u temizle"},
     "set_clear_output_after": {"en": "Clear Output after importing to osu!",
                                "tr": "osu!'ya aktardıktan sonra Output'u temizle"},
+    "set_check_updates": {"en": "Check for updates on startup",
+                          "tr": "Başlangıçta güncellemeleri denetle"},
+    "update_available": {"en": "Rosu {tag} is available.",
+                         "tr": "Rosu {tag} yayınlandı."},
+    "update_open": {"en": "Download", "tr": "İndir"},
     "set_zip_disposal": {"en": "Processed .zip action", "tr": "İşlenen .zip işlemi"},
     "zip_recycle": {"en": "Move to Recycle Bin", "tr": "Geri Dönüşüm Kutusu'na taşı"},
     "zip_move": {"en": "Move to Processed/", "tr": "Processed/ klasörüne taşı"},
@@ -427,6 +432,9 @@ STRINGS: dict[str, dict[str, str]] = {
               "extraction.",
         "tr": "Çıkarma işleminden hemen sonra yeni müzikleri otomatik olarak "
               "Library'e kopyalar."},
+    "tip_check_updates": {
+        "en": "On startup, quietly check GitHub for a newer Rosu release.",
+        "tr": "Başlangıçta, daha yeni bir Rosu sürümü için GitHub'ı sessizce denetler."},
     "tip_clear_before": {"en": "Empty the Output folder before each new extraction.",
                         "tr": "Her yeni çıkarmadan önce Output klasörünü boşaltır."},
     "tip_update_reference": {

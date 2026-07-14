@@ -2,9 +2,12 @@
 """Main window: a tabbed shell hosting the five feature tabs."""
 from __future__ import annotations
 
-from PySide6.QtWidgets import QMainWindow, QTabWidget
+from PySide6.QtWidgets import (
+    QLabel, QMainWindow, QTabWidget, QVBoxLayout, QWidget,
+)
 
 from .. import __version__, theming
+from ..workers import Worker
 from .artists_tab import ArtistsTab
 from .dashboard_tab import DashboardTab
 from .logs_tab import LogsTab
@@ -24,8 +27,23 @@ class MainWindow(QMainWindow):
         self.app = app
         self.resize(1040, 680)
 
+        # central column: a thin update banner (hidden until relevant) + tabs
+        central = QWidget()
+        col = QVBoxLayout(central)
+        col.setContentsMargins(0, 0, 0, 0)
+        col.setSpacing(0)
+        self.update_banner = QLabel(objectName="banner")
+        self.update_banner.setWordWrap(True)
+        self.update_banner.setOpenExternalLinks(True)
+        self.update_banner.setContentsMargins(12, 6, 12, 6)
+        self.update_banner.setVisible(False)
+        col.addWidget(self.update_banner)
         self.tabs = QTabWidget()
-        self.setCentralWidget(self.tabs)
+        col.addWidget(self.tabs, 1)
+        self.setCentralWidget(central)
+
+        self._threads: list[Worker] = []
+        self._update_info: dict | None = None
 
         self.dashboard = DashboardTab(self)
         self.search = SearchTab(self)
@@ -45,6 +63,37 @@ class MainWindow(QMainWindow):
         self._prev_index = self.tabs.currentIndex()
         self.tabs.currentChanged.connect(self._on_tab_changed)
         self.retranslate()
+        self._maybe_check_updates()
+
+    # -- update check (item E) ----------------------------------------------
+    def _maybe_check_updates(self) -> None:
+        """Best-effort startup check for a newer GitHub release (off-thread)."""
+        if not getattr(self.ctx.cfg, "check_updates", True):
+            return
+        from .. import update_check
+        w = Worker(lambda progress=None: update_check.check(__version__))
+        self._threads.append(w)
+        w.succeeded.connect(self._on_update_checked)
+        w.failed.connect(lambda _msg: None)   # offline / rate-limited: stay silent
+        w.finished.connect(lambda: self._threads.remove(w) if w in self._threads else None)
+        w.start()
+
+    def _on_update_checked(self, res) -> None:
+        if not res or not res.get("newer"):
+            return
+        self._update_info = res
+        self._render_update_banner()
+
+    def _render_update_banner(self) -> None:
+        info = self._update_info
+        if not info:
+            self.update_banner.setVisible(False)
+            return
+        link = self.ctx.t("update_open")
+        self.update_banner.setText(
+            self.ctx.t("update_available", tag=info["tag"])
+            + f"  <a href='{info['url']}'>{link}</a>")
+        self.update_banner.setVisible(True)
 
     # -- shared operations ---------------------------------------------------
     def show_missing_packs(self) -> None:
@@ -68,6 +117,7 @@ class MainWindow(QMainWindow):
             self.tabs.setTabText(i, t(key))
         for tab in self._ordered_tabs:
             tab.retranslate()
+        self._render_update_banner()   # banner text follows the language
 
     def _on_tab_changed(self, index: int) -> None:
         # Guard leaving the Settings tab with unsaved path/API edits (item 11).
@@ -99,8 +149,8 @@ class MainWindow(QMainWindow):
             self.ctx.services.request_cancel()
         except Exception:
             pass
-        for tab in self._ordered_tabs:
-            for w in list(getattr(tab, "_threads", [])):
+        for holder in self._ordered_tabs + [self]:   # include our own update worker
+            for w in list(getattr(holder, "_threads", [])):
                 try:
                     if w.isRunning():
                         w.wait(5000)  # give each worker up to 5s to finish
