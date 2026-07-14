@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QComboBox, QHBoxLayout, QLabel, QSplitter, QVBoxLayout, QWidget,
+    QComboBox, QHBoxLayout, QLabel, QPushButton, QSplitter, QVBoxLayout, QWidget,
 )
 
 from ..i18n import human_duration
@@ -33,6 +33,9 @@ class ArtistsTab(QWidget):
         top.addWidget(self.sort_label)
         top.addWidget(self.sort)
         top.addStretch(1)
+        self.btn_reload = QPushButton(objectName="secondary")
+        self.btn_reload.clicked.connect(self.reload)
+        top.addWidget(self.btn_reload)
         root.addLayout(top)
 
         splitter = QSplitter(Qt.Horizontal)
@@ -65,6 +68,8 @@ class ArtistsTab(QWidget):
     def retranslate(self) -> None:
         t = self.ctx.t
         self.sort_label.setText(t("sort_by"))
+        self.btn_reload.setText(t("btn_reload"))
+        self.btn_reload.setToolTip(t("tip_reload"))
         cur = self.sort.currentIndex()
         self.sort.blockSignals(True)
         self.sort.clear()

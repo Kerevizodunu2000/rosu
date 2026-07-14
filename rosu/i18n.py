@@ -52,6 +52,8 @@ STRINGS: dict[str, dict[str, str]] = {
     # Toasts / results
     "extract_done": {"en": "Extracted {packs} packs, {tracks} tracks.",
                      "tr": "{packs} arşiv, {tracks} müzik çıkarıldı."},
+    "loose_done": {"en": "Moved {n} loose beatmap(s) straight to Output (Direct).",
+                   "tr": "{n} arşivsiz müzik doğrudan Output'a taşındı (Direct)."},
     "library_done": {"en": "{new} added, {dup} duplicates — names saved to memory.",
                      "tr": "{new} eklendi, {dup} kopya ile karşılandı — isimler hafızaya eklendi."},
     "library_all_present": {

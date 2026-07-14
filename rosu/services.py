@@ -120,18 +120,61 @@ class Services:
                 fields["dest"] = str(processed_dir)
             self.log.info(action, **fields)
 
+        # loose .osz dropped straight into Packs need no unpacking — move them to
+        # Output and record with a "Direct" source (fixes "no archive found").
+        loose = self.process_loose_osz()
+        total_tracks += loose
+
         info = self.rebuild()
         duration = int(time.time() - start)
         self.log.info("EXTRACT_DONE", packs=len(approved) - len(rejected),
-                      tracks=total_tracks, rejected=len(rejected),
+                      tracks=total_tracks, rejected=len(rejected), loose=loose,
                       duration_s=duration)
         result = {"packs": len(approved) - len(rejected), "tracks": total_tracks,
-                  "rejected": rejected, **info}
+                  "rejected": rejected, "loose": loose, **info}
 
         if self.cfg.auto_backup_after_extract:
             backup = self.copy_library(progress)
             result["backup"] = backup
         return result
+
+    def has_loose_osz(self) -> bool:
+        """Whether the Packs folder holds loose .osz dropped in directly (no
+        archive to unpack)."""
+        return any(self.cfg.packs_path.glob("*.osz"))
+
+    def process_loose_osz(self, progress=None) -> int:
+        """Move loose .osz dropped straight into Packs into Output and record them
+        with a 'Direct' source (they need no unpacking). Returns the count."""
+        import shutil
+        from .osz_meta import read_osz_meta
+        out = self.cfg.output_path
+        out.mkdir(parents=True, exist_ok=True)
+        when = now_iso()
+        pack_id = None
+        moved = 0
+        for p in sorted(self.cfg.packs_path.glob("*.osz")):
+            t = parsing.parse_osz_entry(p.name, p.stat().st_size)
+            if t is None:
+                continue
+            target = out / t.filename
+            try:
+                if target.exists():
+                    target.unlink()
+                shutil.move(str(p), str(target))   # Packs -> Output (already final)
+            except OSError as exc:
+                self.log.error("loose", str(exc)[:200])
+                continue
+            if pack_id is None:
+                pack_id = self.db.get_or_create_local_pack("Direct")   # Source label
+            track_id, _ = self.db.upsert_track(t, when, read_osz_meta(target))
+            self.db.add_track_source(track_id, pack_id, None, when)
+            moved += 1
+            if progress:
+                progress({"kind": "loose", "name": t.filename})
+        if moved:
+            self.log.info("LOOSE_OSZ", moved=moved)
+        return moved
 
     def _quarantine(self, zip_path: Path) -> Path | None:
         """Move a rejected (unsafe) pack aside so it is never re-scanned or

@@ -128,6 +128,7 @@ class DashboardTab(QWidget):
         self._update_count()
         self._update_banner()
         self._sync_auto_copy()
+        self._sync_import_buttons()
         if not self.status.text():
             self.status.setText(t("ready"))
 
@@ -137,8 +138,17 @@ class DashboardTab(QWidget):
         copies. Called on retranslate and whenever the setting is toggled."""
         self.btn_copy.setVisible(not self.ctx.cfg.auto_backup_after_extract)
 
+    def _sync_import_buttons(self) -> None:
+        """Show an import button only for an osu! client that's actually installed
+        or configured — a user may have only one of lazer / stable."""
+        for btn, target in ((self.btn_import_lazer, "lazer"),
+                            (self.btn_import_stable, "stable")):
+            exe = self._import_exe(target)
+            btn.setVisible(bool(exe and Path(exe).exists()))
+
     def on_shown(self) -> None:
         self.refresh_scan()
+        self._sync_import_buttons()   # a client may have been configured meanwhile
 
     # -- scanning ------------------------------------------------------------
     def refresh_scan(self) -> None:
@@ -273,7 +283,8 @@ class DashboardTab(QWidget):
 
     # -- Unpack Archives -----------------------------------------------------
     def on_extract(self) -> None:
-        if not self._scan:
+        # loose .osz dropped straight into Packs count as work too (moved to Output)
+        if not self._scan and not self.services.has_loose_osz():
             self._handle_empty_packs()
             return
         self._busy_generic("working")
@@ -348,7 +359,7 @@ class DashboardTab(QWidget):
 
     def _after_prescan(self, plans) -> None:
         approved = self._resolve_plans(plans)
-        if not approved:
+        if not approved and not self.services.has_loose_osz():
             self._idle()
             self.status.setText(self.ctx.t("done"))
             self.refresh_scan()
@@ -399,6 +410,8 @@ class DashboardTab(QWidget):
     def _after_extract(self, result) -> None:
         self._idle()
         msg = self.ctx.t("extract_done", packs=result["packs"], tracks=result["tracks"])
+        if result.get("loose"):
+            msg += "  " + self.ctx.t("loose_done", n=result["loose"])
         if "backup" in result:
             b = result["backup"]
             msg += "  " + self.ctx.t("library_done", new=b["new"], dup=b["duplicates"])

@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from PySide6.QtGui import QBrush, QColor
 from PySide6.QtWidgets import (
-    QCheckBox, QComboBox, QHBoxLayout, QLabel, QLineEdit, QVBoxLayout, QWidget,
+    QCheckBox, QComboBox, QHBoxLayout, QLabel, QLineEdit, QPushButton, QVBoxLayout,
+    QWidget,
 )
 
 from ..gaps import _present_row
@@ -40,6 +41,9 @@ class PacksTab(QWidget):
         top.addWidget(self.cb_missing)
         top.addWidget(self.cb_extra)
         top.addWidget(self.filter)
+        self.btn_reload = QPushButton(objectName="secondary")
+        self.btn_reload.clicked.connect(self.reload)
+        top.addWidget(self.btn_reload)
         root.addLayout(top)
         wheel_guard.guard(self.filter)   # no accidental change on scroll (item 16)
 
@@ -53,6 +57,8 @@ class PacksTab(QWidget):
 
     def retranslate(self) -> None:
         self.search.setPlaceholderText(self.ctx.t("packs_search_placeholder"))
+        self.btn_reload.setText(self.ctx.t("btn_reload"))
+        self.btn_reload.setToolTip(self.ctx.t("tip_reload"))
         self.cb_missing.setText(self.ctx.t("only_missing"))
         self.cb_extra.setText(self.ctx.t("only_extra"))
         self.hint.setText(self.ctx.t("copy_hint"))
