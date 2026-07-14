@@ -18,7 +18,7 @@ from pathlib import Path
 
 from .models import ParsedPack, ParsedTrack
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta (
@@ -64,6 +64,8 @@ CREATE TABLE IF NOT EXISTS tracks (
     size_bytes        INTEGER DEFAULT 0,
     in_drive          INTEGER DEFAULT 0,
     in_osu            INTEGER DEFAULT 0,
+    in_osu_stable     INTEGER DEFAULT 0,
+    in_osu_lazer      INTEGER DEFAULT 0,
     drive_chunk       TEXT,
     drive_hash        TEXT,
     availability      TEXT
@@ -95,6 +97,7 @@ _MIGRATIONS = {
         "creator": "TEXT", "source": "TEXT", "tags": "TEXT", "bpm": "REAL",
         "length_seconds": "INTEGER", "mode": "TEXT", "diff_count": "INTEGER DEFAULT 0",
         "in_drive": "INTEGER DEFAULT 0", "in_osu": "INTEGER DEFAULT 0",
+        "in_osu_stable": "INTEGER DEFAULT 0", "in_osu_lazer": "INTEGER DEFAULT 0",
         "drive_chunk": "TEXT", "drive_hash": "TEXT",
         "availability": "TEXT",  # NULL/'unknown'/'available'/'gone' (item F, v1.0)
     },
@@ -405,13 +408,23 @@ class Database:
                 (1 if in_drive else 0, chunk, drive_hash, track_id))
             self._conn.commit()
 
-    def set_in_osu(self, beatmapset_id: int, in_osu: bool = True) -> None:
-        """Flag a beatmapset as sent to an osu! client (the 🎮 marker in Search)."""
+    def set_in_osu(self, beatmapset_id: int, in_osu: bool = True,
+                   client: str | None = None) -> None:
+        """Flag a beatmapset as present in an osu! client (the Search 'Where'
+        markers). ``client`` is ``"stable"`` / ``"lazer"`` / ``None`` — the
+        per-client column is set in addition to the legacy ``in_osu`` flag."""
         if beatmapset_id is None:
             return
+        cols = ["in_osu=?"]
+        vals: list = [1 if in_osu else 0]
+        if client == "stable":
+            cols.append("in_osu_stable=?"); vals.append(1 if in_osu else 0)
+        elif client == "lazer":
+            cols.append("in_osu_lazer=?"); vals.append(1 if in_osu else 0)
+        vals.append(beatmapset_id)
         with self._lock:
-            self._conn.execute("UPDATE tracks SET in_osu=? WHERE beatmapset_id=?",
-                               (1 if in_osu else 0, beatmapset_id))
+            self._conn.execute(
+                f"UPDATE tracks SET {', '.join(cols)} WHERE beatmapset_id=?", vals)
             self._conn.commit()
 
     def set_availability(self, beatmapset_id: int, status: str) -> None:

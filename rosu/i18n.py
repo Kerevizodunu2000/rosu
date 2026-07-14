@@ -356,6 +356,9 @@ STRINGS: dict[str, dict[str, str]] = {
 
     # Google Drive backup (item 11, v0.8)
     "col_location": {"en": "Where", "tr": "Konum"},
+    "where_legend": {
+        "en": "🎮 osu!lazer   🕹️ osu!(stable)   💾 Library   ☁️ Drive backup",
+        "tr": "🎮 osu!lazer   🕹️ osu!(stable)   💾 Library   ☁️ Drive yedeği"},
     "btn_about": {"en": "About / Licenses", "tr": "Hakkında / Lisanslar"},
     "tip_about": {"en": "App version, license, and third-party notices.",
                   "tr": "Uygulama sürümü, lisansı ve üçüncü taraf bildirimleri."},

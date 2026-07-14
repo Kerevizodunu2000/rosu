@@ -110,5 +110,19 @@ def test_import_from_osu_client_marks_in_osu(tmp_path):
     (cfg.output_path / "321 X - Y.osz").write_bytes(b"osz")
     library.copy_to_library(cfg.output_path, cfg.library_path, db, "when",
                             physical_copy=True, source_label="local_osu_lazer")
-    assert db.find_track_row(321, "")["in_osu"] == 1
+    row = db.find_track_row(321, "")
+    assert row["in_osu"] == 1 and row["in_osu_lazer"] == 1 and row["in_osu_stable"] == 0
+    db.close()
+
+
+def test_import_from_stable_marks_stable(tmp_path):
+    cfg = config.Config(root=str(tmp_path))
+    cfg = config._fill_defaults(cfg)
+    cfg.ensure_dirs()
+    db = Database(cfg.db_path)
+    (cfg.output_path / "654 P - Q.osz").write_bytes(b"osz")
+    library.copy_to_library(cfg.output_path, cfg.library_path, db, "when",
+                            physical_copy=True, source_label="local_osu_stable")
+    row = db.find_track_row(654, "")
+    assert row["in_osu_stable"] == 1 and row["in_osu_lazer"] == 0
     db.close()

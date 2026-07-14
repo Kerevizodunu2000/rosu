@@ -54,7 +54,11 @@ def test_set_in_osu_flag(tmp_path):
     t = ParsedTrack(beatmapset_id=999, filename="999 A - B.osz", artist="A",
                     title="B", display_name="A - B", size_bytes=1)
     db.upsert_track(t, "when")
-    db.set_in_osu(999)
-    assert db.find_track_row(999, "")["in_osu"] == 1
+    db.set_in_osu(999, client="lazer")
+    row = db.find_track_row(999, "")
+    assert row["in_osu"] == 1 and row["in_osu_lazer"] == 1 and row["in_osu_stable"] == 0
+    db.set_in_osu(999, client="stable")
+    row = db.find_track_row(999, "")
+    assert row["in_osu_stable"] == 1 and row["in_osu_lazer"] == 1   # both now
     db.set_in_osu(None)            # guarded no-op, must not raise
     db.close()

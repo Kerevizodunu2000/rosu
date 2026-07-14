@@ -368,7 +368,7 @@ class Services:
         for f in files[:sent]:
             t = parsing.parse_osz_entry(f.name, 0)
             if t is not None and t.beatmapset_id is not None:
-                self.db.set_in_osu(t.beatmapset_id)
+                self.db.set_in_osu(t.beatmapset_id, client=target)
         if sent:
             self.db._bump()   # let Search/Artists see the new 🎮 flags on reload
         self.log.info("OSU_IMPORT_DONE", target=target, files=res["files"],

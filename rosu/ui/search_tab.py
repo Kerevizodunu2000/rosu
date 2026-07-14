@@ -125,12 +125,18 @@ class SearchTab(QWidget):
                 attempts = row.get("copy_attempts", 0)
                 bid = row.get("beatmapset_id")
                 loc_marks = []
-                if row.get("in_osu"):
-                    loc_marks.append("🎮")
+                in_lazer = row.get("in_osu_lazer")
+                in_stable = row.get("in_osu_stable")
+                if in_lazer:
+                    loc_marks.append("🎮")           # osu!lazer
+                if in_stable:
+                    loc_marks.append("🕹️")           # osu!(stable)
+                if not in_lazer and not in_stable and row.get("in_osu"):
+                    loc_marks.append("🎮")           # legacy flag, client unknown
                 if row.get("in_library"):
-                    loc_marks.append("💾")
+                    loc_marks.append("💾")           # Library
                 if row.get("in_drive"):
-                    loc_marks.append("☁️")
+                    loc_marks.append("☁️")           # Drive backup
                 loc_weight = ((4 if row.get("in_osu") else 0)
                               + (2 if row.get("in_library") else 0)
                               + (1 if row.get("in_drive") else 0))
@@ -155,6 +161,8 @@ class SearchTab(QWidget):
                     item = SortItem(text, sort_val)
                     if c in (0, 1) and text:
                         item.setToolTip(text)      # full name/artist on hover (item 15)
+                    if c == 11:
+                        item.setToolTip(self.ctx.t("where_legend"))  # explain the icons
                     if c in (2, 3, 4, 9):
                         item.setTextAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
                     self.table.setItem(r, c, item)
