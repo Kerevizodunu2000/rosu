@@ -42,9 +42,12 @@ a = Analysis(
     pathex=[],
     binaries=[],
     datas=_datas,
-    hiddenimports=['send2trash', 'send2trash.plat_win', 'rapidfuzz',
-                   'py7zr', 'pyppmd', 'pybcj', 'brotli', 'inflate64',
-                   'multivolumefile', 'texttable', 'Cryptodome'] + _drive_hidden,
+    # send2trash: collect ALL submodules — recent versions moved the Windows
+    # backend to send2trash.win.modern / .win.legacy (the old flat plat_win is
+    # gone), and __init__ picks one at runtime, so a hardcoded name is fragile.
+    hiddenimports=['rapidfuzz', 'py7zr', 'pyppmd', 'pybcj', 'brotli',
+                   'inflate64', 'multivolumefile', 'texttable', 'Cryptodome']
+                  + collect_submodules('send2trash') + _drive_hidden,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

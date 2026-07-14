@@ -1,3 +1,6 @@
 -r requirements.txt
 pytest>=8.0
 pyinstaller>=6.0
+# Only for regenerating the app icon/splash via `python -m rosu.assets.make_icon`
+# (rosu/assets/icon_lab.py). Not needed to run, test, or build the app.
+Pillow>=10.0

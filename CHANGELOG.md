@@ -10,20 +10,28 @@ the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-## [1.0.0] - 2026-07-14
+## [1.0.0] - 2026-07-15
 
 First public release. Rounds Rosu out into a safe, legal, presentable app: it
-now imports to either osu! client, never shows a broken/empty screen, hardens
-archive handling, and can flag maps that no longer exist on osu!.
+imports to either osu! client, never shows a broken/empty screen, hardens archive
+handling, tracks where every map lives (osu! · Library · Drive), and can flag maps
+that no longer exist on osu!. Hardened through extended live testing on a real
+~1400-track library.
 
 ### Added
 - **Import to both osu! clients.** The single "Import to osu!" button is now two
   explicit targets — **Import → osu!lazer** and **Import → osu!(stable)** — each
-  enabled/validated against its own configured executable (auto-detected on first
-  run). Settings gained a second path picker for the osu!(stable) executable.
+  enabled/validated against its own configured executable (both auto-detected on
+  first run). Settings gained a second path picker for the osu!(stable) executable,
+  and the Dashboard hides the button for whichever client isn't installed.
 - **Dashboard Output view.** After unpacking (when `Packs/` is consumed) the
   Dashboard now lists the unpacked beatmaps in `Output/` with a count, instead of
   going blank.
+- **Where a map lives** — location markers across the Search table: 🎮 osu!lazer ·
+  🕹️ osu!(stable) · 💾 Library · ☁️ Drive, with a legend tooltip. New per-client
+  tracking columns (`in_osu_stable` / `in_osu_lazer`) are set both when you import
+  to a client and when you pull already-installed songs. Library rows that are
+  backed up show **which Drive chunk** holds them.
 - **In-app About / Licenses** (Settings → About / Licenses): app version, the
   GPL-3.0 summary with a no-warranty + osu!/ppy non-affiliation notice, and the
   full bundled third-party license notices.
@@ -31,10 +39,22 @@ archive handling, and can flag maps that no longer exist on osu!.
   maps" action flags owned beatmapsets that no longer exist on osu! (deleted /
   taken down) — Rosu is the only pack-level archiver that can tell you what's
   already unrecoverable.
+- **Loose `.osz` handling.** Dropping raw `.osz` files straight into `Packs/`
+  (with no archive to unpack) now moves them into `Output/` tagged with a **Direct**
+  source, instead of the old dead-end "no archives found" message.
+- **Backup options dialog.** "Back up to Drive" now opens a dialog with a preview
+  of the new-set count and total size, a "back up only N sets this run" limit, and
+  a selectable chunk size — including an **Individual (one file per set)** mode.
+- **Upload to Drive & remove** — a fourth "processed `.zip` action" (shown only
+  while Drive is connected): after unpacking, the original archive is uploaded to
+  your Drive `Packs/` folder and removed locally to reclaim disk, with a safe
+  fallback to the `Processed/` folder if Drive is momentarily unavailable.
+- **Remove already-known** button on the Dashboard: recycle/delete the `Output/`
+  `.osz` that are already in your Library, in one action.
 - **Startup update check** against GitHub Releases with a non-intrusive banner and
   one-click download; toggle in Settings (on by default, fails silently offline).
-- **Search "Refresh" button** to re-pull the list from your library on demand
-  (imports already refresh it live; this is a manual trigger).
+- **Refresh button** on Search, Artists, and Packs to re-pull the list on demand
+  (imports already refresh live; this is a manual trigger).
 - **Release integrity:** each release `.exe` is now published with a matching
   SHA-256 checksum.
 
@@ -43,11 +63,46 @@ archive handling, and can flag maps that no longer exist on osu!.
   format (zip / tar / 7z) up front — combined uncompressed-size ceiling,
   entry-count cap, decompression-ratio cap, and path-traversal / absolute /
   drive-relative member-name rejection — before anything is written to disk.
+- **Output is preserved after importing.** Both clients now consume *staged copies*
+  of the `.osz`, so `Output/` survives an import to either osu!lazer or osu!(stable)
+  (previously importing to lazer emptied it).
+- **Google Drive polish.** Upload blocks raised to 32 MiB; the browser consent page
+  is a branded, theme-aware page that **auto-closes and returns to Rosu**; the
+  window refocuses after a successful connect; disconnect now asks for confirmation
+  and shows a toast; the "Individual" upload mode uploads each set under its own
+  `.osz` name instead of a chunk archive.
+- **Import from osu!lazer** now shows a busy/progress indicator instead of a frozen
+  window while the .NET helper re-exports beatmaps.
+- **Search table layout.** The Name column shows the **title only** (the artist has
+  its own column and the Artists tab) while a copy still yields the full clean name;
+  numeric columns are centered and text columns left-aligned; column widths are
+  capped so a row fits without horizontal scrolling.
+- **Wider default window** (1280×760) so the tables breathe.
 - **Third-party notices** now list every component actually bundled in the exe
   (keyring + its backend, py7zr's codec dependencies, the embedded .NET runtime).
 - **Dashboard Copy to Library** is hidden when "Auto-copy to Library after
   unpacking" is enabled (it's redundant then), and a manual copy where everything
   is already in the Library now says so plainly instead of a bare "0 added".
+- **Quit/leave guard.** Closing the window or leaving Settings while an operation is
+  running now warns before interrupting it.
+- **Brand consistency:** the app identifies itself as **Rosu** everywhere (window,
+  splash, Excel report header), dropping the old internal "osu! Archive Manager"
+  string.
+
+### Fixed
+- **osu!(stable) "Error moving file" on import.** Root cause: osu!(stable) imports
+  only **one `.osz` per client launch** (unlike osu!lazer, which takes many). Rosu
+  now hands stable one file per launch — verified 30/30 importing cleanly with
+  `Output/` preserved. (An earlier cross-drive-staging theory was wrong; this was
+  the real cause.)
+- **Crash when importing from an installed client** — a legacy `NOT NULL`
+  constraint on the `packs` table rejected the synthetic source pack; the table is
+  now migrated to drop it.
+- **"0 added, N already had"** maps now correctly show their osu! location in the
+  **Where** column (they were left blank).
+- **Prompt cancel.** Cancelling a Drive backup or a lost-map scan now stops
+  promptly via dedicated cancel tokens, and cancel is honoured *during* a rate-limit
+  retry-backoff rather than only between calls.
 
 ### Security
 - **Hostile archives are refused and quarantined.** A zip-bomb (by total size,

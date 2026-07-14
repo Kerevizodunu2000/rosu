@@ -1,43 +1,106 @@
-# Working data folders (never commit the user's music/archives)
+# =============================================================================
+#  Rosu — .gitignore
+#  The repo is PUBLIC. Nothing here should ever contain a secret, an API key,
+#  an OAuth client, a refresh token, or a user's private beatmap library.
+# =============================================================================
+
+# --- Secrets & credentials (NEVER commit) ------------------------------------
+# config.json holds the osu! API client_id/secret in plaintext beside the exe.
+config.json
+config.*.json
+# OAuth client (client_id/secret) for Google Drive backup. CI writes this from
+# the ROSU_OAUTH_CLIENT_JSON repo secret at build time; it is never committed.
+# (The refresh token is NOT a file — it lives in the OS keyring.)
+rosu/drive/oauth_client.json
+oauth_client.json
+client_secret*.json
+# Generic secret/credential files
+.env
+.env.*
+*.env
+secrets.*
+*.secret
+*.secrets
+credentials.json
+token.json
+*.pem
+*.key
+*.p12
+*.pfx
+
+# --- User working-data folders (the user's music/archives — never commit) ----
 /Packs/
 /Output/
 /Library/
 /Processed/
+/Quarantine/
 /data/
 /logs/
-config.json
 
-# OAuth client (client_id/secret) for the Drive backup — embedded into the
-# release exe via a CI secret, never committed. Local dev copies the JSON
-# Google hands out to rosu/drive/oauth_client.json.
-rosu/drive/oauth_client.json
-
-# Python
+# --- Python ------------------------------------------------------------------
 __pycache__/
 *.py[cod]
+*$py.class
+*.egg
+*.egg-info/
+.eggs/
 .venv/
 venv/
-.pytest_cache/
+env/
+ENV/
+.python-version
 
-# PyInstaller build output
+# --- Test / lint / type-check caches -----------------------------------------
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.dmypy.json
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+.tox/
+.cache/
+
+# --- PyInstaller build output ------------------------------------------------
 /build/
 /dist/
+*.manifest
 *.spec.bak
 
-# Built executable (~94MB; distributed via GitHub Releases, not the repo)
+# --- Built executables (~90 MB; distributed via GitHub Releases, not the repo)
 /rosu.exe
 /osu-archiver.exe
 *.exe
-# ...but DO keep the bundled lazer-export helper (a build input for rosu.exe)
+# ...but DO keep the bundled lazer-export helper (a build input for rosu.exe).
 !rosu/assets/lazer_export/RosuLazerExport.exe
 
-# .NET build output for the lazer helper
+# --- .NET build output for the bundled lazer helper --------------------------
 tools/RosuLazerExport/bin/
 tools/RosuLazerExport/obj/
 tools/RosuLazerExport/FodyWeavers.xml
 
-# Internal design docs, specs, icon-design galleries, and handoff notes —
-# not for the public repo (they also contain local absolute paths).
+# --- IDE / editor -------------------------------------------------------------
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+*.swp
+*.swo
+*~
+
+# --- OS cruft -----------------------------------------------------------------
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# --- Internal, local-only docs & notes (not for the public repo; they also ---
+#     contain local absolute paths and internal planning). --------------------
 HANDOFF.md
 CLAUDE.md
 docs/

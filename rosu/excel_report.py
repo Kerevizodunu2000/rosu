@@ -79,7 +79,7 @@ def _artists_sheet(wb, db):
 def _summary_sheet(wb, db, numbered_missing):
     ws = wb.create_sheet(title="Summary")
     counts = db.counts()
-    ws["A1"] = "osu! Archive Manager — Summary"
+    ws["A1"] = "Rosu — Summary"
     ws["A1"].font = Font(bold=True, size=14)
     ws["A3"], ws["B3"] = "Packs", counts["packs"]
     ws["A4"], ws["B4"] = "Tracks", counts["tracks"]

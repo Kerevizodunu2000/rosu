@@ -11,4 +11,4 @@ translated (see i18n.py).
 """
 
 __version__ = "1.0.0"
-__app_name__ = "osu! Archive Manager"
+__app_name__ = "Rosu"

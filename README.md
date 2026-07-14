@@ -9,7 +9,7 @@
 ![Python](https://img.shields.io/badge/python-3.13-3776AB?logo=python&logoColor=white)
 ![Built with PySide6](https://img.shields.io/badge/built%20with-PySide6-41CD52?logo=qt&logoColor=white)
 
-Rosu bulk-extracts `.zip`/`.7z`/`.tar` beatmap packs into a deduplicated `.osz` library, tracks everything in a local SQLite database, flags real gaps in numbered pack series in an Excel report, and imports the results into osu! with one click — or pulls beatmaps you've already installed straight into that library.
+Rosu bulk-extracts `.zip`/`.7z`/`.tar` beatmap packs into a deduplicated `.osz` library, tracks everything — including **where each map lives** (osu!, your Library, the cloud) — in a local SQLite database, flags real gaps in numbered pack series in an Excel report, and imports the results into **either osu! client** with one click. It can also pull beatmaps you've already installed straight into the library, **back the whole library up to your Google Drive**, and flag maps that no longer exist on osu!.
 
 > **Note:** background logic, code, and logs are English by design. Only the user-facing UI is localized (English/Turkish, switchable in Settings).
 
@@ -44,6 +44,15 @@ Rosu bulk-extracts `.zip`/`.7z`/`.tar` beatmap packs into a deduplicated `.osz` 
 - **Import already-installed songs** (Settings): pulls beatmaps straight from an existing **osu!(stable)** `Songs/` folder or an **osu!lazer** install (via a bundled, self-contained .NET 8 helper that reads `client.realm` read-only — no .NET install required) and dedupes them into the Library.
 - **Refresh Library Data** rescans `Library/`, backfills metadata, and timestamps files that have disappeared instead of silently dropping them.
 
+**Cloud backup (Google Drive)**
+- **Back up your Library to Google Drive** — log in once (loopback OAuth + PKCE, the minimal `drive.file` scope so Rosu only ever sees the files it creates). New `.osz` are uploaded incrementally as fixed-size, append-only chunk archives; re-running uploads only what's new. A pre-backup dialog previews the new-set count and total size and lets you cap how many sets to send this run and pick the chunk size — including an **Individual (one file per set)** mode.
+- **Location tracking** — Rosu records which Drive chunk holds each backed-up set, and the Search table shows where every map lives: 🎮 osu!lazer · 🕹️ osu!(stable) · 💾 Library · ☁️ Drive.
+- Optionally, a processed pack archive can be **uploaded to Drive and removed locally** right after unpacking, to reclaim disk space.
+- The OAuth refresh token is stored in the **OS keyring** (Windows Credential Manager), never in `config.json`.
+
+**Know what's gone**
+- **Lost-map detection** (optional; needs osu! API credentials): flags owned beatmapsets that no longer exist on osu! — deleted or taken down — so you know what's already unrecoverable. Rosu is the only pack-level archiver that surfaces this.
+
 **Search, metadata & reporting**
 - Relevance-ranked **Music Search** (exact > prefix > word > substring, with a fuzzy tiebreak) and a browsable **Artists** tab with sortable aggregates (avg. length, avg. BPM).
 - Rich per-track metadata parsed from each `.osz`'s `.osu` files: BPM, length, mapper/creator, mode, source, tags, difficulty count. Malformed names fall back to "Unknown" without breaking the import.
@@ -60,6 +69,7 @@ Rosu bulk-extracts `.zip`/`.7z`/`.tar` beatmap packs into a deduplicated `.osz` 
 - 12 built-in themes (see [Themes](#themes)); toggles in Settings apply immediately, no save step.
 - Mouse-wheel guard on dropdowns so scrolling never silently changes a value.
 - English/Turkish UI switch.
+- Optional startup **update check** against GitHub Releases with a one-click download banner (on by default, fails silently offline).
 
 ## Screenshots
 
@@ -116,9 +126,11 @@ Dark *(default)*, White, Pink, Pink · Light, Pink · Dark, Pink · Darker, Nord
 Packs/        Incoming .zip/.7z/.tar pack archives (input)
 Output/       Extracted, flattened .osz files (current batch) — staged for import to osu!
 Library/      Permanent, deduplicated .osz backup
-data/         memory.db (SQLite — single source of truth) + tracking.xlsx
+Processed/    Archives moved aside after unpacking (when that disposal mode is chosen)
+Quarantine/   Rejected hostile archives (zip-bomb / path-traversal), never auto-deleted
+data/         memory.db (SQLite — single source of truth) + tracking.xlsx + Drive cache
 logs/         app-YYYY-MM-DD.log + log_formats.md
-config.json   Application settings
+config.json   Application settings (osu! API key kept here; Drive token in the OS keyring)
 ```
 
 ## Run from source
@@ -146,10 +158,13 @@ python -m pytest tests/ -q
 
 ## Roadmap
 
-- **v0.8**: Google Drive sync for the Library.
-- **macOS support**: same Python codebase, packaged as a `.app`/`.dmg` via PyInstaller's macOS runner.
-- Additional UI languages and themes.
-- Extra pack series are already auto-supported by the gap-detection logic (ST/SC/T/L/P/A and beyond) as they appear.
+Rosu 1.0 is the first public release. Beyond it, the focus is:
+
+- **Deeper library tooling** — richer per-map metadata (star rating / ranked status / dates) from the osu! API, partial-pack detection, and collection management.
+- **Cross-platform** — macOS and Linux from the same Python codebase, packaged via PyInstaller.
+- **More UI languages and themes.**
+
+Extra numbered pack series (ST/SC/T/L/P/A and beyond) are already auto-supported by the gap-detection logic as they appear.
 
 See [`CHANGELOG.md`](CHANGELOG.md) for the full, version-by-version history.
 
