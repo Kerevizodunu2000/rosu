@@ -125,6 +125,20 @@ class SettingsTab(QWidget):
         imp_row.addWidget(self.lbl_import_status, 1)
         root.addLayout(imp_row)
 
+        # Google Drive backup (item 11)
+        self.lbl_drive = QLabel(objectName="h1")
+        root.addWidget(self.lbl_drive)
+        self.lbl_drive_help = QLabel(objectName="status")
+        self.lbl_drive_help.setWordWrap(True)
+        root.addWidget(self.lbl_drive_help)
+        drive_row = QHBoxLayout()
+        self.btn_drive = QPushButton(objectName="secondary")
+        self.btn_drive.clicked.connect(self._toggle_drive)
+        self.lbl_drive_status = QLabel(objectName="status")
+        drive_row.addWidget(self.btn_drive)
+        drive_row.addWidget(self.lbl_drive_status, 1)
+        root.addLayout(drive_row)
+
         root.addStretch(1)
         bottom = QHBoxLayout()
         self.saved_label = QLabel(objectName="status")
@@ -192,8 +206,11 @@ class SettingsTab(QWidget):
         self.lbl_import_help.setText(t("set_import_help"))
         self.btn_import_stable.setText(t("btn_import_stable"))
         self.btn_import_lazer.setText(t("btn_import_lazer"))
+        self.lbl_drive.setText(t("set_drive"))
+        self.lbl_drive_help.setText(t("set_drive_help"))
         self.btn_save.setText(t("btn_save"))
         self._refresh_reference_status()
+        self._refresh_drive_status()
 
     def _refresh_reference_status(self) -> None:
         from .. import osu_api
@@ -203,6 +220,52 @@ class SettingsTab(QWidget):
                 "reference_status", n=ref.get("count", 0), when=ref.get("fetched_at", "")))
         else:
             self.lbl_ref_status.setText(self.ctx.t("reference_none"))
+
+    # -- Google Drive (item 11) ---------------------------------------------
+    def _refresh_drive_status(self) -> None:
+        t = self.ctx.t
+        st = self.ctx.services.drive_status()
+        if not st["configured"]:
+            self.btn_drive.setEnabled(False)
+            self.btn_drive.setText(t("btn_drive_connect"))
+            self.lbl_drive_status.setText(t("drive_not_configured"))
+            return
+        self.btn_drive.setEnabled(True)
+        if st["connected"]:
+            self.btn_drive.setText(t("btn_drive_disconnect"))
+            self.lbl_drive_status.setText(t("drive_connected"))
+        else:
+            self.btn_drive.setText(t("btn_drive_connect"))
+            self.lbl_drive_status.setText(t("drive_disconnected"))
+
+    def _toggle_drive(self) -> None:
+        t = self.ctx.t
+        if self.ctx.services.drive_status()["connected"]:
+            self.ctx.services.disconnect_drive()
+            self._refresh_drive_status()
+            return
+        self.btn_drive.setEnabled(False)
+        self.lbl_drive_status.setText(t("drive_connecting"))
+        w = Worker(lambda progress=None: self.ctx.services.connect_drive(progress))
+        self._threads.append(w)
+        w.succeeded.connect(self._drive_connected)
+        w.failed.connect(self._drive_failed)
+        w.finished.connect(lambda: self._threads.remove(w) if w in self._threads else None)
+        w.start()
+
+    def _drive_connected(self, res) -> None:
+        self._refresh_drive_status()
+        if res.get("error"):
+            if res["error"] == "not_configured":
+                self.lbl_drive_status.setText(self.ctx.t("drive_not_configured"))
+            elif res.get("detail"):
+                self.lbl_drive_status.setText(res["detail"])
+            else:
+                self.lbl_drive_status.setText(self.ctx.t("drive_login_failed"))
+
+    def _drive_failed(self, msg) -> None:
+        self._refresh_drive_status()
+        QMessageBox.critical(self, self.ctx.t("app_title"), msg)
 
     # -- live apply ----------------------------------------------------------
     def _apply_language(self) -> None:

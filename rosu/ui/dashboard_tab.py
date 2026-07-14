@@ -49,9 +49,11 @@ class DashboardTab(QWidget):
         self.btn_copy = QPushButton()
         self.btn_import = QPushButton()
         self.btn_refresh = QPushButton()
-        for b in (self.btn_copy, self.btn_import, self.btn_refresh):
+        self.btn_backup = QPushButton()
+        for b in (self.btn_copy, self.btn_import, self.btn_refresh, self.btn_backup):
             b.setObjectName("secondary")
-        for b in (self.btn_extract, self.btn_copy, self.btn_import, self.btn_refresh):
+        for b in (self.btn_extract, self.btn_copy, self.btn_import,
+                  self.btn_refresh, self.btn_backup):
             btn_row.addWidget(b)
         btn_row.addStretch(1)
         self.btn_rescan = QPushButton(objectName="secondary")
@@ -62,6 +64,7 @@ class DashboardTab(QWidget):
         self.btn_copy.clicked.connect(self.on_copy)
         self.btn_import.clicked.connect(self.on_import)
         self.btn_refresh.clicked.connect(self.on_refresh)
+        self.btn_backup.clicked.connect(self.on_backup)
         self.btn_rescan.clicked.connect(self.refresh_scan)
 
         self.table = QTableWidget(0, 5)
@@ -97,6 +100,7 @@ class DashboardTab(QWidget):
         self.btn_copy.setText(t("btn_copy_library"))
         self.btn_import.setText(t("btn_import_osu"))
         self.btn_refresh.setText(t("btn_refresh"))
+        self.btn_backup.setText(t("btn_backup_drive"))
         self.btn_rescan.setText(t("btn_rescan"))
         self.btn_cancel.setText(t("btn_cancel"))
         self.table.setHorizontalHeaderLabels([
@@ -154,7 +158,7 @@ class DashboardTab(QWidget):
     # -- busy state ----------------------------------------------------------
     def _lock(self, locked: bool) -> None:
         for b in (self.btn_extract, self.btn_copy, self.btn_import,
-                  self.btn_refresh, self.btn_rescan):
+                  self.btn_refresh, self.btn_backup, self.btn_rescan):
             b.setEnabled(not locked)
 
     def _busy_generic(self, status_key: str) -> None:
@@ -187,6 +191,9 @@ class DashboardTab(QWidget):
             elif msg.get("kind") == "import":
                 self.status.setText(self.ctx.t(
                     "import_dispatching", batch=msg["batch"], total=msg["total"]))
+            elif msg.get("kind") == "backup":
+                self.progress_panel.update_progress(
+                    msg["done"], msg["total"], msg.get("name", ""), "")
         else:
             self.status.setText(str(msg))
 
@@ -362,3 +369,39 @@ class DashboardTab(QWidget):
                                        disappeared=res["disappeared"],
                                        present=res["present"]))
         self._update_banner()
+
+    # -- Back up to Google Drive (item 11) -----------------------------------
+    def on_backup(self) -> None:
+        t = self.ctx.t
+        st = self.services.drive_status()
+        if not st["configured"]:
+            QMessageBox.information(self, t("app_title"), t("drive_not_configured"))
+            return
+        if not st["connected"]:
+            QMessageBox.information(self, t("app_title"), t("drive_connect_first"))
+            return
+        self._lock(True)
+        self.busy_bar.setVisible(False)
+        self.progress_panel.start()
+        self.status.setText(t("drive_backing_up"))
+        self.btn_cancel.setEnabled(True)
+        self.btn_cancel.setVisible(True)
+        self._start_worker(self.services.backup_to_drive, on_success=self._after_backup)
+
+    def _after_backup(self, res) -> None:
+        self._idle()
+        t = self.ctx.t
+        if res.get("error") == "not_connected":
+            self.status.setText(t("drive_connect_first"))
+            return
+        if res.get("error"):
+            self.status.setText(t("drive_backup_failed"))
+            QMessageBox.critical(self, t("app_title"),
+                                 res.get("detail") or t("drive_backup_failed"))
+            return
+        if res.get("cancelled"):
+            self.status.setText(t("drive_backup_cancelled", uploaded=res["uploaded"],
+                                    chunks=res["chunks"]))
+            return
+        self.status.setText(t("drive_backup_done", uploaded=res["uploaded"],
+                                chunks=res["chunks"]))

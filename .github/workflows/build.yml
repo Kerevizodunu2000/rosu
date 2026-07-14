@@ -22,6 +22,17 @@ jobs:
         run: pip install -r requirements-dev.txt
       - name: Run tests
         run: python -m pytest tests/ -q
+      - name: Embed OAuth client for Drive (from secret, if present)
+        shell: bash
+        env:
+          ROSU_OAUTH_CLIENT_JSON: ${{ secrets.ROSU_OAUTH_CLIENT_JSON }}
+        run: |
+          if [ -n "$ROSU_OAUTH_CLIENT_JSON" ]; then
+            printf '%s' "$ROSU_OAUTH_CLIENT_JSON" > rosu/drive/oauth_client.json
+            echo "Embedded OAuth client ($(wc -c < rosu/drive/oauth_client.json) bytes)."
+          else
+            echo "No ROSU_OAUTH_CLIENT_JSON secret — building without an embedded Drive client."
+          fi
       - name: Build single .exe
         run: pyinstaller rosu.spec
       - name: Smoke-test the frozen build

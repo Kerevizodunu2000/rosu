@@ -78,3 +78,40 @@ def test_artists_ranked_nulls_sort_last(tmp_path):
     # ascending by avg_length: the artist with data comes first, NULL last
     assert [a["artist"] for a in db.artists_ranked("avg_length", False)] == ["HasLen", "NoLen"]
     db.close()
+
+
+def test_migration_adds_drive_columns(tmp_path):
+    """A pre-v0.8 database gains the Drive columns on open, keeping its rows."""
+    import sqlite3
+    p = tmp_path / "old.db"
+    conn = sqlite3.connect(p)
+    conn.executescript(
+        """CREATE TABLE tracks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            beatmapset_id INTEGER UNIQUE, filename TEXT, artist TEXT, title TEXT,
+            display_name TEXT, creator TEXT, source TEXT, tags TEXT, bpm REAL,
+            length_seconds INTEGER, mode TEXT, diff_count INTEGER DEFAULT 0,
+            first_seen_at TEXT, last_seen_at TEXT, copy_attempts INTEGER DEFAULT 0,
+            in_library INTEGER DEFAULT 0, library_status TEXT,
+            status_changed_at TEXT, size_bytes INTEGER DEFAULT 0
+        );
+        INSERT INTO tracks(beatmapset_id, filename, artist, display_name, in_library)
+        VALUES (4242, 'song.osz', 'Camellia', 'Camellia - X', 1);""")
+    conn.commit()
+    conn.close()
+
+    db = Database(p)
+    cols = {r["name"] for r in db._conn.execute("PRAGMA table_info(tracks)")}
+    assert {"in_drive", "in_osu", "drive_chunk", "drive_hash"} <= cols
+    row = db._conn.execute(
+        "SELECT * FROM tracks WHERE beatmapset_id=4242").fetchone()
+    assert row["filename"] == "song.osz"          # old data survived
+    assert row["in_drive"] == 0 and row["in_osu"] == 0
+    assert row["drive_chunk"] is None
+
+    db.set_drive_state(row["id"], True, "chunk-0000.zip", "abc123")
+    row2 = db._conn.execute(
+        "SELECT * FROM tracks WHERE id=?", (row["id"],)).fetchone()
+    assert row2["in_drive"] == 1 and row2["drive_chunk"] == "chunk-0000.zip"
+    assert row2["drive_hash"] == "abc123"
+    db.close()

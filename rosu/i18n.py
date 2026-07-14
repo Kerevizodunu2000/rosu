@@ -261,6 +261,41 @@ STRINGS: dict[str, dict[str, str]] = {
     "theme_catppuccin-latte": {"en": "Catppuccin Latte", "tr": "Catppuccin Latte"},
     "theme_solarized-dark": {"en": "Solarized Dark", "tr": "Solarized Koyu"},
     "theme_solarized-light": {"en": "Solarized Light", "tr": "Solarized Açık"},
+
+    # Google Drive backup (item 11, v0.8)
+    "col_location": {"en": "Where", "tr": "Konum"},
+    "set_drive": {"en": "Google Drive backup", "tr": "Google Drive yedeği"},
+    "set_drive_help": {
+        "en": "Log in once to back up your Library to Google Drive as bundled "
+              "archives, and restore it on another PC. Rosu can only see the files "
+              "it creates (drive.file scope) — never the rest of your Drive.",
+        "tr": "Kütüphaneni paketlenmiş arşivler halinde Google Drive'a yedeklemek ve "
+              "başka bir bilgisayarda geri yüklemek için bir kez giriş yap. Rosu "
+              "yalnızca kendi oluşturduğu dosyaları görebilir (drive.file) — "
+              "Drive'ının geri kalanını asla."},
+    "btn_drive_connect": {"en": "Connect Google Drive", "tr": "Google Drive'a Bağlan"},
+    "btn_drive_disconnect": {"en": "Disconnect", "tr": "Bağlantıyı Kes"},
+    "drive_connected": {"en": "Connected.", "tr": "Bağlı."},
+    "drive_disconnected": {"en": "Not connected.", "tr": "Bağlı değil."},
+    "drive_connecting": {"en": "Opening browser for Google sign-in…",
+                         "tr": "Google girişi için tarayıcı açılıyor…"},
+    "drive_not_configured": {
+        "en": "Google Drive is not available in this build (no OAuth client).",
+        "tr": "Bu sürümde Google Drive kullanılamıyor (OAuth istemcisi yok)."},
+    "drive_login_failed": {"en": "Google sign-in failed or was cancelled.",
+                           "tr": "Google girişi başarısız oldu veya iptal edildi."},
+    "btn_backup_drive": {"en": "Back up to Drive", "tr": "Drive'a Yedekle"},
+    "drive_connect_first": {"en": "Connect Google Drive in Settings first.",
+                            "tr": "Önce Ayarlar'dan Google Drive'a bağlan."},
+    "drive_backing_up": {"en": "Backing up to Google Drive…",
+                         "tr": "Google Drive'a yedekleniyor…"},
+    "drive_backup_done": {
+        "en": "Backed up {uploaded} tracks in {chunks} archive(s) to Drive.",
+        "tr": "{uploaded} müzik {chunks} arşiv halinde Drive'a yedeklendi."},
+    "drive_backup_cancelled": {
+        "en": "Backup cancelled — {uploaded} tracks in {chunks} archive(s) uploaded.",
+        "tr": "Yedek iptal edildi — {uploaded} müzik {chunks} arşiv yüklendi."},
+    "drive_backup_failed": {"en": "Drive backup failed.", "tr": "Drive yedeği başarısız."},
 }
 
 

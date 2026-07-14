@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import uuid
 from pathlib import Path
 
 from PySide6.QtCore import Qt
@@ -33,6 +34,10 @@ class AppContext:
         # auto-detect osu! once if not configured
         if not self.cfg.osu_exe:
             self.cfg.osu_exe = config.detect_osu_exe()
+            config.save_config(self.cfg)
+        # give this install a stable id for its Drive manifest shard (item 11)
+        if not self.cfg.device_id:
+            self.cfg.device_id = uuid.uuid4().hex
             config.save_config(self.cfg)
         logsvc.write_log_formats_doc(self.cfg.logs_path)
         self.log = logsvc.LogService(self.cfg.logs_path, __version__)

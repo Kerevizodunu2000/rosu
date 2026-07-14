@@ -7,6 +7,11 @@
 /logs/
 config.json
 
+# OAuth client (client_id/secret) for the Drive backup — embedded into the
+# release exe via a CI secret, never committed. Local dev copies the JSON
+# Google hands out to rosu/drive/oauth_client.json.
+rosu/drive/oauth_client.json
+
 # Python
 __pycache__/
 *.py[cod]

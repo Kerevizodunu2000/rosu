@@ -40,10 +40,15 @@ class Services:
         self.db = db
         self.log = log
         self._cancel = threading.Event()  # cooperative cancel for osu! import
+        self._drive_cancel = threading.Event()  # separate cancel for Drive ops
         self._rebuild_lock = threading.Lock()  # serialize tracking.xlsx writes
 
     def request_cancel(self) -> None:
+        # Set both so the shared Dashboard/close-window cancel reaches whichever
+        # operation is running; each op clears only its OWN token at start, so a
+        # Drive login can never wipe an in-flight osu!-import cancel (or vice versa).
         self._cancel.set()
+        self._drive_cancel.set()
 
     # -- scanning / pre-check ------------------------------------------------
     def scan(self):
@@ -319,3 +324,183 @@ class Services:
 
     def tracks_by_artist(self, artist: str) -> list[dict]:
         return self.db.tracks_by_artist(artist)
+
+    # -- Google Drive backup (item 11, v0.8) --------------------------------
+    def _drive_auth(self):
+        """Lazily build+cache DriveAuth (keeps keyring/urllib off the startup
+        path and out of ``--selftest``)."""
+        auth = getattr(self, "_drive_auth_obj", None)
+        if auth is None:
+            from .drive.auth import DriveAuth
+            auth = DriveAuth()
+            self._drive_auth_obj = auth
+        return auth
+
+    def _make_drive_client(self):
+        from .drive.client import DriveClient
+        return DriveClient(self._drive_auth())
+
+    def drive_status(self) -> dict:
+        auth = self._drive_auth()
+        return {"configured": auth.is_configured(),
+                "connected": auth.is_connected()}
+
+    def connect_drive(self, progress=None) -> dict:
+        """Run the Google OAuth consent flow (off-thread) and remember it."""
+        from .drive.auth import DriveError, DriveNotConfigured
+        self._drive_cancel.clear()
+        auth = self._drive_auth()
+        try:
+            auth.login(cancel=self._drive_cancel.is_set)
+        except DriveNotConfigured as exc:
+            return {"error": "not_configured", "detail": str(exc)}
+        except DriveError as exc:
+            return {"error": "auth", "detail": str(exc)[:300]}
+        self.cfg.drive_connected = True
+        config.save_config(self.cfg)
+        self.log.info("DRIVE_CONNECT", connected=True)
+        return {"connected": True}
+
+    def disconnect_drive(self, progress=None) -> dict:
+        self._drive_auth().logout()
+        self.cfg.drive_connected = False
+        config.save_config(self.cfg)
+        self.log.info("DRIVE_DISCONNECT")
+        return {"connected": False}
+
+    def backup_to_drive(self, progress=None) -> dict:
+        """Back up new Library .osz to Google Drive as append-only chunk
+        archives, updating this device's manifest shard.
+
+        Returns ``{"uploaded", "chunks", "skipped"}`` or ``{"error": ...}``.
+        """
+        from .drive import bundle, manifest
+        from .drive.auth import DriveCancelled, DriveError
+        self._drive_cancel.clear()
+        auth = self._drive_auth()
+        if not auth.is_connected():
+            return {"error": "not_connected"}
+
+        # 1. Library tracks that actually have a physical .osz to upload.
+        lib = self.cfg.library_path
+        local: list[dict] = []
+        for t in self.db.library_tracks():
+            if t.get("library_status") == "memory":
+                continue  # memory-only row: nothing on disk to back up
+            fn = t.get("filename")
+            p = (lib / fn) if fn else None
+            if p and p.exists():
+                item = dict(t)
+                item["_path"] = p
+                item["size"] = p.stat().st_size
+                local.append(item)
+
+        # 2. Diff against this device's shard (append-only, incremental).
+        shard_dir = self.cfg.drive_cache_path
+        shard_dir.mkdir(parents=True, exist_ok=True)
+        shard_path = shard_dir / manifest.shard_name(self.cfg.device_id)
+        entries = manifest.load_shard(shard_path)
+        to_upload = manifest.diff_to_upload(local, entries)
+        if not to_upload:
+            self.log.info("DRIVE_BACKUP", uploaded=0, skipped=len(local), chunks=0)
+            return {"uploaded": 0, "skipped": len(local), "chunks": 0}
+
+        try:
+            client = self._make_drive_client()
+            folder = self.cfg.drive_folder_id or client.ensure_folder("Rosu")
+            if folder != self.cfg.drive_folder_id:
+                self.cfg.drive_folder_id = folder
+                config.save_config(self.cfg)
+
+            start = self._drive_next_chunk_index(client, folder, entries)
+            items = [{"track": t, "path": t["_path"], "size": t["size"]}
+                     for t in to_upload]
+            chunks = bundle.plan_chunks(items, self.cfg.drive_chunk_bytes, start,
+                                        self.cfg.device_id)
+
+            total = len(to_upload)
+            done = 0
+            uploaded = 0
+            uploaded_chunks = 0
+            cancelled = False
+            for ch in chunks:
+                if self._drive_cancel.is_set():
+                    cancelled = True
+                    break
+                members = [it["path"] for it in ch["items"]]
+                local_chunk = shard_dir / ch["name"]
+                bundle.write_chunk(members, local_chunk)
+                try:
+                    client.upload_file(local_chunk, ch["name"], folder,
+                                       cancel=self._drive_cancel.is_set)
+                except DriveCancelled:
+                    cancelled = True
+                finally:
+                    # transient staging copy — remove even if the upload failed
+                    try:
+                        local_chunk.unlink()
+                    except OSError:
+                        pass
+                if cancelled:
+                    break
+                for it in ch["items"]:
+                    t = it["track"]
+                    sha = bundle.sha256_file(it["path"])
+                    entries[manifest.track_key(t)] = manifest.entry_from_track(
+                        t, ch["name"], it["size"], sha)
+                    row = self.db.find_track_row(t.get("beatmapset_id"),
+                                                 t.get("filename"))
+                    if row:
+                        self.db.set_drive_state(row["id"], True, ch["name"], sha)
+                    uploaded += 1
+                    done += 1
+                    if progress:
+                        progress({"kind": "backup", "name": t.get("filename"),
+                                  "done": done, "total": total})
+                uploaded_chunks += 1
+                # persist the shard after each chunk so a crash mid-run resumes
+                manifest.save_shard(shard_path, self.cfg.device_id, entries)
+
+            if uploaded:
+                self._push_shard(client, shard_path, folder)
+            self.log.info("DRIVE_BACKUP", uploaded=uploaded, chunks=uploaded_chunks,
+                          skipped=len(local) - len(to_upload), cancelled=cancelled)
+            return {"uploaded": uploaded, "chunks": uploaded_chunks,
+                    "skipped": len(local) - len(to_upload), "cancelled": cancelled}
+        except DriveError as exc:
+            self.log.error("drive:backup", str(exc)[:300])
+            return {"error": "drive", "detail": str(exc)[:300]}
+
+    def _push_shard(self, client, shard_path, folder) -> None:
+        """Publish this device's manifest shard to Drive (replace the prior copy
+        so shards don't accumulate). Non-fatal on failure."""
+        from .drive.auth import DriveError
+        try:
+            existing = client.find_file(shard_path.name, folder)
+            if existing:
+                client.delete_file(existing)
+            client.upload_file(shard_path, shard_path.name, folder)
+        except DriveError as exc:
+            self.log.error("drive:shard", str(exc)[:200])
+
+    def _drive_next_chunk_index(self, client, folder, entries) -> int:
+        """Next append-only chunk index for THIS device, reconciled with Drive.
+
+        Seeds from the local shard AND the actual Drive folder listing, so a
+        lost/cleared local cache or a reinstall never restarts numbering at 0
+        and collides (by name) with a chunk already in the shared folder.
+        """
+        from .drive import bundle
+        from .drive.auth import DriveError
+        prefix = f"chunk-{self.cfg.device_id}-"
+        highest = bundle.next_chunk_index(entries) - 1   # local-shard max, or -1
+        try:
+            for f in client.list_folder(folder):
+                name = f.get("name", "")
+                if name.startswith(prefix):
+                    idx = bundle.parse_chunk_index(name)
+                    if idx is not None and idx > highest:
+                        highest = idx
+        except DriveError:
+            pass   # listing failed -> fall back to the local-shard index
+        return highest + 1

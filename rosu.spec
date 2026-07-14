@@ -2,23 +2,46 @@
 # PyInstaller spec: builds a single, self-contained rosu.exe.
 # Build with:  pyinstaller rosu.spec
 
+import os
+
+from PyInstaller.utils.hooks import collect_submodules
+
 block_cipher = None
+
+# keyring finds its OS backend via importlib.metadata entry points, which
+# PyInstaller's static analysis misses -> collect them (plus win32ctypes, the
+# Windows Credential Manager backend's dependency) and the rosu.drive submodules
+# (only lazily imported from services, so name them explicitly to be safe).
+_drive_hidden = (
+    collect_submodules('keyring')
+    + collect_submodules('win32ctypes')
+    + ['rosu.drive', 'rosu.drive.auth', 'rosu.drive.client',
+       'rosu.drive.bundle', 'rosu.drive.manifest']
+)
+
+# Embed the OAuth client only if present. CI writes rosu/drive/oauth_client.json
+# from a secret before building; it is gitignored, so an open-source build
+# without the secret simply omits it (Drive login is then unavailable) rather
+# than failing the build.
+_oauth_client = os.path.join('rosu', 'drive', 'oauth_client.json')
+_datas = [
+    ('rosu/assets/icon.png', 'rosu/assets'),
+    ('rosu/assets/icon.ico', 'rosu/assets'),
+    ('rosu/assets/splash.png', 'rosu/assets'),
+    # self-contained .NET helper that re-exports osu!lazer beatmapsets (item 15)
+    ('rosu/assets/lazer_export/RosuLazerExport.exe', 'rosu/assets/lazer_export'),
+]
+if os.path.exists(_oauth_client):
+    _datas.append((_oauth_client, 'rosu/drive'))
 
 a = Analysis(
     ['run.py'],
     pathex=[],
     binaries=[],
-    datas=[
-        ('rosu/assets/icon.png', 'rosu/assets'),
-        ('rosu/assets/icon.ico', 'rosu/assets'),
-        ('rosu/assets/splash.png', 'rosu/assets'),
-        # self-contained .NET helper that re-exports osu!lazer beatmapsets (item 15)
-        ('rosu/assets/lazer_export/RosuLazerExport.exe',
-         'rosu/assets/lazer_export'),
-    ],
+    datas=_datas,
     hiddenimports=['send2trash', 'send2trash.plat_win', 'rapidfuzz',
                    'py7zr', 'pyppmd', 'pybcj', 'brotli', 'inflate64',
-                   'multivolumefile', 'texttable', 'Cryptodome'],
+                   'multivolumefile', 'texttable', 'Cryptodome'] + _drive_hidden,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

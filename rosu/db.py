@@ -18,7 +18,7 @@ from pathlib import Path
 
 from .models import ParsedPack, ParsedTrack
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta (
@@ -61,7 +61,11 @@ CREATE TABLE IF NOT EXISTS tracks (
     in_library        INTEGER DEFAULT 0,
     library_status    TEXT,
     status_changed_at TEXT,
-    size_bytes        INTEGER DEFAULT 0
+    size_bytes        INTEGER DEFAULT 0,
+    in_drive          INTEGER DEFAULT 0,
+    in_osu            INTEGER DEFAULT 0,
+    drive_chunk       TEXT,
+    drive_hash        TEXT
 );
 CREATE TABLE IF NOT EXISTS track_sources (
     track_id  INTEGER NOT NULL,
@@ -80,6 +84,7 @@ CREATE INDEX IF NOT EXISTS idx_packs_series ON packs(series);
 _POST_INDEXES = """
 CREATE INDEX IF NOT EXISTS idx_tracks_artist ON tracks(artist);
 CREATE INDEX IF NOT EXISTS idx_packs_category ON packs(category);
+CREATE INDEX IF NOT EXISTS idx_tracks_drive ON tracks(in_drive);
 """
 
 # Columns added after v1, applied via ALTER for databases upgrading in place.
@@ -88,6 +93,8 @@ _MIGRATIONS = {
     "tracks": {
         "creator": "TEXT", "source": "TEXT", "tags": "TEXT", "bpm": "REAL",
         "length_seconds": "INTEGER", "mode": "TEXT", "diff_count": "INTEGER DEFAULT 0",
+        "in_drive": "INTEGER DEFAULT 0", "in_osu": "INTEGER DEFAULT 0",
+        "drive_chunk": "TEXT", "drive_hash": "TEXT",
     },
 }
 
@@ -303,6 +310,18 @@ class Database:
                 """UPDATE tracks SET in_library=?, library_status=?,
                    status_changed_at=? WHERE id=?""",
                 (1 if in_library else 0, status, when, track_id))
+            self._conn.commit()
+
+    def set_drive_state(self, track_id: int, in_drive: bool,
+                        chunk: str | None = None,
+                        drive_hash: str | None = None) -> None:
+        """Record whether a track is stored in the Drive backup, and if so which
+        chunk archive holds it plus its content hash (item 11, v0.8)."""
+        with self._lock:
+            self._conn.execute(
+                """UPDATE tracks SET in_drive=?, drive_chunk=?, drive_hash=?
+                   WHERE id=?""",
+                (1 if in_drive else 0, chunk, drive_hash, track_id))
             self._conn.commit()
 
     def find_track_row(self, beatmapset_id: int | None,

@@ -25,7 +25,9 @@ from pathlib import Path
 from typing import BinaryIO
 
 # Refuse to unpack a .7z whose declared uncompressed total is absurd (zip-bomb).
-_MAX_STAGE_BYTES = 30 * 1024 ** 3
+# Public name is reused by rosu.drive.bundle as an overall backup sanity ceiling.
+MAX_STAGE_BYTES = 30 * 1024 ** 3
+_MAX_STAGE_BYTES = MAX_STAGE_BYTES  # backwards-compatible private alias
 
 # suffix -> family. Longest suffixes are matched first (see archive_kind).
 _SUFFIXES = {

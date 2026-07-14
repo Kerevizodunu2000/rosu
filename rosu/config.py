@@ -64,6 +64,14 @@ class Config:
     auto_backup_after_extract: bool = False   # auto-run Copy to Library after extract
     zip_disposal: str = "recycle"
 
+    # Google Drive backup (v0.8) — the OAuth refresh token is NOT stored here
+    # (it lives in the OS keyring); config.json is plaintext beside the exe.
+    drive_folder_id: str = ""            # id of the Rosu folder in the user's Drive
+    drive_chunk_bytes: int = 1073741824  # 1 GiB per append-only chunk archive
+    drive_auto_sync: bool = False        # back up to Drive when the Library changes
+    drive_connected: bool = False        # non-secret UI hint; truth is in keyring
+    device_id: str = ""                  # random id for this install's manifest shard
+
     # Bookkeeping
     schema_note: str = "paths are absolute; edit from Settings tab"
     _extra: dict = field(default_factory=dict)
@@ -105,6 +113,11 @@ class Config:
     def reference_path(self) -> Path:
         return self.data_path / "reference.json"
 
+    @property
+    def drive_cache_path(self) -> Path:
+        """Local working area for Drive chunk staging and manifest shards."""
+        return self.data_path / "drive"
+
     def ensure_dirs(self) -> None:
         for p in (self.packs_path, self.output_path, self.library_path,
                   self.data_path, self.logs_path):
@@ -129,6 +142,14 @@ def _fill_defaults(cfg: Config) -> Config:
         cfg.theme = "dark"
     if cfg.zip_disposal not in ZIP_DISPOSAL:
         cfg.zip_disposal = "recycle"
+    # Drive chunk size is user-editable (and hand-editable in config.json), so
+    # coerce and floor it — there is no other validation hook on load.
+    try:
+        cfg.drive_chunk_bytes = int(cfg.drive_chunk_bytes)
+    except (TypeError, ValueError):
+        cfg.drive_chunk_bytes = 1073741824
+    if cfg.drive_chunk_bytes < 1024 * 1024:   # never below 1 MiB
+        cfg.drive_chunk_bytes = 1024 * 1024
     return cfg
 
 

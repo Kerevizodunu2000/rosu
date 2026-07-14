@@ -10,8 +10,35 @@ the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-Roadmap for v0.8.0 (Google Drive) is tracked in
-`docs/superpowers/specs/2026-07-13-osu-archiver-v0.3-to-v0.8-roadmap-design.md`.
+## [0.8.0] - 2026-07-14
+
+Google Drive backup: log in once and back up your Library to the cloud as
+bundled archives, with per-track location tracking (item 11).
+
+### Added
+- **Google Drive backup (item 11)** — a new `rosu/drive/` package and a
+  "Back up to Drive" action on the Dashboard. Logging in once (Settings →
+  Google Drive) uploads new Library `.osz` to a designated Drive folder as
+  **fixed-size, append-only chunk archives** (`chunk-NNNN.zip`); re-running
+  uploads only what's new (incremental). A per-device **manifest shard**
+  (`manifest-<deviceId>.json`) records which chunk holds each beatmapset, so a
+  second machine can later rebuild its state from Drive.
+- **OAuth Desktop-app login** — loopback (127.0.0.1) + **PKCE**, the
+  non-sensitive **`drive.file`** scope (Rosu only ever sees the files it creates,
+  never the rest of your Drive), with the refresh token stored in the **OS
+  keyring** (Windows Credential Manager), never in `config.json`.
+- **Location badges** in the Search/browse table — 🎮 osu! · 💾 Library ·
+  ☁️ Drive — backed by additive tracking columns `in_drive` / `in_osu` /
+  `drive_chunk` / `drive_hash` (DB schema v3).
+- Settings **Connect / Disconnect Google Drive**, a configurable chunk size, and
+  a per-install `device_id`.
+
+### Notes
+- Built on the standard library (urllib + `http.server`) to match the app's
+  stdlib-only HTTP policy; the only new runtime dependency is `keyring`. The
+  OAuth client is embedded at build time from a CI secret and never committed.
+- Bidirectional cross-device sync, offload / free-space, and import-to-osu! from
+  Drive are planned for v0.8.1 / v0.8.2.
 
 ## [0.7.1] - 2026-07-13
 
@@ -217,7 +244,8 @@ Initial release. The core archive-management pipeline.
 - **EN/TR** localization; English-only code/logs.
 - Single-file **PyInstaller** build (`osu-archiver.spec`) + GitHub Actions build workflow.
 
-[Unreleased]: https://github.com/Kerevizodunu2000/rosu/compare/v0.7.1...HEAD
+[Unreleased]: https://github.com/Kerevizodunu2000/rosu/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/Kerevizodunu2000/rosu/releases/tag/v0.8.0
 [0.7.1]: https://github.com/Kerevizodunu2000/rosu/releases/tag/v0.7.1
 [0.7.0]: https://github.com/Kerevizodunu2000/rosu/releases/tag/v0.7.0
 [0.6.0]: https://github.com/Kerevizodunu2000/rosu/releases/tag/v0.6.0

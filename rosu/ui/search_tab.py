@@ -20,7 +20,7 @@ from .copy_table import CopyTable, SortItem
 class SearchTab(QWidget):
     _KEYS = ("col_name", "col_artist", "col_id", "col_bpm", "col_length",
              "col_mapper", "col_mode", "col_sources", "col_first_seen",
-             "col_attempts", "col_lib_status")
+             "col_attempts", "col_lib_status", "col_location")
 
     def __init__(self, main_window):
         super().__init__()
@@ -123,6 +123,16 @@ class SearchTab(QWidget):
             length = row.get("length_seconds")
             attempts = row.get("copy_attempts", 0)
             bid = row.get("beatmapset_id")
+            loc_marks = []
+            if row.get("in_osu"):
+                loc_marks.append("🎮")
+            if row.get("in_library"):
+                loc_marks.append("💾")
+            if row.get("in_drive"):
+                loc_marks.append("☁️")
+            loc_weight = ((4 if row.get("in_osu") else 0)
+                          + (2 if row.get("in_library") else 0)
+                          + (1 if row.get("in_drive") else 0))
             cells = [
                 (row.get("display_name", ""), None),
                 (row.get("artist", ""), None),
@@ -135,6 +145,7 @@ class SearchTab(QWidget):
                 (row.get("first_seen_at", ""), None),
                 (str(attempts), attempts),
                 (status, None),
+                (" ".join(loc_marks) if loc_marks else "-", loc_weight),
             ]
             for c, (text, sort_val) in enumerate(cells):
                 item = SortItem(text, sort_val)
