@@ -113,6 +113,15 @@ class SettingsTab(QWidget):
         ref_row.addWidget(self.lbl_ref_status, 1)
         root.addLayout(ref_row)
 
+        # Lost-map detection (item F) — needs the API creds above
+        lost_row = QHBoxLayout()
+        self.btn_lost = QPushButton(objectName="secondary")
+        self.btn_lost.clicked.connect(self._scan_lost_maps)
+        self.lbl_lost_status = QLabel(objectName="status")
+        lost_row.addWidget(self.btn_lost)
+        lost_row.addWidget(self.lbl_lost_status, 1)
+        root.addLayout(lost_row)
+
         # Auto-import from installed osu! clients (item 15)
         self.lbl_import = QLabel(objectName="h1")
         root.addWidget(self.lbl_import)
@@ -281,6 +290,8 @@ class SettingsTab(QWidget):
         self.lbl_cid.setText(t("set_client_id"))
         self.lbl_cs.setText(t("set_client_secret"))
         self.btn_reference.setText(t("btn_update_reference"))
+        self.btn_lost.setText(t("btn_scan_lost"))
+        self.btn_lost.setToolTip(t("tip_scan_lost"))
         self.lbl_import.setText(t("set_import"))
         self.lbl_import_help.setText(t("set_import_help"))
         self.btn_import_stable.setText(t("btn_import_stable"))
@@ -306,6 +317,7 @@ class SettingsTab(QWidget):
         self.btn_about.setToolTip(t("tip_about"))
         self.btn_save.setToolTip(t("tip_save"))
         self._refresh_reference_status()
+        self._refresh_lost_status()
         self._refresh_drive_status()
 
     def _refresh_reference_status(self) -> None:
@@ -419,6 +431,48 @@ class SettingsTab(QWidget):
     def _reference_failed(self, msg) -> None:
         self.btn_reference.setEnabled(True)
         self._refresh_reference_status()
+        QMessageBox.critical(self, self.ctx.t("app_title"), msg)
+
+    # -- lost-map detection (item F) -----------------------------------------
+    def _refresh_lost_status(self) -> None:
+        n = self.ctx.services.lost_map_count()
+        self.lbl_lost_status.setText(self.ctx.t("lost_maps_count", n=n) if n else "")
+
+    def _scan_lost_maps(self) -> None:
+        cfg = self.ctx.cfg
+        cfg.osu_client_id = self.client_id.text().strip()
+        cfg.osu_client_secret = self.client_secret.text().strip()
+        self.ctx.save_config()
+        if not (cfg.osu_client_id and cfg.osu_client_secret):
+            QMessageBox.information(self, self.ctx.t("app_title"),
+                                    self.ctx.t("lost_maps_needs_api"))
+            return
+        self.btn_lost.setEnabled(False)
+        self.lbl_lost_status.setText(self.ctx.t("working"))
+        w = Worker(lambda progress=None: self.ctx.services.scan_lost_maps(progress))
+        self._threads.append(w)
+        w.progressed.connect(self._on_lost_progress)
+        w.succeeded.connect(self._lost_done)
+        w.failed.connect(self._lost_failed)
+        w.finished.connect(lambda: self._threads.remove(w) if w in self._threads else None)
+        w.start()
+
+    def _on_lost_progress(self, msg) -> None:
+        if isinstance(msg, dict) and msg.get("kind") == "lostmap":
+            self.lbl_lost_status.setText(f"{msg['done']}/{msg['total']}")
+
+    def _lost_done(self, res) -> None:
+        self.btn_lost.setEnabled(True)
+        if res.get("error") == "no_api":
+            self.lbl_lost_status.setText(self.ctx.t("lost_maps_needs_api"))
+            return
+        self.lbl_lost_status.setText(self.ctx.t(
+            "lost_maps_result", checked=res["checked"], gone=res["gone"]))
+        self.mw.search.reload()
+
+    def _lost_failed(self, msg) -> None:
+        self.btn_lost.setEnabled(True)
+        self._refresh_lost_status()
         QMessageBox.critical(self, self.ctx.t("app_title"), msg)
 
     # -- auto-import from installed osu! clients (item 15) -------------------

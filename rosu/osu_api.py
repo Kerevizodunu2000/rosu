@@ -58,6 +58,55 @@ def _get(url: str, token: str) -> dict:
         return json.loads(resp.read())
 
 
+def _status_code(url: str, token: str) -> tuple[int, int | None]:
+    """GET a URL and return (http_status, retry_after_seconds). Never raises for
+    an HTTP error status — only for a transport failure."""
+    req = urllib.request.Request(
+        url, headers={"Authorization": f"Bearer {token}", "Accept": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            return resp.status, None
+    except urllib.error.HTTPError as exc:
+        ra = exc.headers.get("Retry-After") if exc.headers else None
+        return exc.code, (int(ra) if (ra and str(ra).isdigit()) else None)
+
+
+def beatmapset_availability(ids, client_id: str, client_secret: str,
+                            progress=None, max_calls: int = 500,
+                            cancel=None) -> dict[int, str]:
+    """Check whether each owned beatmapset still exists on osu! (item F, v1.0).
+
+    Returns ``{beatmapset_id: 'available' | 'gone' | 'unknown'}`` — 200 means the
+    set is live, 404 means it was taken down / deleted (unrecoverable from osu!).
+    Capped at ``max_calls`` per run and gentle (small delay + 429 backoff) so a
+    large library never hammers the API. ``cancel`` is polled between ids.
+    """
+    unique = [i for i in dict.fromkeys(ids) if i]
+    token = _token(client_id, client_secret)
+    out: dict[int, str] = {}
+    total = min(len(unique), max_calls)
+    for bid in unique:
+        if cancel is not None and cancel():
+            break
+        if len(out) >= max_calls:
+            break
+        url = f"{API_BASE}/beatmapsets/{bid}"
+        retries = 0
+        while True:
+            code, retry_after = _status_code(url, token)
+            if code == 429 and retries < 5:
+                time.sleep(min(retry_after or 2 ** retries, 60))
+                retries += 1
+                continue
+            break
+        out[bid] = ("available" if code == 200
+                    else "gone" if code == 404 else "unknown")
+        if progress:
+            progress({"kind": "lostmap", "done": len(out), "total": total})
+        time.sleep(0.1)  # be a good API citizen
+    return out
+
+
 def fetch_reference(client_id: str, client_secret: str, progress=None) -> dict:
     """Fetch every pack across all types. Returns a reference dict."""
     token = _token(client_id, client_secret)

@@ -269,6 +269,15 @@ STRINGS: dict[str, dict[str, str]] = {
                        "tr": "Referans: yok (yalnız Standard boşlukları gösterilir)"},
     "reference_done": {"en": "Reference updated: {n} packs.",
                        "tr": "Referans güncellendi: {n} paket."},
+    "btn_scan_lost": {"en": "Scan for lost maps", "tr": "Kayıp haritaları tara"},
+    "lost_maps_needs_api": {
+        "en": "Enter your osu! API credentials above first, then scan.",
+        "tr": "Önce yukarıdan osu! API bilgilerinizi girin, sonra tarayın."},
+    "lost_maps_result": {
+        "en": "Checked {checked}, {gone} no longer on osu!.",
+        "tr": "{checked} kontrol edildi, {gone} tanesi artık osu!'da yok."},
+    "lost_maps_count": {"en": "{n} beatmap(s) no longer on osu!.",
+                        "tr": "{n} müzik artık osu!'da yok."},
     "reference_help": {
         "en": "Register an OAuth app at osu.ppy.sh/home/account/edit → paste the "
               "Client ID + Secret, then update. Lets us flag genuinely missing "
@@ -425,6 +434,11 @@ STRINGS: dict[str, dict[str, str]] = {
               "genuinely missing packs.",
         "tr": "Gerçekten eksik paketleri tespit etmek için osu! API'sinden güncel "
               "resmi paket listesini çeker."},
+    "tip_scan_lost": {
+        "en": "Check which beatmaps in your Library no longer exist on osu! "
+              "(deleted/taken down). Needs osu! API credentials.",
+        "tr": "Kütüphanendeki hangi müziklerin artık osu!'da olmadığını (silinmiş/"
+              "kaldırılmış) kontrol eder. osu! API bilgileri gerekir."},
     "tip_import_stable": {"en": "Import beatmaps already installed in your osu!(stable) client.",
                          "tr": "osu!(stable) istemcinizde zaten yüklü olan müzikleri içe aktarır."},
     "tip_import_lazer": {"en": "Import beatmaps already installed in your osu!lazer client.",

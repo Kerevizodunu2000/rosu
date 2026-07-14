@@ -18,7 +18,7 @@ from pathlib import Path
 
 from .models import ParsedPack, ParsedTrack
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta (
@@ -65,7 +65,8 @@ CREATE TABLE IF NOT EXISTS tracks (
     in_drive          INTEGER DEFAULT 0,
     in_osu            INTEGER DEFAULT 0,
     drive_chunk       TEXT,
-    drive_hash        TEXT
+    drive_hash        TEXT,
+    availability      TEXT
 );
 CREATE TABLE IF NOT EXISTS track_sources (
     track_id  INTEGER NOT NULL,
@@ -95,6 +96,7 @@ _MIGRATIONS = {
         "length_seconds": "INTEGER", "mode": "TEXT", "diff_count": "INTEGER DEFAULT 0",
         "in_drive": "INTEGER DEFAULT 0", "in_osu": "INTEGER DEFAULT 0",
         "drive_chunk": "TEXT", "drive_hash": "TEXT",
+        "availability": "TEXT",  # NULL/'unknown'/'available'/'gone' (item F, v1.0)
     },
 }
 
@@ -356,6 +358,22 @@ class Database:
                    WHERE id=?""",
                 (1 if in_drive else 0, chunk, drive_hash, track_id))
             self._conn.commit()
+
+    def set_availability(self, beatmapset_id: int, status: str) -> None:
+        """Record whether a beatmapset still exists on osu! (item F, v1.0):
+        'available' / 'gone' / 'unknown'. Keyed by beatmapset id."""
+        with self._lock:
+            self._conn.execute(
+                "UPDATE tracks SET availability=? WHERE beatmapset_id=?",
+                (status, beatmapset_id))
+            self._conn.commit()
+
+    def lost_map_count(self) -> int:
+        """How many owned beatmapsets are flagged as gone from osu! (item F)."""
+        with self._lock:
+            r = self._conn.execute(
+                "SELECT COUNT(*) c FROM tracks WHERE availability='gone'").fetchone()
+            return r["c"] if r else 0
 
     def find_track_row(self, beatmapset_id: int | None,
                        filename: str) -> sqlite3.Row | None:

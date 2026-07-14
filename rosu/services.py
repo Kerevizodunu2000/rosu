@@ -348,6 +348,32 @@ class Services:
         self.log.info("REFERENCE_SYNC", packs=ref.get("count", 0))
         return ref
 
+    def scan_lost_maps(self, progress=None, max_calls: int = 500) -> dict:
+        """Flag owned beatmapsets that no longer exist on osu! (item F, v1.0).
+
+        Needs osu! API credentials (returns ``{"error": "no_api"}`` otherwise).
+        Checks up to ``max_calls`` library beatmapsets, stores each result, and
+        returns ``{"checked", "gone"}``.
+        """
+        if not (self.cfg.osu_client_id and self.cfg.osu_client_secret):
+            return {"error": "no_api"}
+        self._cancel.clear()
+        ids = [r["beatmapset_id"] for r in self.db.library_tracks()
+               if r.get("beatmapset_id")]
+        result = osu_api.beatmapset_availability(
+            ids, self.cfg.osu_client_id, self.cfg.osu_client_secret,
+            progress=progress, max_calls=max_calls, cancel=self._cancel.is_set)
+        gone = 0
+        for bid, status in result.items():
+            self.db.set_availability(bid, status)
+            if status == "gone":
+                gone += 1
+        self.log.info("LOST_MAP_SCAN", checked=len(result), gone=gone)
+        return {"checked": len(result), "gone": gone}
+
+    def lost_map_count(self) -> int:
+        return self.db.lost_map_count()
+
     # -- gap rows for the Packs tab / Excel ----------------------------------
     def series_rows(self, series: str):
         """Confidence-aware rows for one series (present + any real red gaps)."""
