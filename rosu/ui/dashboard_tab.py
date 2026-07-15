@@ -65,6 +65,10 @@ class DashboardTab(QWidget):
         self.btn_purge_known.setVisible(False)   # only when known archives are present
         self.btn_purge_known.clicked.connect(self.on_purge_known)
         btn_row.addWidget(self.btn_purge_known)
+        self.btn_clear_output = QPushButton(objectName="secondary")
+        self.btn_clear_output.setVisible(False)   # only in the Output view with files
+        self.btn_clear_output.clicked.connect(self.on_clear_output)
+        btn_row.addWidget(self.btn_clear_output)
         self.btn_rescan = QPushButton(objectName="secondary")
         btn_row.addWidget(self.btn_rescan)
         root.addLayout(btn_row)
@@ -113,6 +117,7 @@ class DashboardTab(QWidget):
         self.btn_refresh.setText(t("btn_refresh"))
         self.btn_backup.setText(t("btn_backup_drive"))
         self.btn_purge_known.setText(t("btn_purge_known"))
+        self.btn_clear_output.setText(t("btn_clear_output"))
         self.btn_rescan.setText(t("btn_rescan"))
         self.btn_cancel.setText(t("btn_cancel"))
         self.btn_extract.setToolTip(t("tip_extract"))
@@ -122,6 +127,7 @@ class DashboardTab(QWidget):
         self.btn_refresh.setToolTip(t("tip_refresh"))
         self.btn_backup.setToolTip(t("tip_backup_drive"))
         self.btn_purge_known.setToolTip(t("tip_purge_known"))
+        self.btn_clear_output.setToolTip(t("tip_clear_output"))
         self.btn_rescan.setToolTip(t("tip_rescan"))
         self.btn_cancel.setToolTip(t("tip_cancel"))
         self._populate_table()   # headers + rows follow the current view + language
@@ -173,6 +179,8 @@ class DashboardTab(QWidget):
             self._populate_output_table()
         else:
             self._populate_packs_table()
+        # "Clear Output" only makes sense while the Output view has files.
+        self.btn_clear_output.setVisible(self._view == "output" and bool(self._output))
 
     def _populate_packs_table(self) -> None:
         t = self.ctx.t
@@ -233,7 +241,7 @@ class DashboardTab(QWidget):
     def _lock(self, locked: bool) -> None:
         for b in (self.btn_extract, self.btn_copy, self.btn_import_lazer,
                   self.btn_import_stable, self.btn_refresh, self.btn_backup,
-                  self.btn_purge_known, self.btn_rescan):
+                  self.btn_purge_known, self.btn_clear_output, self.btn_rescan):
             b.setEnabled(not locked)
 
     def _busy_generic(self, status_key: str) -> None:
@@ -304,6 +312,21 @@ class DashboardTab(QWidget):
             return
         n = self.services.dispose_archives(list(self._known_paths))
         self.status.setText(t("purge_known_done", n=n))
+        self.refresh_scan()
+
+    def on_clear_output(self) -> None:
+        """Recycle the .osz still in Output/ once a batch is done (copied to the
+        Library and/or imported into osu!) — a manual 'empty staging' action."""
+        if not self._output:
+            return
+        t = self.ctx.t
+        reply = QMessageBox.question(
+            self, t("app_title"), t("clear_output_confirm", n=len(self._output)),
+            QMessageBox.Ok | QMessageBox.Cancel, QMessageBox.Ok)
+        if reply != QMessageBox.Ok:
+            return
+        n = self.services.clear_output()
+        self.status.setText(t("clear_output_done", n=n))
         self.refresh_scan()
 
     def _offer_pick_archives(self) -> None:

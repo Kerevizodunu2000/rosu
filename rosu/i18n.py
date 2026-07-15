@@ -114,6 +114,19 @@ STRINGS: dict[str, dict[str, str]] = {
               "işlemi' ayarını kullanır (varsayılan: Geri Dönüşüm Kutusu)."},
     "purge_known_done": {"en": "Removed {n} already-added archive(s).",
                          "tr": "{n} çoktan eklenmiş arşiv kaldırıldı."},
+    "btn_clear_output": {"en": "Clear Output", "tr": "Output'u Temizle"},
+    "tip_clear_output": {
+        "en": "Send the .osz still in Output to the Recycle Bin — they're already "
+              "in your Library and imported into osu!.",
+        "tr": "Output'ta kalan .osz dosyalarını Geri Dönüşüm Kutusu'na gönder — "
+              "zaten Library'nde ve osu!'ya aktarılmış durumdalar."},
+    "clear_output_confirm": {
+        "en": "Move {n} file(s) from Output to the Recycle Bin? They're already "
+              "backed up in your Library and imported into osu!.",
+        "tr": "{n} dosya Output'tan Geri Dönüşüm Kutusu'na taşınsın mı? Zaten "
+              "Library'nde yedekli ve osu!'ya aktarılmış durumdalar."},
+    "clear_output_done": {"en": "Cleared {n} file(s) from Output.",
+                          "tr": "Output'tan {n} dosya temizlendi."},
     "nothing_to_unpack": {
         "en": "Nothing new to unpack — everything in Packs is already added. "
               "Choose archives to import, or use 'Remove already-added'.",

@@ -36,3 +36,27 @@ def test_output_listing_reports_name_and_size(tmp_path):
     sizes = {r["name"]: r["size_bytes"] for r in listing}
     assert sizes == {"123 A - B.osz": 10, "456 C - D.osz": 20}
     db.close()
+
+
+def test_clear_output_recycles_every_osz(tmp_path, monkeypatch):
+    # Recycle Bin is stubbed with unlink so the test leaves nothing behind.
+    trashed = []
+
+    def fake_trash(p):
+        from pathlib import Path
+        trashed.append(p)
+        Path(p).unlink()
+
+    monkeypatch.setattr("send2trash.send2trash", fake_trash)
+    cfg, db, svc = _svc(tmp_path)
+    (cfg.output_path / "123 A - B.osz").write_bytes(b"x" * 10)
+    (cfg.output_path / "456 C - D.osz").write_bytes(b"y" * 20)
+    keep = cfg.output_path / "notes.txt"
+    keep.write_bytes(b"not an osz")            # non-.osz stays
+
+    n = svc.clear_output()
+    assert n == 2
+    assert len(trashed) == 2
+    assert not list(cfg.output_path.glob("*.osz"))   # Output emptied of .osz
+    assert keep.exists()                             # unrelated file untouched
+    db.close()

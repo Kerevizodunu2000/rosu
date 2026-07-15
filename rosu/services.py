@@ -251,6 +251,15 @@ class Services:
                 self.log.error("dispose", str(exc)[:200])
         return n
 
+    def clear_output(self) -> int:
+        """Recycle every .osz still in Output/ — a manual "empty the staging
+        folder" action for after a batch has been copied to the Library and/or
+        imported into osu!. Uses the Recycle Bin (recoverable), like every other
+        guarded delete. Returns how many were removed."""
+        n = _clear_osz(self.cfg.output_path)
+        self.log.info("OUTPUT_CLEARED", count=n)
+        return n
+
     def rebuild(self) -> dict:
         # Serialize report writes so two workers (e.g. a Dashboard extract and a
         # Settings import) can't corrupt tracking.xlsx by saving it at once.
