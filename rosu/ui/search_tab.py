@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
-    QHBoxLayout, QLabel, QLineEdit, QPushButton, QVBoxLayout, QWidget,
+    QCheckBox, QHBoxLayout, QLabel, QLineEdit, QPushButton, QVBoxLayout, QWidget,
 )
 
 from ..i18n import human_duration
@@ -46,6 +46,12 @@ class SearchTab(QWidget):
         row.addWidget(self.btn_reload)
         root.addLayout(row)
 
+        # Opt-in: also match creator/tags. Off by default — tag matching used to
+        # flood results (e.g. every Vocaloid map for "Hatsune Miku").
+        self.chk_tags = QCheckBox()
+        self.chk_tags.toggled.connect(lambda _=None: self.do_search())
+        root.addWidget(self.chk_tags)
+
         self.result = QLabel(objectName="status")
         root.addWidget(self.result)
         self.hint = QLabel(objectName="status")
@@ -67,6 +73,8 @@ class SearchTab(QWidget):
         self.box.setPlaceholderText(t("search_placeholder"))
         self.btn.setText(t("tab_search"))
         self.btn_reload.setText(t("btn_reload"))
+        self.chk_tags.setText(t("search_tags_toggle"))
+        self.chk_tags.setToolTip(t("tip_search_tags"))
         self.hint.setText(t("copy_hint"))
         self.box.setToolTip(t("tip_search_box"))
         self.btn.setToolTip(t("tip_search_btn"))
@@ -91,7 +99,8 @@ class SearchTab(QWidget):
         self._search_seq += 1
         seq = self._search_seq
         self.result.setText(self.ctx.t("working"))
-        w = Worker(self.ctx.services.search, query)
+        w = Worker(self.ctx.services.search, query,
+                   search_tags=self.chk_tags.isChecked())
         self._threads.append(w)
         w.succeeded.connect(lambda rows, s=seq, q=query: self._on_results(rows, s, q))
         w.failed.connect(self._on_failed)

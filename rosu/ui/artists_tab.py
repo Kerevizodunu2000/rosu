@@ -2,9 +2,10 @@
 """Artists tab: artists ranked by song count; click one to see their songs."""
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
-    QComboBox, QHBoxLayout, QLabel, QPushButton, QSplitter, QVBoxLayout, QWidget,
+    QComboBox, QHBoxLayout, QLabel, QLineEdit, QPushButton, QSplitter,
+    QVBoxLayout, QWidget,
 )
 
 from ..i18n import human_duration
@@ -32,11 +33,21 @@ class ArtistsTab(QWidget):
         wheel_guard.guard(self.sort)   # no accidental change on scroll (item 16)
         top.addWidget(self.sort_label)
         top.addWidget(self.sort)
-        top.addStretch(1)
+        self.filter = QLineEdit()
+        self.filter.setClearButtonEnabled(True)
+        self.filter.textChanged.connect(lambda _=None: self._filter_debounce.start())
+        top.addWidget(self.filter, 1)
         self.btn_reload = QPushButton(objectName="secondary")
         self.btn_reload.clicked.connect(self.reload)
         top.addWidget(self.btn_reload)
         root.addLayout(top)
+
+        # Client-side filter over the already-loaded artists (cheap — no query).
+        self._all_artists: list[dict] = []
+        self._filter_debounce = QTimer(self)
+        self._filter_debounce.setSingleShot(True)
+        self._filter_debounce.setInterval(200)
+        self._filter_debounce.timeout.connect(self._apply_filter)
 
         splitter = QSplitter(Qt.Horizontal)
         self.artists = CopyTable(name_column=0)
@@ -78,6 +89,8 @@ class ArtistsTab(QWidget):
         self.sort.setCurrentIndex(cur if cur >= 0 else 0)
         self.sort.blockSignals(False)
         self.sort.setToolTip(t("tip_artists_sort"))
+        self.filter.setPlaceholderText(t("artist_filter_placeholder"))
+        self.filter.setToolTip(t("tip_artist_filter"))
         self.artists.setHorizontalHeaderLabels(
             [t("col_artist"), t("col_songs"), t("col_avg_length"), t("col_avg_bpm")])
         self.artists.set_menu_labels(t("copy_names_action"), t("copy_table_action"))
@@ -96,7 +109,26 @@ class ArtistsTab(QWidget):
     def reload(self) -> None:
         metric, descending = self.sort.currentData() or ("count", True)
         gen = self.ctx.services.data_generation()
-        rows = self.ctx.services.artists(metric, descending)
+        self._all_artists = self.ctx.services.artists(metric, descending)
+        self._fill_artists(self._apply_text_filter(self._all_artists))
+        self.songs.setRowCount(0)
+        self.selected.setText("")
+        self._built_key = (gen, metric, descending)
+
+    def _apply_text_filter(self, rows: list[dict]) -> list[dict]:
+        needle = self.filter.text().strip().casefold()
+        if not needle:
+            return rows
+        return [a for a in rows if needle in (a.get("artist") or "").casefold()]
+
+    def _apply_filter(self) -> None:
+        """Re-fill the artists table from the cached list for the current filter
+        text — no DB query, so typing stays instant even on a huge library."""
+        self._fill_artists(self._apply_text_filter(self._all_artists))
+        self.songs.setRowCount(0)
+        self.selected.setText("")
+
+    def _fill_artists(self, rows: list[dict]) -> None:
         self.artists.setUpdatesEnabled(False)   # coalesce paints during the build
         self.artists.setSortingEnabled(False)
         try:
@@ -118,9 +150,6 @@ class ArtistsTab(QWidget):
             self.artists.setSortingEnabled(True)
             self.artists.setUpdatesEnabled(True)
         self.artists.seed_widths_once(name_min=220)
-        self.songs.setRowCount(0)
-        self.selected.setText("")
-        self._built_key = (gen, metric, descending)
 
     def _on_artist(self, row: int, _col: int) -> None:
         item = self.artists.item(row, 0)

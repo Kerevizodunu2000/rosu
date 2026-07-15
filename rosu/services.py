@@ -590,15 +590,19 @@ class Services:
         return numbered
 
     # -- search --------------------------------------------------------------
-    def search(self, query: str, progress=None) -> list[dict]:
+    def search(self, query: str, search_tags: bool = False,
+               progress=None) -> list[dict]:
         """Ranked search, or the full name-sorted listing when the box is empty
-        (item 11). ``progress`` is accepted so it can run in a Worker thread."""
+        (item 11). ``search_tags`` opts into matching creator/tags too (off by
+        default — it flooded results). ``progress`` is accepted so it can run in a
+        Worker thread."""
         if query.strip():
-            rows = search.search(self.db, query)
+            rows = search.search(self.db, query, search_tags=search_tags)
         else:
             rows = self.db.all_tracks()
             self.db.attach_sources_bulk(rows)
-        self.log.info("SEARCH", query=query or "(all)", results=len(rows))
+        self.log.info("SEARCH", query=query or "(all)", results=len(rows),
+                      tags=search_tags)
         return rows
 
     def data_generation(self) -> int:

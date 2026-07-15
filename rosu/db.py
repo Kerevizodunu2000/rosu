@@ -492,26 +492,46 @@ class Database:
                 "SELECT * FROM tracks WHERE in_library=1")
             return [dict(r) for r in cur.fetchall()]
 
-    def search_candidates(self, query: str, limit: int = 2000) -> list[dict]:
-        """Broad substring recall over the searchable fields.
+    def search_candidates(self, query: str, limit: int = 2000,
+                          search_tags: bool = False) -> list[dict]:
+        """Token-AND recall over the searchable fields.
 
-        Ranking is done in :mod:`rosu.search`. Sources are NOT attached
-        here — that would be one JOIN per candidate (an N+1 that froze the UI on
-        common words). The caller attaches sources in bulk to the *displayed*
-        rows only, via :meth:`attach_sources_bulk`.
+        Each query word must appear in some **strong** field (name/artist/title)
+        — the old whole-query ``tags LIKE '%…%'`` recall flooded results with maps
+        merely tagged with a word (e.g. every Vocaloid map for "Hatsune Miku").
+        ``creator``/``tags`` are only recalled when ``search_tags`` is on. A purely
+        numeric query also matches on ``beatmapset_id``.
+
+        Ranking is done in :mod:`rosu.search`. Sources are NOT attached here — that
+        would be one JOIN per candidate (an N+1 that froze the UI on common words);
+        the caller attaches them in bulk to the *displayed* rows only.
         """
-        q = f"%{query.strip()}%"
+        from .search import tokenize
+        raw = query.strip()
+        tokens = tokenize(raw)
+        fields = ["display_name", "artist", "title"]
+        if search_tags:
+            fields = fields + ["creator", "tags"]
+
+        clauses: list[str] = []
+        params: list = []
+        for tok in tokens:
+            like = f"%{tok}%"
+            ors = " OR ".join(f"{f} LIKE ? COLLATE NOCASE" for f in fields)
+            clauses.append(f"({ors})")
+            params.extend([like] * len(fields))
+        where = " AND ".join(clauses) if clauses else "0"
+
+        if raw.isdigit():   # allow an id prefix match regardless of word tokens
+            where = f"({where}) OR CAST(beatmapset_id AS TEXT) LIKE ?"
+            params.append(f"{raw}%")
+        elif not tokens:
+            return []       # nothing searchable
+
+        params.append(limit)
         with self._lock:
             cur = self._conn.execute(
-                """SELECT * FROM tracks
-                   WHERE display_name LIKE ? COLLATE NOCASE
-                      OR artist LIKE ? COLLATE NOCASE
-                      OR title LIKE ? COLLATE NOCASE
-                      OR creator LIKE ? COLLATE NOCASE
-                      OR tags LIKE ? COLLATE NOCASE
-                      OR CAST(beatmapset_id AS TEXT) LIKE ?
-                   LIMIT ?""",
-                (q, q, q, q, q, q, limit))
+                f"SELECT * FROM tracks WHERE {where} LIMIT ?", params)
             return [dict(r) for r in cur.fetchall()]
 
     def all_tracks(self, limit: int = 5000) -> list[dict]:

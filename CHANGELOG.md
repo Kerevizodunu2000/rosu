@@ -10,6 +10,26 @@ the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-07-15
+
+Search-relevance patch (first minor of the Library Maturity line).
+
+### Fixed
+- **Search returned unrelated maps.** Searching an artist like **"Hatsune Miku"**
+  surfaced maps that merely had *miku* in their tags. Two causes, both fixed:
+  the database recalled on a whole-query `tags LIKE '%…%'`, and the ranker had a
+  weak fallback onto `tags`/`source`. Search now **tokenizes** the query and every
+  word must hit a **strong** field (name / artist / title); a row's rank is its
+  weakest word, so "all words as prefixes" beats "all words as substrings". The
+  `source` fallback is **gone** (it flooded results).
+
+### Added
+- **"Also search tags / mapper"** toggle on the Search tab — off by default.
+  When on, creator/tags are matched too, but only ever at the lowest tier, so a
+  tag hit can never outrank a real name/artist/title match.
+- **Filter box on the Artists tab** — instantly narrows the artist list by name,
+  client-side (no reload), matching the Search/Packs tabs.
+
 ## [1.0.0] - 2026-07-15
 
 First public release. Rounds Rosu out into a safe, legal, presentable app: it
@@ -382,7 +402,8 @@ Initial release. The core archive-management pipeline.
 - **EN/TR** localization; English-only code/logs.
 - Single-file **PyInstaller** build (`osu-archiver.spec`) + GitHub Actions build workflow.
 
-[Unreleased]: https://github.com/Kerevizodunu2000/rosu/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/Kerevizodunu2000/rosu/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/Kerevizodunu2000/rosu/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/Kerevizodunu2000/rosu/compare/v0.8.1...v1.0.0
 [0.8.1]: https://github.com/Kerevizodunu2000/rosu/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/Kerevizodunu2000/rosu/releases/tag/v0.8.0

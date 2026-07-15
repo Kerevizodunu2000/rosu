@@ -37,6 +37,31 @@ def test_search_candidates_returns_raw_rows_without_sources(tmp_path):
     db.close()
 
 
+def test_search_candidates_token_and(tmp_path):
+    """Every word must hit a strong field, so cross-row token soup is excluded."""
+    db = _mk(tmp_path)
+    both = db.search_candidates("hatsune miku")          # row 10 has both words
+    assert [r["beatmapset_id"] for r in both] == [111]
+    split = db.search_candidates("hatsune hardcore")     # no single row has both
+    assert split == []
+    db.close()
+
+
+def test_search_candidates_tags_are_opt_in(tmp_path):
+    db = _mk(tmp_path)
+    assert db.search_candidates("vocaloid") == []        # tag-only, off by default
+    hit = db.search_candidates("vocaloid", search_tags=True)
+    assert [r["beatmapset_id"] for r in hit] == [111]
+    db.close()
+
+
+def test_search_candidates_numeric_id(tmp_path):
+    db = _mk(tmp_path)
+    rows = db.search_candidates("222")
+    assert [r["beatmapset_id"] for r in rows] == [222]
+    db.close()
+
+
 def test_attach_sources_bulk(tmp_path):
     db = _mk(tmp_path)
     rows = db.all_tracks()

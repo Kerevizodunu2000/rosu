@@ -158,6 +158,10 @@ STRINGS: dict[str, dict[str, str]] = {
     # Search
     "search_placeholder": {"en": "Search artist, title or id…",
                            "tr": "Sanatçı, başlık veya id ara…"},
+    "search_tags_toggle": {"en": "Also search tags / mapper",
+                           "tr": "Etiketlerde / haritacıda da ara"},
+    "artist_filter_placeholder": {"en": "Filter artists…",
+                                  "tr": "Sanatçı süz…"},
     "btn_reload": {"en": "Refresh", "tr": "Yenile"},
     "search_have": {"en": "You have this music ({n} match).",
                     "tr": "Bu müzik sizde yüklü ({n} eşleşme)."},
@@ -533,6 +537,12 @@ STRINGS: dict[str, dict[str, str]] = {
                       "tr": "Kütüphanenizde sanatçı, başlık veya beatmap id'sine göre "
                             "arama yapmak için yazın."},
     "tip_search_btn": {"en": "Run the search now.", "tr": "Aramayı şimdi çalıştırır."},
+    "tip_search_tags": {
+        "en": "Off by default: also match a map's tags and mapper. Leave off for "
+              "artist/title searches — tag matching used to flood results.",
+        "tr": "Varsayılan kapalı: haritanın etiketleri ve haritacıyı da eşleştirir. "
+              "Sanatçı/başlık aramaları için kapalı bırakın — etiket eşleşmesi "
+              "sonuçları eskiden dolduruyordu."},
     "tip_reload": {"en": "Reload the list from your library (reflect new imports).",
                    "tr": "Listeyi kütüphanenden yeniden yükler (yeni içe aktarımları gösterir)."},
 
@@ -548,6 +558,9 @@ STRINGS: dict[str, dict[str, str]] = {
 
     "tip_artists_sort": {"en": "Choose how the artist list is sorted.",
                         "tr": "Sanatçı listesinin nasıl sıralanacağını seçer."},
+    "tip_artist_filter": {"en": "Filter the artist list by name (instant, no reload).",
+                          "tr": "Sanatçı listesini ada göre süzer (anında, yeniden "
+                                "yükleme yok)."},
 
     "tip_open_formats": {
         "en": "Open log_formats.md, which explains the log entry formats.",
