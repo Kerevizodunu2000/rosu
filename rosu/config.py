@@ -159,7 +159,8 @@ def _fill_defaults(cfg: Config) -> Config:
     # coerce and floor it — there is no other validation hook on load.
     try:
         cfg.drive_chunk_bytes = int(cfg.drive_chunk_bytes)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
+        # OverflowError: int(float('inf')) from a hand-edited "Infinity" in json.
         cfg.drive_chunk_bytes = 1073741824
     if cfg.drive_chunk_bytes < 1024 * 1024:   # never below 1 MiB
         cfg.drive_chunk_bytes = 1024 * 1024

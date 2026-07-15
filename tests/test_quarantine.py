@@ -50,3 +50,20 @@ def test_quarantine_never_overwrites_a_prior_file(tmp_path):
     assert d1.read_bytes() == b"first"                    # original preserved
     assert d2.read_bytes() == b"second"
     db.close()
+
+
+def test_dispose_move_never_clobbers_a_prior_archive(tmp_path):
+    # extractor.dispose_zip 'move' used to unlink whatever sat at the destination;
+    # two different packs with the same name must both survive in Processed/.
+    from rosu import extractor
+    packs = tmp_path / "Packs"
+    packs.mkdir()
+    processed = tmp_path / "Processed"
+    a = packs / "S1 - Pack.zip"
+    a.write_bytes(b"first-pack")
+    assert extractor.dispose_zip(a, "move", processed) == "ZIP_MOVED"
+    b = packs / "S1 - Pack.zip"           # different content, same name, later run
+    b.write_bytes(b"second-pack")
+    assert extractor.dispose_zip(b, "move", processed) == "ZIP_MOVED"
+    kept = sorted(p.read_bytes() for p in processed.glob("*.zip"))
+    assert kept == [b"first-pack", b"second-pack"]   # neither was clobbered

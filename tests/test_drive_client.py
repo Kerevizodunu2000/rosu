@@ -89,6 +89,26 @@ def test_upload_file_multi_chunk_with_308(tmp_path):
     assert ranges == ["bytes 0-9/20", "bytes 10-19/20"]
 
 
+def test_list_folder_follows_pagination():
+    # A folder with >1 page must be fully enumerated — chunk-index reconciliation
+    # relies on seeing every name, so a truncated listing could reuse a name.
+    pages = [
+        (200, {}, b'{"nextPageToken":"TOK2","files":[{"id":"a","name":"chunk-dev-0000.zip"}]}'),
+        (200, {}, b'{"files":[{"id":"b","name":"chunk-dev-0001.zip"}]}'),
+    ]
+    urls = []
+
+    def transport(method, url, headers=None, body=None):
+        urls.append(url)
+        return pages.pop(0)
+
+    c = client.DriveClient(FakeAuth(), transport=transport)
+    files = c.list_folder("FOLDER1")
+    assert [f["name"] for f in files] == ["chunk-dev-0000.zip", "chunk-dev-0001.zip"]
+    assert len(urls) == 2                              # both pages fetched
+    assert "TOK2" in urls[1] and "TOK2" not in urls[0]  # 2nd request carried token
+
+
 def test_upload_file_cancelled_aborts_before_put(tmp_path):
     f = tmp_path / "chunk-0000.zip"
     f.write_bytes(b"X" * 100)

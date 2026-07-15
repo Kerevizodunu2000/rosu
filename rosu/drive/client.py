@@ -96,11 +96,23 @@ class DriveClient:
         return self._find(name, parent, folder=False)
 
     def list_folder(self, parent: str) -> list[dict]:
-        params = urllib.parse.urlencode(
-            {"q": f"'{_q_escape(parent)}' in parents and trashed = false",
-             "fields": "files(id,name,size)", "pageSize": 1000, "spaces": "drive"})
-        _st, _h, data = self._api("GET", "/files?" + params)
-        return json.loads(data).get("files", [])
+        """Every file in ``parent`` — follows nextPageToken so a folder with more
+        than one page (>1000 objects) is fully enumerated, not silently truncated
+        (chunk-index reconciliation depends on seeing the true set of names)."""
+        files: list[dict] = []
+        page_token: str | None = None
+        while True:
+            q = {"q": f"'{_q_escape(parent)}' in parents and trashed = false",
+                 "fields": "nextPageToken, files(id,name,size)",
+                 "pageSize": 1000, "spaces": "drive"}
+            if page_token:
+                q["pageToken"] = page_token
+            _st, _h, data = self._api("GET", "/files?" + urllib.parse.urlencode(q))
+            payload = json.loads(data)
+            files.extend(payload.get("files", []))
+            page_token = payload.get("nextPageToken")
+            if not page_token:
+                return files
 
     def delete_file(self, file_id: str) -> None:
         self._api("DELETE", f"/files/{urllib.parse.quote(file_id)}")

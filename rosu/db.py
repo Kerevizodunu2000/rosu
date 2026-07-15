@@ -169,33 +169,54 @@ class Database:
                      "title", "mode", "season", "year", "track_count",
                      "extracted_at", "source_zip", "status", "extra_count"]
         shared = ", ".join(c for c in canonical if c in info)
-        self._conn.execute("PRAGMA foreign_keys=OFF")
-        self._conn.executescript(f"""
-            CREATE TABLE packs_new (
-                id           INTEGER PRIMARY KEY AUTOINCREMENT,
-                code         TEXT UNIQUE NOT NULL,
-                series       TEXT,
-                number       INTEGER,
-                category     TEXT,
-                full_name    TEXT,
-                title        TEXT,
-                mode         TEXT,
-                season       TEXT,
-                year         INTEGER,
-                track_count  INTEGER DEFAULT 0,
-                extracted_at TEXT,
-                source_zip   TEXT,
-                status       TEXT DEFAULT 'processed',
-                extra_count  INTEGER DEFAULT 0
-            );
-            INSERT INTO packs_new ({shared}) SELECT {shared} FROM packs;
-            DROP TABLE packs;
-            ALTER TABLE packs_new RENAME TO packs;
-            CREATE INDEX IF NOT EXISTS idx_packs_series ON packs(series);
-            CREATE INDEX IF NOT EXISTS idx_packs_category ON packs(category);
-        """)
-        self._conn.execute("PRAGMA foreign_keys=ON")
-        self._conn.commit()
+        # Do the swap inside ONE explicit transaction so an interruption between
+        # DROP TABLE packs and the RENAME can never leave the db without a packs
+        # table (which the next launch would silently recreate empty). Python's
+        # sqlite3 implicitly COMMITs before DDL in its default mode, so take manual
+        # autocommit control for the duration; PRAGMA foreign_keys can't be toggled
+        # inside a transaction, so do it outside.
+        self._conn.commit()   # flush any pending work before manual txn control
+        old_iso = self._conn.isolation_level
+        self._conn.isolation_level = None
+        try:
+            self._conn.execute("PRAGMA foreign_keys=OFF")
+            self._conn.execute("BEGIN")
+            self._conn.execute("""
+                CREATE TABLE packs_new (
+                    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                    code         TEXT UNIQUE NOT NULL,
+                    series       TEXT,
+                    number       INTEGER,
+                    category     TEXT,
+                    full_name    TEXT,
+                    title        TEXT,
+                    mode         TEXT,
+                    season       TEXT,
+                    year         INTEGER,
+                    track_count  INTEGER DEFAULT 0,
+                    extracted_at TEXT,
+                    source_zip   TEXT,
+                    status       TEXT DEFAULT 'processed',
+                    extra_count  INTEGER DEFAULT 0
+                )""")
+            self._conn.execute(
+                f"INSERT INTO packs_new ({shared}) SELECT {shared} FROM packs")
+            self._conn.execute("DROP TABLE packs")
+            self._conn.execute("ALTER TABLE packs_new RENAME TO packs")
+            self._conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_packs_series ON packs(series)")
+            self._conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_packs_category ON packs(category)")
+            self._conn.execute("COMMIT")
+        except Exception:
+            try:
+                self._conn.execute("ROLLBACK")
+            except Exception:
+                pass
+            raise
+        finally:
+            self._conn.execute("PRAGMA foreign_keys=ON")
+            self._conn.isolation_level = old_iso
 
     def data_generation(self) -> int:
         """A counter bumped on every write that changes the track set or its

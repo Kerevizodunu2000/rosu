@@ -192,6 +192,24 @@ def test_dispose_archive_to_drive_uploads_and_removes(tmp_path, monkeypatch):
     db.close()
 
 
+def test_dispose_archives_uploads_to_drive_when_configured(tmp_path, monkeypatch):
+    # The Dashboard "Remove already-added" button (services.dispose_archives) must
+    # honour zip_disposal=="drive" — upload then remove — not silently Recycle-Bin
+    # the archives the user asked to back up to the cloud first.
+    cfg, db, svc = _make_services(tmp_path, monkeypatch)
+    cfg.zip_disposal = "drive"
+    fake = FakeClient()
+    svc._make_drive_client = lambda: fake
+    zip_path = cfg.packs_path / "S9 - Pack.zip"
+    zip_path.write_bytes(b"archive-bytes")
+
+    n = svc.dispose_archives([zip_path])
+    assert n == 1
+    assert "S9 - Pack.zip" in fake.uploads     # uploaded to Drive, NOT trashed
+    assert not zip_path.exists()               # removed locally after upload
+    db.close()
+
+
 def test_dispose_archive_to_drive_falls_back_when_disconnected(tmp_path, monkeypatch):
     cfg, db, svc = _make_services(tmp_path, monkeypatch)
     zip_path = cfg.packs_path / "S2 - Pack.zip"

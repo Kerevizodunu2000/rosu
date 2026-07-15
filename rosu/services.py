@@ -197,7 +197,8 @@ class Services:
                 self.cfg.drive_folder_id = folder
                 config.save_config(self.cfg)
             packs_folder = client.ensure_folder("Packs", folder)
-            client.upload_file(zip_path, zip_path.name, packs_folder)
+            client.upload_file(zip_path, zip_path.name, packs_folder,
+                               cancel=self._drive_cancel.is_set)
             zip_path.unlink(missing_ok=True)   # uploaded -> reclaim local disk
             self.log.info("ZIP_TO_DRIVE", file=zip_path.name)
             return "ZIP_TO_DRIVE"
@@ -236,7 +237,14 @@ class Services:
         n = 0
         for p in paths:
             try:
-                action = extractor.dispose_zip(Path(p), self.cfg.zip_disposal, processed)
+                # "drive" needs the upload-then-remove path (with its safe
+                # move-to-Processed fallback); dispose_zip has no "drive" branch
+                # and would silently Recycle-Bin the archive the user asked to
+                # back up to the cloud first.
+                if self.cfg.zip_disposal == "drive":
+                    action = self._dispose_archive_to_drive(Path(p))
+                else:
+                    action = extractor.dispose_zip(Path(p), self.cfg.zip_disposal, processed)
                 self.log.info(action, file=Path(p).name)
                 n += 1
             except OSError as exc:
@@ -486,8 +494,11 @@ class Services:
                 except OSError:
                     pass
                 staged.append(dst)
-            except OSError:
-                staged.append(f)   # fall back to the original for this one
+            except OSError as exc:
+                # Do NOT substitute the Output original: osu! would consume it and
+                # break the "Output is preserved" guarantee, silently. Log and skip
+                # — the set stays in Output (and the Library) to retry.
+                self.log.error("import:stage", f"{f.name}: {str(exc)[:150]}")
         return staged or files
 
     def _stage_for_stable(self, files, exe=None):

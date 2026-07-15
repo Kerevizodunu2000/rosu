@@ -159,8 +159,10 @@ def dispose_zip(zip_path: Path, mode: str, processed_dir: Path) -> str:
         processed_dir = Path(processed_dir)
         processed_dir.mkdir(parents=True, exist_ok=True)
         dest = processed_dir / zip_path.name
-        if dest.exists():
-            dest.unlink()
+        n = 1
+        while dest.exists():   # never clobber a different archive already here
+            dest = processed_dir / f"{zip_path.stem}.{n}{zip_path.suffix}"
+            n += 1
         zip_path.replace(dest)
         return "ZIP_MOVED"
     # default: Recycle Bin
