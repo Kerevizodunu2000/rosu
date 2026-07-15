@@ -12,7 +12,7 @@
 <p><sub><i>rose&nbsp;+&nbsp;osu!</i></sub></p>
 
 <p>
-  <a href="https://github.com/Kerevizodunu2000/rosu/releases"><img alt="Latest release" src="https://img.shields.io/badge/release-v1.0.0-ff66aa?labelColor=2b2b2b"></a>
+  <a href="https://github.com/Kerevizodunu2000/rosu/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/Kerevizodunu2000/rosu?label=release&labelColor=2b2b2b&color=ff66aa"></a>
   <a href="LICENSE"><img alt="License: GPL-3.0-or-later" src="https://img.shields.io/badge/license-GPL--3.0--or--later-ff66aa?labelColor=2b2b2b"></a>
   <img alt="Platform: Windows" src="https://img.shields.io/badge/platform-Windows-ff66aa?labelColor=2b2b2b&logo=windows&logoColor=white">
   <img alt="Python 3.13" src="https://img.shields.io/badge/python-3.13-ff66aa?labelColor=2b2b2b&logo=python&logoColor=white">
