@@ -36,6 +36,9 @@ token.json
 /Quarantine/
 /data/
 /logs/
+# SQLite databases — the real one lives in the (ignored) data/ folder; this also
+# catches any stray *.db a test or tool drops in the repo root.
+*.db
 
 # --- Python ------------------------------------------------------------------
 __pycache__/
