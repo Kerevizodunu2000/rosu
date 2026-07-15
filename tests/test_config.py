@@ -26,3 +26,14 @@ def test_fill_defaults_floors_tiny_chunk_bytes():
     cfg = config.Config(root="x", drive_chunk_bytes=10)
     cfg = config._fill_defaults(cfg)
     assert cfg.drive_chunk_bytes >= 1024 * 1024   # never below 1 MiB
+
+
+def test_auto_refresh_on_tab_defaults_on_and_round_trips(tmp_path, monkeypatch):
+    # v1.3: the "auto-refresh a tab on switch" toggle defaults ON and persists.
+    monkeypatch.setattr(config, "_config_file", lambda: tmp_path / "config.json")
+    assert config.Config(root="x").auto_refresh_on_tab is True
+    cfg = config.load_config()                         # no file yet → default
+    assert cfg.auto_refresh_on_tab is True
+    cfg.auto_refresh_on_tab = False
+    config.save_config(cfg)
+    assert config.load_config().auto_refresh_on_tab is False

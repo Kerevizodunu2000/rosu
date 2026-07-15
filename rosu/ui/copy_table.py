@@ -16,7 +16,7 @@ count) sort numerically even when displayed as formatted text.
 """
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
     QAbstractItemView, QApplication, QHeaderView, QMenu, QTableWidget,
@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
 
 _CLEAN_ROLE = Qt.UserRole + 11  # per-row clean copy name (single-click copy)
 _COPY_ROLE = Qt.UserRole + 12   # per-cell TSV copy override (Ctrl+C / double-click)
+_PATH_ROLE = Qt.UserRole + 13   # per-row file path for "Open file location" (v1.3)
 
 
 class SortItem(QTableWidgetItem):
@@ -52,11 +53,14 @@ class SortItem(QTableWidgetItem):
 
 
 class CopyTable(QTableWidget):
+    openLocationRequested = Signal(str)   # emitted with a file path (v1.3)
+
     def __init__(self, name_column: int = 0, parent=None):
         super().__init__(parent)
         self._name_column = name_column
         self._menu_names = "Copy names"          # overridable via set_menu_labels
         self._menu_table = "Copy as table (Ctrl+C)"
+        self._menu_open_location = ""            # set via retranslate; empty = hidden
         self._widths_seeded = False
         self.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.setSelectionBehavior(QAbstractItemView.SelectRows)
@@ -109,6 +113,21 @@ class CopyTable(QTableWidget):
         if item is not None:
             item.setData(_COPY_ROLE, text)
 
+    def set_row_path(self, row: int, path) -> None:
+        """Attach a file path to this row for the "Open file location" context
+        menu entry (v1.3). Stored on the name-column item, same as the other
+        per-row roles."""
+        item = self.item(row, self._name_column)
+        if item is not None:
+            item.setData(_PATH_ROLE, str(path))
+
+    def _row_path(self, row: int) -> str:
+        item = self.item(row, self._name_column)
+        if item is None:
+            return ""
+        val = item.data(_PATH_ROLE)
+        return val if val else ""
+
     def _clean_name(self, row: int) -> str:
         item = self.item(row, self._name_column)
         if item is None:
@@ -153,6 +172,14 @@ class CopyTable(QTableWidget):
         act_table.triggered.connect(self._copy_rows_tsv)
         menu.addAction(act_names)
         menu.addAction(act_table)
+        if len(rows) == 1 and self._menu_open_location:
+            path = self._row_path(rows[0])
+            if path:
+                menu.addSeparator()
+                act_open = QAction(self._menu_open_location, self)
+                act_open.triggered.connect(
+                    lambda: self.openLocationRequested.emit(path))
+                menu.addAction(act_open)
         menu.exec(self.viewport().mapToGlobal(pos))
 
     def keyPressEvent(self, event) -> None:

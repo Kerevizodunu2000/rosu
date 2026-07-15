@@ -725,6 +725,65 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "Tick 'Upload to Drive' first — a share link needs the file uploaded.",
         "tr": "Önce 'Drive'a yükle'yi işaretle — paylaşım linki için dosyanın "
               "yüklenmesi gerekir."},
+
+    # -- İş Kuyruğu / Job queue (v1.3) ---------------------------------------
+    "sc_refresh": {"en": "Refresh counts", "tr": "Sayıları yenile"},
+    "sc_jobqueue_title": {"en": "Job queue", "tr": "İş kuyruğu"},
+    "job_added": {"en": "Added to the queue.", "tr": "Kuyruğa eklendi."},
+    "job_cancelled_rest": {"en": "Cancelled — the rest keep going.",
+                           "tr": "İptal edildi — diğerleri devam ediyor."},
+    "job_clear_finished": {"en": "Clear finished", "tr": "Bitenleri temizle"},
+    "queue_empty": {
+        "en": "Queue is empty. Start an action above to add a job.",
+        "tr": "Kuyruk boş. Bir iş eklemek için yukarıdan bir işlem başlat."},
+    "job_state_pending": {"en": "Queued", "tr": "Sırada"},
+    "job_state_running": {"en": "Running", "tr": "Çalışıyor"},
+    "job_state_done": {"en": "Done", "tr": "Bitti"},
+    "job_state_failed": {"en": "Failed", "tr": "Hata"},
+    "job_state_cancelled": {"en": "Cancelled", "tr": "İptal"},
+    # job titles
+    "job_unpack_lazer": {"en": "Unpack → osu!lazer", "tr": "Aç → osu!lazer"},
+    "job_unpack_stable": {"en": "Unpack → osu!(stable)", "tr": "Aç → osu!(stable)"},
+    "job_unpack_both": {"en": "Unpack → both clients", "tr": "Aç → iki istemci"},
+    "job_transfer": {"en": "Transfer {source} → {target}",
+                     "tr": "Aktar {source} → {target}"},
+    "job_save": {"en": "Save {sources} → Library",
+                 "tr": "{sources} → Library'ye kaydet"},
+    "job_export": {"en": "Export: {source}", "tr": "Dışa aktar: {source}"},
+    "job_dedup": {"en": "Dedupe Library", "tr": "Kütüphaneyi tekilleştir"},
+    # step labels
+    "job_step_prescan": {"en": "Pre-scan packs", "tr": "Paketleri ön tara"},
+    "job_step_extract": {"en": "Extract", "tr": "Çıkart"},
+    "job_step_send_lazer": {"en": "Send to osu!lazer", "tr": "osu!lazer'e gönder"},
+    "job_step_send_stable": {"en": "Send to osu!(stable)",
+                             "tr": "osu!(stable)'a gönder"},
+    "job_step_enumerate": {"en": "Check target", "tr": "Hedefi tara"},
+    "job_step_export_client": {"en": "Export from client",
+                               "tr": "İstemciden dışa aktar"},
+    "job_step_send": {"en": "Send to target", "tr": "Hedefe gönder"},
+    "job_step_save_lazer": {"en": "osu!lazer → Library", "tr": "osu!lazer → Library"},
+    "job_step_save_stable": {"en": "osu!(stable) → Library",
+                             "tr": "osu!(stable) → Library"},
+    "job_step_gather": {"en": "Gather sets", "tr": "Setleri topla"},
+    "job_step_archive": {"en": "Write archive", "tr": "Arşiv oluştur"},
+    "job_step_upload": {"en": "Upload to Drive", "tr": "Drive'a yükle"},
+    "job_step_scan": {"en": "Scan for duplicates", "tr": "Kopyaları tara"},
+    "job_step_remove": {"en": "Recycle duplicates",
+                        "tr": "Kopyaları geri dönüşüme gönder"},
+
+    # -- quick UX (v1.3) -----------------------------------------------------
+    "set_auto_refresh": {"en": "Auto-refresh a tab when I open it",
+                         "tr": "Sekmeye geçince verileri otomatik yenile"},
+    "tip_auto_refresh": {
+        "en": "When you switch to a tab, refresh its data automatically "
+              "(Dashboard scan, Shortcuts counts, Search, Packs…).",
+        "tr": "Bir sekmeye geçtiğinde verilerini otomatik yeniler (Panel taraması, "
+              "Kısayol sayıları, Arama, Packs…)."},
+    "sc_export_random": {"en": "Random N:", "tr": "Rastgele N:"},
+    "tip_export_random": {
+        "en": "Export a random sample of this many sets instead of all of them.",
+        "tr": "Hepsi yerine bu kadar seti rastgele seçip dışa aktarır."},
+    "menu_open_location": {"en": "Open file location", "tr": "Dosya konumunu aç"},
 }
 
 

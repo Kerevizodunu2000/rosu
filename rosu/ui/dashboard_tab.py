@@ -16,6 +16,7 @@ from .. import config, extractor, osu_import
 from ..i18n import human_duration
 from ..workers import Worker
 from .progress_panel import ProgressPanel
+from .reveal import reveal_in_explorer
 
 
 def _fmt_size(n: int) -> str:
@@ -89,6 +90,7 @@ class DashboardTab(QWidget):
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.verticalHeader().setVisible(False)
         self.table.setAlternatingRowColors(True)
+        self.table.cellDoubleClicked.connect(self._on_row_activated)
         root.addWidget(self.table, 1)
 
         # progress feedback
@@ -223,6 +225,18 @@ class DashboardTab(QWidget):
             self.table.setItem(r, 1, size_item)
         self.table.resizeColumnsToContents()
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+
+    def _on_row_activated(self, row: int, _col: int) -> None:
+        """Double-click a row: reveal its file in the OS file manager (v1.3)."""
+        if self._view == "output":
+            if not (0 <= row < len(self._output)):
+                return
+            path = self.ctx.cfg.output_path / self._output[row]["name"]
+        else:
+            if not (0 <= row < len(self._scan)):
+                return
+            path = self._scan[row][0]
+        reveal_in_explorer(self, self.ctx, path)
 
     def _update_count(self) -> None:
         if self._view == "output":

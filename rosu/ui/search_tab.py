@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 from ..i18n import human_duration
 from ..workers import Worker
 from .copy_table import CopyTable, SortItem
+from .reveal import reveal_in_explorer
 
 
 class SearchTab(QWidget):
@@ -59,6 +60,7 @@ class SearchTab(QWidget):
 
         self.table = CopyTable(name_column=0)
         self.table.setColumnCount(len(self._KEYS))
+        self.table.openLocationRequested.connect(self._open_location)
         root.addWidget(self.table, 1)
 
         # Debounced live search: wait until typing pauses (~250 ms) before running.
@@ -81,6 +83,7 @@ class SearchTab(QWidget):
         self.btn_reload.setToolTip(t("tip_reload"))
         self.table.setHorizontalHeaderLabels([t(k) for k in self._KEYS])
         self.table.set_menu_labels(t("copy_names_action"), t("copy_table_action"))
+        self.table._menu_open_location = t("menu_open_location")
 
     def on_shown(self) -> None:
         # First time the tab is opened, show the full library so it's browsable.
@@ -179,7 +182,13 @@ class SearchTab(QWidget):
                 full = row.get("source_full") or []
                 if full:
                     self.table.set_copy_value(r, 7, "; ".join(full))
+                if row.get("in_library") and row.get("filename"):
+                    self.table.set_row_path(
+                        r, self.ctx.cfg.library_path / row["filename"])
         finally:
             self.table.setSortingEnabled(True)
             self.table.setUpdatesEnabled(True)
         self.table.seed_widths_once(name_min=260)   # title-only name column
+
+    def _open_location(self, path: str) -> None:
+        reveal_in_explorer(self, self.ctx, path)

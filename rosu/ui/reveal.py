@@ -1,0 +1,37 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+"""Reveal a file in the OS file manager (v1.3). On Windows it selects the file
+in Explorer; elsewhere it opens the containing folder. Missing files are
+reported, not silently ignored."""
+from __future__ import annotations
+
+import subprocess
+import sys
+from pathlib import Path
+
+from PySide6.QtCore import QUrl
+from PySide6.QtGui import QDesktopServices
+from PySide6.QtWidgets import QMessageBox
+
+
+def reveal_in_explorer(parent, ctx, path) -> None:
+    """Open ``path``'s location. ``parent`` is the calling QWidget (for the
+    warning dialog), ``ctx`` is the AppContext (for ``ctx.t`` translations).
+
+    Callers pass internally-derived paths (scanned archives, Output/Library
+    files) — this does not sanitise free-form input. Args go to ``Popen`` as a
+    list (never ``shell=True``), so there is no shell-injection surface."""
+    p = Path(path)
+    if not p.exists():
+        QMessageBox.information(parent, ctx.t("app_title"),
+                                ctx.t("file_missing", path=str(p)))
+        return
+    if sys.platform.startswith("win"):
+        try:
+            # explorer wants the flag and path as ONE token: "/select,<path>".
+            # Splitting them into two args makes Explorer ignore /select and just
+            # open the default folder. Backslash path (str on a Windows Path).
+            subprocess.Popen(["explorer", f"/select,{p}"])
+            return
+        except OSError:
+            pass   # fall through to opening the containing folder
+    QDesktopServices.openUrl(QUrl.fromLocalFile(str(p.parent)))

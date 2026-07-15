@@ -1,28 +1,99 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Shortcuts (Kısayollar) tab: installed-music summary + one-click flows —
-lazer↔stable transfer, save-to-Library, unpack→import, export, and dedup (v1.2).
+lazer↔stable transfer, save-to-Library, unpack→import, export, and dedup.
 
-Thin UI: every action runs a :class:`~rosu.services.Services` method off the UI
-thread via :class:`~rosu.workers.Worker`, mirroring the Dashboard tab.
+v1.3 turns every action into a **queued job** (İş Kuyruğu): each button builds a
+:class:`~rosu.jobs.Job` and hands it to a :class:`~rosu.ui.job_queue.JobQueueController`,
+which runs the job's sub-steps with live status, per-item cancel, and DISK/DRIVE
+concurrency (a disk op runs while a Drive upload runs). The buttons stay live so
+several jobs can be queued at once.
 """
 from __future__ import annotations
 
 from pathlib import Path
 
 from PySide6.QtWidgets import (
-    QCheckBox, QComboBox, QFileDialog, QGridLayout, QGroupBox, QHBoxLayout,
-    QLabel, QMessageBox, QPushButton, QVBoxLayout, QWidget,
+    QCheckBox, QComboBox, QFileDialog, QFrame, QGridLayout, QGroupBox,
+    QHBoxLayout, QLabel, QMessageBox, QProgressBar, QPushButton, QScrollArea,
+    QSpinBox, QVBoxLayout, QWidget,
 )
 
+from .. import config
+from ..jobs import State
 from ..workers import Worker
-from .progress_panel import ProgressPanel
+from .job_queue import JobQueueController
 
 _GIB = 1024 ** 3
 _MIB = 1024 ** 2
 
+_GLYPH = {State.PENDING: "○", State.RUNNING: "⟳", State.DONE: "✓",
+          State.FAILED: "✗", State.CANCELLED: "⊘", State.SKIPPED: "–"}
+_STATE_KEY = {
+    State.PENDING: "job_state_pending", State.RUNNING: "job_state_running",
+    State.DONE: "job_state_done", State.FAILED: "job_state_failed",
+    State.CANCELLED: "job_state_cancelled", State.SKIPPED: "job_state_cancelled"}
+
 
 def _fmt_size(n: int) -> str:
     return f"{n / _MIB:,.1f} MB"
+
+
+class JobRowWidget(QFrame):
+    """One row in the İş Kuyruğu list: title + state chip + cancel, and a line
+    per sub-step with a glyph and (for the active step) a thin progress bar.
+    ``update_view`` re-reads the Job so a language change or a state change is
+    reflected in place (no full rebuild, no flicker)."""
+
+    def __init__(self, job, controller, ctx):
+        super().__init__(objectName="jobrow")
+        self.setFrameShape(QFrame.StyledPanel)
+        self.job = job
+        self.controller = controller
+        self.ctx = ctx
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(8, 6, 8, 6)
+        lay.setSpacing(2)
+
+        head = QHBoxLayout()
+        self.lbl_title = QLabel(objectName="status")
+        self.lbl_state = QLabel(objectName="status")
+        self.btn_cancel = QPushButton("✕", objectName="secondary")
+        self.btn_cancel.setFixedWidth(32)
+        self.btn_cancel.clicked.connect(lambda: self.controller.cancel_job(self.job))
+        head.addWidget(self.lbl_title, 1)
+        head.addWidget(self.lbl_state)
+        head.addWidget(self.btn_cancel)
+        lay.addLayout(head)
+
+        self.step_rows: list = []
+        for _step in job.steps:
+            r = QHBoxLayout()
+            lbl = QLabel(objectName="status")
+            bar = QProgressBar()
+            bar.setMaximumHeight(8)
+            bar.setTextVisible(False)
+            bar.setVisible(False)
+            r.addWidget(lbl, 3)
+            r.addWidget(bar, 2)
+            lay.addLayout(r)
+            self.step_rows.append((lbl, bar))
+
+    def update_view(self) -> None:
+        t = self.ctx.t
+        self.lbl_title.setText(
+            f"{_GLYPH.get(self.job.state, '')} "
+            + t(self.job.title_key, **self.job.title_kwargs))
+        self.lbl_state.setText(t(_STATE_KEY.get(self.job.state, "job_state_pending")))
+        self.btn_cancel.setVisible(self.job.state in (State.PENDING, State.RUNNING))
+        self.setToolTip(self.job.error or "")
+        for (lbl, bar), step in zip(self.step_rows, self.job.steps):
+            lbl.setText(f"    {_GLYPH.get(step.state, '○')} {t(step.key)}")
+            if step.state == State.RUNNING and step.total:
+                bar.setMaximum(step.total)
+                bar.setValue(step.done)
+                bar.setVisible(True)
+            else:
+                bar.setVisible(False)
 
 
 class ShortcutsTab(QWidget):
@@ -35,13 +106,27 @@ class ShortcutsTab(QWidget):
         self._summary: dict | None = None
         self._status_key: str | None = "ready"   # remembered so a language change
         self._status_kwargs: dict = {}            # can re-render the status message
+        self._rows: dict = {}                     # job.id -> JobRowWidget
+
+        self.queue = JobQueueController(self)
+        self.queue.changed.connect(self._refresh_queue)
+        self.queue.job_finished.connect(self._on_job_finished)
+        self.queue.gate_needed.connect(self._on_gate_needed)
 
         root = QVBoxLayout(self)
         root.setContentsMargins(18, 18, 18, 18)
         root.setSpacing(12)
 
+        header = QHBoxLayout()
         self.title = QLabel(objectName="h1")
-        root.addWidget(self.title)
+        header.addWidget(self.title, 1)
+        # Manual summary refresh — the only way to update the counts when the
+        # "auto-refresh a tab on entry" setting is turned off and no job has run.
+        self.btn_refresh = QPushButton("⟳", objectName="secondary")
+        self.btn_refresh.setFixedWidth(36)
+        self.btn_refresh.clicked.connect(self.on_shown)
+        header.addWidget(self.btn_refresh)
+        root.addLayout(header)
 
         # -- installed-music summary -------------------------------------------
         self.summary_box = QGroupBox()
@@ -104,10 +189,17 @@ class ShortcutsTab(QWidget):
         self.export_share = QCheckBox()
         self.export_drive.toggled.connect(self._on_drive_toggled)
         self.export_share.toggled.connect(self._on_share_toggled)
+        self.export_random = QCheckBox()
+        self.export_random_n = QSpinBox()
+        self.export_random_n.setRange(1, 100000)
+        self.export_random_n.setValue(10)
+        self.export_random_n.setEnabled(False)
+        self.export_random.toggled.connect(self.export_random_n.setEnabled)
         self.btn_export = QPushButton(objectName="secondary")
         self.btn_export.clicked.connect(self.on_export)
         for w in (self.export_source, self.export_format, self.export_split,
-                  self.export_drive, self.export_share, self.btn_export):
+                  self.export_drive, self.export_share, self.export_random,
+                  self.export_random_n, self.btn_export):
             erow.addWidget(w)
         erow.addStretch(1)
         root.addWidget(self.export_box)
@@ -120,24 +212,40 @@ class ShortcutsTab(QWidget):
         drow.addStretch(1)
         root.addLayout(drow)
 
-        # -- progress / status -------------------------------------------------
-        self.progress_panel = ProgressPanel()
-        root.addWidget(self.progress_panel)
-        root.addStretch(1)
+        # -- İş Kuyruğu / job queue --------------------------------------------
+        self.jobqueue_box = QGroupBox()
+        qlay = QVBoxLayout(self.jobqueue_box)
+        self.queue_empty = QLabel(objectName="status")
+        qlay.addWidget(self.queue_empty)
+        self.queue_container = QWidget()
+        self.queue_list = QVBoxLayout(self.queue_container)
+        self.queue_list.setContentsMargins(0, 0, 0, 0)
+        self.queue_list.addStretch(1)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setWidget(self.queue_container)
+        scroll.setMinimumHeight(150)
+        qlay.addWidget(scroll)
+        qbtns = QHBoxLayout()
+        qbtns.addStretch(1)
+        self.btn_clear_finished = QPushButton(objectName="secondary")
+        self.btn_clear_finished.clicked.connect(self.queue.clear_finished)
+        qbtns.addWidget(self.btn_clear_finished)
+        qlay.addLayout(qbtns)
+        root.addWidget(self.jobqueue_box, 1)
 
         bottom = QHBoxLayout()
         self.status = QLabel(objectName="status")
-        self.btn_cancel = QPushButton(objectName="secondary")
-        self.btn_cancel.setVisible(False)
-        self.btn_cancel.clicked.connect(self._on_cancel)
         bottom.addWidget(self.status, 1)
-        bottom.addWidget(self.btn_cancel)
         root.addLayout(bottom)
+
+        self._refresh_queue()
 
     # -- i18n ------------------------------------------------------------------
     def retranslate(self) -> None:
         t = self.ctx.t
         self.title.setText(t("tab_shortcuts"))
+        self.btn_refresh.setToolTip(t("sc_refresh"))
         self.summary_box.setTitle(t("sc_summary_title"))
         for key in ("lazer", "stable", "library", "drive"):
             head, _val = self.sum_labels[key]
@@ -156,12 +264,18 @@ class ShortcutsTab(QWidget):
         self._fill_export_combos()
         self.export_drive.setText(t("sc_export_drive"))
         self.export_share.setText(t("sc_export_share"))
+        self.export_random.setText(t("sc_export_random"))
+        self.export_random.setToolTip(t("tip_export_random"))
+        self.export_random_n.setToolTip(t("tip_export_random"))
         self.btn_export.setText(t("btn_export"))
         self.btn_dedup.setText(t("btn_dedup"))
         self.btn_dedup.setToolTip(t("tip_dedup"))
-        self.btn_cancel.setText(t("btn_cancel"))
+        self.jobqueue_box.setTitle(t("sc_jobqueue_title"))
+        self.btn_clear_finished.setText(t("job_clear_finished"))
+        self.queue_empty.setText(t("queue_empty"))
         self._render_summary()
         self._sync_drive_controls()
+        self._refresh_queue()
         if self._status_key:                      # re-render the last status in the
             self.status.setText(t(self._status_key, **self._status_kwargs))  # new language
         elif not self.status.text():
@@ -253,52 +367,25 @@ class ShortcutsTab(QWidget):
             else:
                 val.setText(t("sc_count_fmt", n=info["count"]))
 
-    # -- actions ---------------------------------------------------------------
+    # -- actions: build a job and queue it -------------------------------------
     def on_transfer(self, source: str, target: str) -> None:
-        self._busy()
-        self.btn_cancel.setEnabled(True)
-        self.btn_cancel.setVisible(True)
-        self._start_worker(
-            lambda progress=None: self.services.transfer_between_clients(
-                source, target, progress),
-            on_success=self._after_transfer)
-
-    def _after_transfer(self, res) -> None:
-        self._idle()
         t = self.ctx.t
-        if res.get("error") == "same_client":
+        if source == target:
             return
-        if res.get("error") == "no_target_exe":
+        # Validate up front (as services.transfer_between_clients did) so an
+        # invalid pick is reported immediately instead of failing in the queue.
+        target_exe = (self.ctx.cfg.osu_stable_exe or config.detect_stable_exe()
+                      if target == "stable"
+                      else self.ctx.cfg.osu_lazer_exe or config.detect_osu_exe())
+        if not target_exe or not Path(target_exe).exists():
             QMessageBox.warning(self, t("app_title"), t("sc_no_target_exe"))
-            self._set_status("sc_no_target_exe")
             return
-        if res.get("cancelled"):
-            self._set_status("sc_cancelled")
-            self.on_shown()
-            return
-        self._set_status("sc_transfer_done", found=res["found"],
-                         transferred=res["transferred"], skipped=res["skipped"])
-        self.on_shown()
+        self.queue.enqueue(self.services.build_transfer_job(source, target))
+        self._set_status("job_added")
 
     def on_save(self, sources) -> None:
-        self._busy()
-        self.btn_cancel.setEnabled(True)
-        self.btn_cancel.setVisible(True)
-        self._start_worker(
-            lambda progress=None: self.services.save_installed_to_library(
-                sources, progress),
-            on_success=self._after_save)
-
-    def _after_save(self, res) -> None:
-        self._idle()
-        if any(isinstance(v, dict) and v.get("cancelled") for v in res.values()):
-            self._set_status("sc_cancelled")
-            self.on_shown()
-            return
-        new = sum(v.get("new", 0) for v in res.values() if isinstance(v, dict))
-        self._set_status("sc_save_done", new=new)
-        self.mw.search.reload()
-        self.on_shown()
+        self.queue.enqueue(self.services.build_save_job(sources))
+        self._set_status("job_added")
 
     def on_unpack(self, targets) -> None:
         t = self.ctx.t
@@ -314,25 +401,8 @@ class ShortcutsTab(QWidget):
         if clicked is None or box.buttonRole(clicked) == QMessageBox.RejectRole:
             return
         skip = clicked is only_new   # "Only new" skips sets already in the target
-        self._busy()
-        self.btn_cancel.setEnabled(True)
-        self.btn_cancel.setVisible(True)
-        self._start_worker(
-            lambda progress=None: self.services.unpack_and_import(
-                targets, skip, progress),
-            on_success=self._after_unpack)
-
-    def _after_unpack(self, res) -> None:
-        self._idle()
-        if res.get("cancelled"):
-            self._set_status("sc_cancelled")
-            self.on_shown()
-            return
-        ex = res.get("extract", {})
-        skipped = sum(v.get("skipped", 0) for v in res.get("imports", {}).values())
-        self._set_status("sc_unpack_done2", tracks=ex.get("tracks", 0), skipped=skipped)
-        self.mw.search.reload()
-        self.on_shown()
+        self.queue.enqueue(self.services.build_unpack_job(targets, skip))
+        self._set_status("job_added")
 
     def on_export(self) -> None:
         t = self.ctx.t
@@ -341,6 +411,7 @@ class ShortcutsTab(QWidget):
         split = self.export_split.currentData()
         upload = self.export_drive.isChecked()
         share = self.export_share.isChecked()
+        limit = self.export_random_n.value() if self.export_random.isChecked() else None
         if upload and not self.services.drive_status().get("connected"):
             QMessageBox.information(self, t("app_title"), t("drive_connect_first"))
             return
@@ -353,20 +424,87 @@ class ShortcutsTab(QWidget):
         dest_base = Path(path)
         if dest_base.suffix.lower() in (".zip", ".7z"):
             dest_base = dest_base.with_suffix("")   # exporter re-appends the suffix
-        self._busy()
-        self.btn_cancel.setEnabled(True)
-        self.btn_cancel.setVisible(True)
-        self._start_worker(
-            lambda progress=None: self.services.export_sets(
-                source, dest_base, fmt, split, upload, share, progress),
-            on_success=self._after_export)
+        job = self.services.build_export_job(source, dest_base, fmt, split,
+                                             upload, share, limit)
+        job.title_kwargs["source"] = t(f"sc_source_{source}")   # translated label
+        self.queue.enqueue(job)
+        self._set_status("job_added")
 
-    def _after_export(self, res) -> None:
-        self._idle()
+    def on_dedup(self) -> None:
+        """Queue a dedup job: it scans first, then WAITS at a gate for the preview
+        confirmation before recycling anything (240-file safety)."""
+        self.queue.enqueue(self.services.build_dedup_job())
+        self._set_status("job_added")
+
+    # -- queue reactions -------------------------------------------------------
+    def _refresh_queue(self) -> None:
+        jobs = self.queue.jobs
+        ids = {j.id for j in jobs}
+        for jid in list(self._rows):
+            if jid not in ids:
+                w = self._rows.pop(jid)
+                self.queue_list.removeWidget(w)
+                w.deleteLater()
+        for job in jobs:
+            row = self._rows.get(job.id)
+            if row is None:
+                row = JobRowWidget(job, self.queue, self.ctx)
+                self._rows[job.id] = row
+                # insert above the trailing stretch so rows stack top-down
+                self.queue_list.insertWidget(self.queue_list.count() - 1, row)
+            row.update_view()
+        self.queue_empty.setVisible(not jobs)
+
+    def _on_gate_needed(self, job) -> None:
+        """A dedup job finished scanning — show the preview + confirm before it
+        recycles anything. No duplicates → skip the remove step cleanly."""
         t = self.ctx.t
-        if res.get("cancelled"):
-            self._set_status("sc_cancelled")
+        plan = job.ctx.get("plan", {})
+        if plan.get("count", 0) == 0:
+            self._set_status("sc_dedup_none")
+            self.queue.skip_gate(job)
             return
+        reply = QMessageBox.question(
+            self, t("app_title"),
+            t("sc_dedup_confirm", count=plan["count"],
+              freed=_fmt_size(plan["freed_bytes"])),
+            QMessageBox.Ok | QMessageBox.Cancel, QMessageBox.Cancel)
+        if reply == QMessageBox.Ok:
+            self.queue.confirm_gate(job)
+        else:
+            self.queue.cancel_job(job)
+
+    def _on_job_finished(self, job) -> None:
+        """Route a completed job's result to the matching presenter (preserving
+        the v1.2 completion dialogs), then refresh the installed-summary counts."""
+        res = job.result or {}
+        presenter = {
+            "transfer": self._present_transfer, "save": self._present_save,
+            "unpack": self._present_unpack, "export": self._present_export,
+            "dedup": self._present_dedup,
+        }.get(job.kind)
+        if presenter is not None:
+            presenter(res)
+        self.on_shown()
+
+    def _present_transfer(self, res) -> None:
+        self._set_status("sc_transfer_done", found=res.get("found", 0),
+                         transferred=res.get("transferred", 0),
+                         skipped=res.get("skipped", 0))
+
+    def _present_save(self, res) -> None:
+        new = sum(v.get("new", 0) for v in res.values() if isinstance(v, dict))
+        self._set_status("sc_save_done", new=new)
+        self.mw.search.reload()
+
+    def _present_unpack(self, res) -> None:
+        ex = res.get("extract", {})
+        skipped = sum(v.get("skipped", 0) for v in res.get("imports", {}).values())
+        self._set_status("sc_unpack_done2", tracks=ex.get("tracks", 0), skipped=skipped)
+        self.mw.search.reload()
+
+    def _present_export(self, res) -> None:
+        t = self.ctx.t
         if res.get("count", 0) == 0:
             self._set_status("sc_export_empty")
             return
@@ -391,43 +529,14 @@ class ShortcutsTab(QWidget):
             # user must know so they can review/revoke the share in Drive.
             QMessageBox.warning(self, t("app_title"), t("sc_export_shared_no_link"))
 
-    def on_dedup(self) -> None:
-        """Preview what dedup would recycle, confirm (explaining the criterion),
-        then remove — never delete files without an explicit OK (240-file safety)."""
-        self._busy()
-        self._start_worker(self.services.dedup_library_plan,
-                           on_success=self._after_dedup_plan)
-
-    def _after_dedup_plan(self, plan) -> None:
-        self._idle()
-        t = self.ctx.t
-        if plan.get("count", 0) == 0:
-            self._set_status("sc_dedup_none")
-            return
-        reply = QMessageBox.question(
-            self, t("app_title"),
-            t("sc_dedup_confirm", count=plan["count"],
-              freed=_fmt_size(plan["freed_bytes"])),
-            QMessageBox.Ok | QMessageBox.Cancel, QMessageBox.Cancel)
-        if reply != QMessageBox.Ok:
-            self._set_status("ready")
-            return
-        names = plan["names"]
-        self._busy()
-        self._start_worker(
-            lambda progress=None: self.services.dedup_library(names, progress),
-            on_success=self._after_dedup)
-
-    def _after_dedup(self, res) -> None:
-        self._idle()
+    def _present_dedup(self, res) -> None:
         if res.get("removed", 0) == 0:
             self._set_status("sc_dedup_none")
         else:
             self._set_status("sc_dedup_done", removed=res["removed"],
                              freed=_fmt_size(res["freed_bytes"]))
-        self.on_shown()
 
-    # -- worker plumbing -------------------------------------------------------
+    # -- worker plumbing (summary refresh only) --------------------------------
     def _set_status(self, key: str, **kwargs) -> None:
         """Set a translatable status message, remembering it so a later language
         change re-renders it in the new language (retranslate)."""
@@ -439,26 +548,9 @@ class ShortcutsTab(QWidget):
         self._status_key, self._status_kwargs = None, {}
         self.status.setText(text)
 
-    def _busy(self) -> None:
-        self._lock(True)
-        self.progress_panel.start()
-        self._set_status("working")
-
-    def _lock(self, locked: bool) -> None:
-        for b in (self.btn_l2s, self.btn_s2l, self.btn_save_lazer,
-                  self.btn_save_stable, self.btn_unpack_lazer, self.btn_unpack_stable,
-                  self.btn_unpack_both, self.btn_export, self.btn_dedup):
-            b.setEnabled(not locked)
-
-    def _idle(self) -> None:
-        self._lock(False)
-        self.progress_panel.finish()
-        self.btn_cancel.setVisible(False)
-
     def _start_worker(self, fn, *args, on_success=None) -> None:
         w = Worker(fn, *args)
         self._threads.append(w)
-        w.progressed.connect(self._on_progress)
         if on_success:
             w.succeeded.connect(on_success)
         w.failed.connect(self._on_failed)
@@ -466,26 +558,5 @@ class ShortcutsTab(QWidget):
             lambda: self._threads.remove(w) if w in self._threads else None)
         w.start()
 
-    def _on_progress(self, msg) -> None:
-        if isinstance(msg, dict):
-            if msg.get("kind") == "phase":
-                self.status.setText(self.ctx.t(msg.get("key", "")))
-            elif "total" in msg:
-                done = msg.get("done", msg.get("batch", 0))
-                self.progress_panel.update_progress(
-                    done, msg.get("total", 0),
-                    str(msg.get("name") or msg.get("pack") or ""),
-                    str(msg.get("osz") or ""))
-            elif msg.get("name"):
-                self.status.setText(str(msg["name"]))
-        else:
-            self.status.setText(str(msg))
-
     def _on_failed(self, msg: str) -> None:
-        self._idle()
         self._set_status_lit(msg)
-        QMessageBox.critical(self, self.ctx.t("app_title"), msg)
-
-    def _on_cancel(self) -> None:
-        self.services.request_cancel()
-        self.btn_cancel.setEnabled(False)

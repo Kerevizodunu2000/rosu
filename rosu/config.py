@@ -70,6 +70,7 @@ class Config:
     auto_backup_after_extract: bool = False   # auto-run Copy to Library after extract
     zip_disposal: str = "recycle"
     check_updates: bool = True   # check GitHub for a newer release on startup
+    auto_refresh_on_tab: bool = True   # re-run a tab's on_shown() when switched to
 
     # Google Drive backup (v0.8) — the OAuth refresh token is NOT stored here
     # (it lives in the OS keyring); config.json is plaintext beside the exe.

@@ -146,7 +146,7 @@ class MainWindow(QMainWindow):
             return
         self._prev_index = index
         widget = self.tabs.widget(index)
-        if hasattr(widget, "on_shown"):
+        if self.ctx.cfg.auto_refresh_on_tab and hasattr(widget, "on_shown"):
             widget.on_shown()
 
     def closeEvent(self, event) -> None:
@@ -170,6 +170,13 @@ class MainWindow(QMainWindow):
                 return
         try:
             self.ctx.services.request_cancel()
+            # Job-queue steps poll their OWN per-job token (so one job's cancel
+            # can't disturb another's Drive upload), which request_cancel doesn't
+            # reach — trip each queued job's token too so running steps stop.
+            for tab in self._ordered_tabs:
+                q = getattr(tab, "queue", None)
+                if q is not None:
+                    q.cancel_all()
         except Exception:
             pass
         for holder in self._ordered_tabs + [self]:   # include our own update worker
@@ -179,4 +186,8 @@ class MainWindow(QMainWindow):
                         w.wait(5000)  # give each worker up to 5s to finish
                 except RuntimeError:
                     pass  # C++ object already gone
+        for tab in self._ordered_tabs:   # remove any queued job's temp stage dir
+            q = getattr(tab, "queue", None)
+            if q is not None:
+                q.cleanup_all()
         super().closeEvent(event)

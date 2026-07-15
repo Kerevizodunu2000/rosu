@@ -13,10 +13,13 @@ import time
 from pathlib import Path
 
 from . import (
-    archives, config, excel_report, extractor, gaps, library, osu_api,
+    archives, config, excel_report, extractor, gaps, jobs, library, osu_api,
     osu_import, parsing, search,
 )
 from .models import ExtractPlan, ParsedPack
+
+# Language-neutral client display names for job titles.
+_CLIENT_LABEL = {"lazer": "osu!lazer", "stable": "osu!(stable)"}
 
 
 def now_iso() -> str:
@@ -33,6 +36,18 @@ def _clear_osz(folder: Path) -> int:
         except OSError:
             pass
     return n
+
+
+def _sample_export(files, limit):
+    """Return a random sample of ``limit`` files for the export "Random N" option
+    (list order is preserved so the archive listing stays stable). ``limit`` that
+    is falsy / <= 0 / >= len(files) returns the full list unchanged. Shared by
+    ``export_sets`` and the job-queue export builder."""
+    import random
+    if not limit or limit <= 0 or limit >= len(files):
+        return files
+    chosen = set(random.sample(range(len(files)), limit))
+    return [f for i, f in enumerate(files) if i in chosen]
 
 
 class Services:
@@ -78,8 +93,14 @@ class Services:
         return plans
 
     # -- extraction ----------------------------------------------------------
-    def extract(self, approved: list[tuple[Path, ParsedPack]], progress=None) -> dict:
-        self._cancel.clear()   # fresh extract; makes unpacking cancellable
+    def extract(self, approved: list[tuple[Path, ParsedPack]], progress=None,
+                cancel=None) -> dict:
+        # ``cancel`` (a zero-arg bool callable) lets a queued job carry its OWN
+        # cancel token; when None we fall back to the shared ``_cancel`` Event
+        # (Dashboard / close-window path) and clear it as before.
+        _eff = cancel if cancel is not None else self._cancel.is_set
+        if cancel is None:
+            self._cancel.clear()   # fresh extract; makes unpacking cancellable
         when = now_iso()
         start = time.time()
         if self.cfg.clear_output_before_extract:
@@ -99,12 +120,12 @@ class Services:
         processed_dir = self.cfg.root_path / "Processed"
         rejected: list[dict] = []
         for zip_path, parsed in approved:
-            if self._cancel.is_set():
+            if _eff():
                 break
             try:
                 res = extractor.extract_pack(zip_path, parsed, self.cfg.output_path,
                                              self.db, when, _cb, log=self.log,
-                                             cancel=self._cancel.is_set)
+                                             cancel=_eff)
             except archives.UnsafeArchive as exc:
                 # A zip-bomb / path-traversal pack: quarantine it (don't delete —
                 # the owner may want to inspect it) and keep processing the rest.
@@ -317,11 +338,13 @@ class Services:
                       dup_ids=res["dup_ids"][:50])
         return res
 
-    def import_from_stable(self, progress=None) -> dict:
+    def import_from_stable(self, progress=None, cancel=None) -> dict:
         """Zip osu!(stable) Songs/ folders we don't already have into Output, then
         dedup them into the Library."""
         from . import client_import
-        self._cancel.clear()   # fresh op; own the token so its Cancel button works
+        _eff = cancel if cancel is not None else self._cancel.is_set
+        if cancel is None:
+            self._cancel.clear()   # fresh op; own the token so its Cancel button works
         songs = client_import.stable_songs_dir()
         if not songs:
             return {"source": "stable", "found": False}
@@ -330,7 +353,7 @@ class Services:
         made = 0
         cancelled = False
         for i, folder in enumerate(folders, 1):
-            if self._cancel.is_set():
+            if _eff():
                 cancelled = True
                 break
             bid = client_import.beatmapset_id_for_folder(folder)
@@ -348,21 +371,22 @@ class Services:
         return {"source": "stable", "found": True, "made": made,
                 "cancelled": cancelled, **res}
 
-    def import_from_lazer(self, progress=None) -> dict:
+    def import_from_lazer(self, progress=None, cancel=None) -> dict:
         """Run the bundled .NET helper to re-export osu!lazer beatmapsets from its
         Realm + files store, then dedup the exported .osz into the Library. The
         (long) export is cancellable."""
         import shutil
         import tempfile
         from . import client_import
-        self._cancel.clear()   # fresh op; own the token for this import
+        _eff = cancel if cancel is not None else self._cancel.is_set
+        if cancel is None:
+            self._cancel.clear()   # fresh op; own the token for this import
         data = client_import.lazer_data_dir()
         if not data:
             return {"source": "lazer", "found": False}
         out = Path(tempfile.mkdtemp(prefix="rosu_lazer_"))
         try:
-            ok, detail = self._run_lazer_export(data, out, progress,
-                                                cancel=self._cancel.is_set)
+            ok, detail = self._run_lazer_export(data, out, progress, cancel=_eff)
             if not ok:
                 if detail == "helper_missing":
                     return {"source": "lazer", "found": True, "error": "helper_missing"}
@@ -566,7 +590,8 @@ class Services:
         files = osu_import.output_osz_files(self.cfg.output_path)
         return self._dispatch_to_client(target, files, progress)
 
-    def _dispatch_to_client(self, target: str, files, progress=None) -> dict:
+    def _dispatch_to_client(self, target: str, files, progress=None,
+                            cancel=None) -> dict:
         """Launch osu! (``target`` = ``"lazer"``/``"stable"``) to import an explicit
         list of ``.osz`` files, with the per-client staging + batching the client
         needs, and flag the sets present in that client. Shared by the Dashboard
@@ -575,7 +600,9 @@ class Services:
 
         Does NOT clear the cancel token — the caller owns it, so a cancel raised
         during an earlier phase of the same operation (e.g. a transfer's export
-        step) still stops the dispatch."""
+        step) still stops the dispatch. ``cancel`` (a queued job's own token)
+        overrides the shared ``_cancel`` when given."""
+        _eff = cancel if cancel is not None else self._cancel.is_set
         if target == "stable":
             exe = self.cfg.osu_stable_exe or config.detect_stable_exe()
             # osu!(stable) *moves* each .osz into its Songs folder on import; a
@@ -598,7 +625,7 @@ class Services:
                 progress({"kind": "import", "batch": i, "total": total, "files": n})
 
         res = osu_import.import_files(exe, files, progress=_prog,
-                                      cancel=self._cancel.is_set, **batch_kw)
+                                      cancel=_eff, **batch_kw)
         # Optimistically flag the dispatched sets as present in osu! so the Search
         # 'Where' column shows the 🎮 marker (item F2 / user feedback).
         sent = res.get("sent", len(files))
@@ -800,11 +827,13 @@ class Services:
         return self.db.osu_client_ids(client)
 
     def _export_client_sets(self, source: str, stage, skip_ids,
-                            progress=None) -> tuple[list, int]:
+                            progress=None, cancel=None) -> tuple[list, int]:
         """Materialise the beatmaps installed in ``source`` as ``.osz`` files under
         ``stage``, skipping any whose id is in ``skip_ids`` (already in the target).
-        Returns ``(osz_paths, skipped_count)``."""
+        Returns ``(osz_paths, skipped_count)``. ``cancel`` (a queued job's own
+        token) overrides the shared ``_cancel`` when given."""
         from . import client_import
+        _eff = cancel if cancel is not None else self._cancel.is_set
         stage = Path(stage)
         stage.mkdir(parents=True, exist_ok=True)
         out: list = []
@@ -815,7 +844,7 @@ class Services:
                 return out, skipped
             folders = list(client_import.iter_stable_folders(songs))
             for i, folder in enumerate(folders, 1):
-                if self._cancel.is_set():
+                if _eff():
                     break
                 bid = client_import.beatmapset_id_for_folder(folder)
                 if skip_ids and bid is not None and bid in skip_ids:
@@ -838,16 +867,15 @@ class Services:
             return out, skipped
         # source == "lazer": re-export via the bundled .NET helper, then filter.
         data = client_import.lazer_data_dir()
-        if data is None or self._cancel.is_set():
+        if data is None or _eff():
             return out, skipped
-        ok, detail = self._run_lazer_export(data, stage, progress,
-                                            cancel=self._cancel.is_set)
+        ok, detail = self._run_lazer_export(data, stage, progress, cancel=_eff)
         if not ok:
             if detail not in ("cancelled", "helper_missing"):
                 self.log.error("xfer:lazer", detail)
             return out, skipped
         for p in client_import.iter_osz_in_folder(stage):
-            if self._cancel.is_set():
+            if _eff():
                 break
             t = parsing.parse_osz_entry(p.name, 0)
             if skip_ids and t is not None and t.beatmapset_id in skip_ids:
@@ -901,13 +929,19 @@ class Services:
                 "freed_bytes": sum(sizes.get(n, 0) for n in to_remove),
                 "groups": groups, "names": to_remove}
 
-    def dedup_library(self, names=None, progress=None) -> dict:
+    def dedup_library(self, names=None, progress=None, cancel=None) -> dict:
         """Recycle redundant duplicate ``.osz`` in the Library (see
         :meth:`dedup_library_plan` for how duplicates are identified). ``names`` is
         an explicit list from a confirmed plan; when ``None`` it scans and removes in
-        one shot. Recycle Bin (recoverable). Returns
+        one shot. Recycle Bin (recoverable). ``cancel`` (a queued job's own token)
+        stops the recycle loop cooperatively. Returns
         ``{"removed","freed_bytes","groups"}``."""
         from send2trash import send2trash
+        # This method never owned/cleared the shared ``_cancel`` in v1.2, so for
+        # the cancel=None path it must NOT read it (a leftover cancel from an
+        # earlier op would silently make it a no-op). Only an explicitly passed
+        # job token cancels it.
+        _eff = cancel if cancel is not None else (lambda: False)
         lib = self.cfg.library_path
         if names is None:
             names, sizes, groups = self._dedup_scan()
@@ -921,6 +955,8 @@ class Services:
             groups = 0
         removed = freed = 0
         for i, name in enumerate(names, 1):
+            if _eff():
+                break
             try:
                 send2trash(str(lib / name))
                 removed += 1
@@ -935,7 +971,8 @@ class Services:
 
     def export_sets(self, source: str, dest_base, fmt: str = "zip",
                     split_bytes: int | None = None, upload_to_drive: bool = False,
-                    share: bool = False, progress=None) -> dict:
+                    share: bool = False, progress=None,
+                    limit: int | None = None) -> dict:
         """Shortcut ④: gather the beatmaps from ``source`` and write them to
         archive(s) at ``dest_base``.
 
@@ -943,7 +980,8 @@ class Services:
         (only the Library sets already backed up to Drive), ``"lazer"`` /
         ``"stable"`` (re-export from that client), or ``"merged"`` (the union of
         Library + both clients, deduped by id). ``fmt`` is ``"zip"`` or ``"7z"``;
-        ``split_bytes`` splits into volumes (None = one archive). With
+        ``split_bytes`` splits into volumes (None = one archive). ``limit`` (>0)
+        exports a random sample of that many sets instead of all of them. With
         ``upload_to_drive`` the archive(s) are uploaded to a Drive ``Exports``
         folder, and ``share`` adds an anyone-with-link permission + returns the
         link. Returns ``{"source","count","archives":[...], ["drive": {...}]}``.
@@ -956,6 +994,7 @@ class Services:
         stage = Path(tempfile.mkdtemp(prefix="rosu_export_"))
         try:
             files = self._gather_export_sources(source, stage, progress)
+            files = _sample_export(files, limit)
             if not files or self._cancel.is_set():
                 return {"source": source, "count": 0, "archives": [],
                         "cancelled": self._cancel.is_set()}
@@ -973,9 +1012,11 @@ class Services:
         finally:
             shutil.rmtree(stage, ignore_errors=True)
 
-    def _gather_export_sources(self, source: str, stage, progress=None) -> list:
+    def _gather_export_sources(self, source: str, stage, progress=None,
+                               cancel=None) -> list:
         """Collect the ``.osz`` file paths that make up an export ``source`` (see
-        :meth:`export_sets`). Client sources are materialised into ``stage``."""
+        :meth:`export_sets`). Client sources are materialised into ``stage``.
+        ``cancel`` (a queued job's own token) is threaded into the client re-export."""
         from .parsing import parse_osz_entry
         lib = self.cfg.library_path
 
@@ -993,7 +1034,7 @@ class Services:
         if source == "drive":
             return lib_files(only_drive=True)
         if source in ("lazer", "stable"):
-            osz, _ = self._export_client_sets(source, stage, None, progress)
+            osz, _ = self._export_client_sets(source, stage, None, progress, cancel)
             return osz
         if source == "merged":
             seen: set = set()
@@ -1010,19 +1051,23 @@ class Services:
 
             _add(lib_files())
             for client in ("lazer", "stable"):
-                osz, _ = self._export_client_sets(client, stage, None, progress)
+                osz, _ = self._export_client_sets(client, stage, None, progress, cancel)
                 _add(osz)
             return out
         return []
 
     def _upload_export_to_drive(self, archives, share: bool,
-                                progress=None) -> dict:
+                                progress=None, cancel=None) -> dict:
         """Upload the written export archive(s) to a Drive ``Exports`` folder and,
         when ``share``, grant an anyone-with-link permission and collect the link
         for each. Returns ``{"uploaded", "files": [{name,id,link}]}`` or
-        ``{"error": ...}``."""
+        ``{"error": ...}``. ``cancel`` (a queued job's own token) overrides the
+        shared ``_drive_cancel`` when given, so cancelling THIS export never trips
+        another job's Drive upload."""
         from .drive.auth import DriveCancelled, DriveError
-        self._drive_cancel.clear()
+        _eff = cancel if cancel is not None else self._drive_cancel.is_set
+        if cancel is None:
+            self._drive_cancel.clear()
         if not self._drive_auth().is_connected():
             return {"error": "not_connected"}
         try:
@@ -1037,7 +1082,7 @@ class Services:
             files: list = []
             cancelled = False
             for a in archives:
-                if self._drive_cancel.is_set():
+                if _eff():
                     cancelled = True
                     break
                 a = Path(a)
@@ -1049,7 +1094,7 @@ class Services:
 
                 try:
                     fid = client.upload_file(a, a.name, exports, progress=_up,
-                                             cancel=self._drive_cancel.is_set)
+                                             cancel=_eff)
                 except DriveCancelled:
                     cancelled = True
                     break
@@ -1080,6 +1125,204 @@ class Services:
         except DriveError as exc:
             self.log.error("export:drive", str(exc)[:300])
             return {"error": "drive", "detail": str(exc)[:300]}
+
+    # -- job-queue builders (v1.3) -------------------------------------------
+    # Each returns a jobs.Job — an ordered list of lane-tagged Steps that reuse
+    # the sub-methods above, carrying data through ``job.ctx`` and a per-job
+    # cancel token (``cancel``), so the İş Kuyruğu can run them step-by-step with
+    # live status, per-item cancel, and DISK/DRIVE concurrency. Each step calls
+    # a sub-method with ``cancel=`` (the job's own token) — never the shared
+    # ``_cancel`` — so cancelling one job can't disturb another.
+
+    def build_unpack_job(self, targets, skip_duplicates: bool = True) -> jobs.Job:
+        """Shortcut ⑤ as a job: prescan → extract → send(target…). Mirrors
+        :meth:`unpack_and_import`; the result dict shape is identical."""
+        title = ("job_unpack_both" if len(targets) > 1
+                 else f"job_unpack_{targets[0]}")
+        job = jobs.Job(jobs.new_id(), title, kind="unpack")
+
+        def s_prescan(ctx, progress, cancel):
+            plans = self.prescan_all(progress)
+            ctx["approved"] = [(Path(p.zip_path), p.parsed)
+                               for p in plans if p.kind == "new"]
+
+        def s_extract(ctx, progress, cancel):
+            approved = ctx.get("approved", [])
+            if approved or self.has_loose_osz():
+                ctx["extract"] = self.extract(approved, progress, cancel=cancel)
+            else:
+                ctx["extract"] = {"packs": 0, "tracks": 0}
+
+        def s_send(target):
+            def _run(ctx, progress, cancel):
+                files = osu_import.output_osz_files(self.cfg.output_path)
+                target_ids = self._client_set_ids(target) if skip_duplicates else set()
+                if target_ids:
+                    send = [f for f in files
+                            if (pt := parsing.parse_osz_entry(f.name, 0)) is None
+                            or pt.beatmapset_id not in target_ids]
+                else:
+                    send = list(files)
+                res = self._dispatch_to_client(target, send, progress, cancel=cancel)
+                ctx.setdefault("imports", {})[target] = {
+                    **res, "skipped": len(files) - len(send)}
+            return _run
+
+        job.steps = [jobs.Step("job_step_prescan", jobs.Lane.DISK, s_prescan),
+                     jobs.Step("job_step_extract", jobs.Lane.DISK, s_extract)]
+        for target in targets:
+            key = ("job_step_send_lazer" if target == "lazer"
+                   else "job_step_send_stable")
+            job.steps.append(jobs.Step(key, jobs.Lane.DISK, s_send(target)))
+        job.finalize = lambda ctx: {
+            "extract": ctx.get("extract", {"packs": 0, "tracks": 0}),
+            "imports": ctx.get("imports", {}), "cancelled": job.cancel_cb()}
+        return job
+
+    def build_transfer_job(self, source: str, target: str) -> jobs.Job:
+        """Shortcut ①/② as a job: enumerate target → export source → send.
+        Assumes the caller already validated (same-client / target-exe)."""
+        import shutil
+        import tempfile
+        job = jobs.Job(jobs.new_id(), "job_transfer", kind="transfer",
+                       title_kwargs={"source": _CLIENT_LABEL.get(source, source),
+                                     "target": _CLIENT_LABEL.get(target, target)})
+        stage = Path(tempfile.mkdtemp(prefix="rosu_xfer_"))
+        job.ctx["stage"] = stage
+        job.on_cleanup.append(lambda: shutil.rmtree(stage, ignore_errors=True))
+
+        def s_enumerate(ctx, progress, cancel):
+            ctx["skip_ids"] = self._client_set_ids(target)
+
+        def s_export(ctx, progress, cancel):
+            osz, skipped = self._export_client_sets(
+                source, ctx["stage"], ctx["skip_ids"], progress, cancel=cancel)
+            ctx["osz"], ctx["skipped"] = osz, skipped
+            ctx["found"] = len(osz) + skipped
+
+        def s_send(ctx, progress, cancel):
+            osz = ctx.get("osz", [])
+            if cancel() or not osz:
+                ctx["transferred"] = 0
+                ctx["send_cancelled"] = False
+                return
+            res = self._dispatch_to_client(target, osz, progress, cancel=cancel)
+            ctx["transferred"] = res.get("sent", 0)
+            ctx["send_cancelled"] = res.get("cancelled", False)
+
+        job.steps = [jobs.Step("job_step_enumerate", jobs.Lane.DISK, s_enumerate),
+                     jobs.Step("job_step_export_client", jobs.Lane.DISK, s_export),
+                     jobs.Step("job_step_send", jobs.Lane.DISK, s_send)]
+
+        def finalize(ctx):
+            res = {"source": source, "target": target, "found": ctx.get("found", 0),
+                   "transferred": ctx.get("transferred", 0),
+                   "skipped": ctx.get("skipped", 0),
+                   "cancelled": job.cancel_cb() or ctx.get("send_cancelled", False)}
+            self.log.info("CLIENT_TRANSFER", source=source, target=target,
+                          found=res["found"], transferred=res["transferred"],
+                          skipped=res["skipped"])
+            return res
+        job.finalize = finalize
+        return job
+
+    def build_save_job(self, sources) -> jobs.Job:
+        """Shortcut ③ as a job: one step per source client → Library."""
+        labels = ", ".join(_CLIENT_LABEL.get(s, s) for s in sources)
+        job = jobs.Job(jobs.new_id(), "job_save", kind="save",
+                       title_kwargs={"sources": labels})
+
+        def s_source(src):
+            def _run(ctx, progress, cancel):
+                if src == "stable":
+                    r = self.import_from_stable(progress, cancel=cancel)
+                else:
+                    r = self.import_from_lazer(progress, cancel=cancel)
+                ctx.setdefault("out", {})[src] = r
+            return _run
+
+        for s in sources:
+            key = ("job_step_save_stable" if s == "stable"
+                   else "job_step_save_lazer")
+            job.steps.append(jobs.Step(key, jobs.Lane.DISK, s_source(s)))
+        job.finalize = lambda ctx: ctx.get("out", {})
+        return job
+
+    def build_export_job(self, source: str, dest_base, fmt: str = "zip",
+                         split_bytes: int | None = None, upload: bool = False,
+                         share: bool = False, limit: int | None = None) -> jobs.Job:
+        """Shortcut ④ as a job: gather → archive (DISK) → upload (DRIVE). The
+        upload step is on the DRIVE lane, so once an export starts uploading the
+        DISK lane frees for the next queued job (disk work ↔ Drive upload)."""
+        import shutil
+        import tempfile
+        from . import exporter
+        job = jobs.Job(jobs.new_id(), "job_export", kind="export",
+                       title_kwargs={"source": source})
+        stage = Path(tempfile.mkdtemp(prefix="rosu_export_"))
+        job.ctx["stage"] = stage
+        job.on_cleanup.append(lambda: shutil.rmtree(stage, ignore_errors=True))
+
+        def s_gather(ctx, progress, cancel):
+            files = self._gather_export_sources(source, ctx["stage"], progress,
+                                                cancel=cancel)
+            ctx["files"] = _sample_export(files, limit)
+
+        def s_archive(ctx, progress, cancel):
+            files = ctx.get("files", [])
+            if not files or cancel():
+                ctx["written"] = []
+                return
+            ctx["written"] = exporter.write_export(
+                files, Path(dest_base), fmt, split_bytes, progress, cancel=cancel)
+
+        def s_upload(ctx, progress, cancel):
+            if cancel() or not ctx.get("written"):
+                return
+            ctx["drive"] = self._upload_export_to_drive(
+                ctx["written"], share, progress, cancel=cancel)
+
+        job.steps = [jobs.Step("job_step_gather", jobs.Lane.DISK, s_gather),
+                     jobs.Step("job_step_archive", jobs.Lane.DISK, s_archive)]
+        if upload:
+            job.steps.append(jobs.Step("job_step_upload", jobs.Lane.DRIVE, s_upload))
+
+        def finalize(ctx):
+            written = ctx.get("written", [])
+            # Match export_sets: count reflects sets actually archived — 0 when the
+            # write never happened (cancelled between gather and archive, or empty).
+            res = {"source": source,
+                   "count": len(ctx.get("files", [])) if written else 0,
+                   "archives": [str(a) for a in written],
+                   "cancelled": job.cancel_cb()}
+            if "drive" in ctx:
+                res["drive"] = ctx["drive"]
+            self.log.info("EXPORT", source=source, sets=res["count"],
+                          archives=len(written), fmt=fmt, cancelled=res["cancelled"])
+            return res
+        job.finalize = finalize
+        return job
+
+    def build_dedup_job(self) -> jobs.Job:
+        """Library dedup as a job: scan (preview) → GATED remove. The remove step
+        waits for an explicit UI confirmation (the queue shows the preview dialog
+        before recycling anything)."""
+        job = jobs.Job(jobs.new_id(), "job_dedup", kind="dedup")
+
+        def s_scan(ctx, progress, cancel):
+            ctx["plan"] = self.dedup_library_plan()
+
+        def s_remove(ctx, progress, cancel):
+            names = ctx.get("plan", {}).get("names", [])
+            ctx["result"] = self.dedup_library(names=names, progress=progress,
+                                               cancel=cancel)
+
+        job.steps = [jobs.Step("job_step_scan", jobs.Lane.DISK, s_scan),
+                     jobs.Step("job_step_remove", jobs.Lane.DISK, s_remove,
+                               gated=True)]
+        job.finalize = lambda ctx: ctx.get(
+            "result", {"removed": 0, "freed_bytes": 0, "groups": 0})
+        return job
 
     # -- reference (osu! API) ------------------------------------------------
     def _reference(self):

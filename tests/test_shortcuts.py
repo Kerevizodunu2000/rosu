@@ -311,6 +311,21 @@ def test_export_sets_empty_source(tmp_path):
     db.close()
 
 
+def test_export_sets_random_limit_samples(tmp_path):
+    import zipfile
+    cfg, db, svc = _svc(tmp_path)
+    for i in range(5):
+        (cfg.library_path / f"{i} A - B.osz").write_bytes(b"x" * 10)
+    res = svc.export_sets("library", tmp_path / "out" / "R", fmt="zip", limit=2)
+    assert res["count"] == 2                             # sampled down from 5
+    with zipfile.ZipFile(res["archives"][0]) as z:
+        assert len(z.namelist()) == 2
+    # limit >= available exports everything
+    res_all = svc.export_sets("library", tmp_path / "out" / "A", fmt="zip", limit=99)
+    assert res_all["count"] == 5
+    db.close()
+
+
 def test_export_sets_merged_dedups_by_id(tmp_path, monkeypatch):
     import zipfile
     cfg, db, svc = _svc(tmp_path)
@@ -486,6 +501,20 @@ def test_dedup_library_plan_previews_without_deleting(tmp_path):
     assert plan["count"] == 1 and plan["names"] == ["123 A - B (1).osz"]
     assert plan["freed_bytes"] == 40 and plan["groups"] == 1
     assert (cfg.library_path / "123 A - B (1).osz").exists()   # preview deletes nothing
+    db.close()
+
+
+def test_dedup_library_ignores_stale_shared_cancel(tmp_path, monkeypatch):
+    """v1.3 guard: dedup_library(cancel=None) must NOT honor a leftover shared
+    _cancel from an earlier op — in v1.2 it never owned that token and always ran
+    to completion. (A prior cancelled extract/import leaves _cancel set.)"""
+    monkeypatch.setattr("send2trash.send2trash", lambda p: Path(p).unlink())
+    cfg, db, svc = _svc(tmp_path)
+    (cfg.library_path / "b.osz").write_bytes(b"y" * 20)
+    svc._cancel.set()                          # leftover cancel from a prior op
+    res = svc.dedup_library(names=["b.osz"])   # must still recycle, not no-op
+    assert res["removed"] == 1
+    assert not (cfg.library_path / "b.osz").exists()
     db.close()
 
 

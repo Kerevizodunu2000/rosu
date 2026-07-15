@@ -10,6 +10,51 @@ the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-07-16
+
+**İş Kuyruğu — a job queue on the Shortcuts tab.** Every shortcut action is now a
+**queued job broken into named sub-steps** with live status, so you can see exactly
+which phase it's in, **cancel jobs one at a time** (the rest keep going), and **run
+work concurrently** — a disk operation runs while a Drive upload runs. Plus a few
+quick-UX wins that came out of testing.
+
+### Added
+- **Job queue (İş Kuyruğu)** on the Shortcuts tab. Clicking Transfer / Save /
+  Unpack / Export / Dedupe now **adds a job to the queue** instead of locking the
+  tab. Each job shows its **sub-steps** (e.g. unpack → *Pre-scan → Extract → Send to
+  osu!lazer → Send to osu!(stable)*) with a per-step status glyph and progress bar.
+  - **Per-item cancel** — each queued/running job has its own ✕; cancelling one
+    interrupts just that job and the rest keep going. Cancellation is per-job, so it
+    can never disturb another job's in-flight Drive upload.
+  - **Concurrent lanes** — local-disk work runs on one lane, Google-Drive upload on
+    another, and they overlap. An export that has finished writing and is uploading
+    frees the disk lane, so the next queued disk job starts immediately.
+  - **Dedupe still confirms first** — a dedupe job scans, then **waits** for your
+    explicit confirmation (previewing the count) before recycling anything.
+  - A **"Clear finished"** button tidies completed/failed/cancelled jobs.
+- **Double-click an archive → open its file location.** Double-click a row in the
+  Dashboard (packs or Output view) to reveal the file in your file manager (selected
+  in Explorer on Windows); Search/Library rows get an **"Open file location"**
+  right-click entry for Library files.
+- **Auto-refresh a tab when you open it** — a new Settings toggle (default **on**):
+  switching to a tab refreshes its data automatically. Turn it off to keep data
+  static until you refresh manually. The Shortcuts summary gains a **⟳ refresh**
+  button for that case.
+- **Random N export** — an "Export a random sample of N sets" option on the export
+  action, instead of exporting everything.
+
+### Changed
+- Shortcuts buttons stay **enabled** while jobs run (queue several at once) — the
+  old single-operation lock, shared progress bar and single Cancel button are gone,
+  replaced by the per-job queue.
+
+### Internal
+- New pure `rosu/jobs.py` (job/step/lane model + synchronous runner + the
+  lane-scheduling decision, unit-tested) and `rosu/ui/job_queue.py` (the live
+  scheduler). Service methods gained a backward-compatible per-job `cancel` token so
+  a queued job is fully isolated from the shared cancel used elsewhere. 252 tests;
+  adversarial code + security review (2 HIGH + several MED fixed), `--selftest` OK.
+
 ## [1.2.0] - 2026-07-15
 
 **Library Maturity — the Shortcuts (Kısayollar) tab.** One place for the common
@@ -474,7 +519,8 @@ Initial release. The core archive-management pipeline.
 - **EN/TR** localization; English-only code/logs.
 - Single-file **PyInstaller** build (`osu-archiver.spec`) + GitHub Actions build workflow.
 
-[Unreleased]: https://github.com/Kerevizodunu2000/rosu/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/Kerevizodunu2000/rosu/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/Kerevizodunu2000/rosu/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/Kerevizodunu2000/rosu/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/Kerevizodunu2000/rosu/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/Kerevizodunu2000/rosu/compare/v1.0.0...v1.0.1
