@@ -114,6 +114,8 @@ Rosu highlights *missing* packs in the Excel report, but only when it can be con
 2. Download the latest `rosu.exe` (or `rosu-<version>.exe`).
 3. Run it — no installer, no dependencies. On first launch Rosu creates its working folders next to the executable.
 
+> **First run — the "Windows protected your PC" / "unknown publisher" screen is expected.** Because Rosu is a new, independently-built app that isn't code-signed with a (paid) certificate, **Windows SmartScreen** warns the first time you run it. This is normal for small open-source apps — it means *"Windows doesn't recognize this yet,"* **not** *"this is malware."* To run it: click **More info** → **Run anyway** (Turkish: *Ek bilgi* → *Yine de çalıştır*). You'll only see it once on that PC. Rosu is [GPL-3.0 open source](LICENSE) and every release ships a **`.sha256` checksum** so you can verify your download is untampered. (The warning goes away over time as more people run the app, and fully disappears if the project is ever code-signed — see [Build the exe](#build-the-exe).)
+
 ## Usage
 
 1. Drop your beatmap-pack archives into the `Packs/` folder created next to `rosu.exe`.
