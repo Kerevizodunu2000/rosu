@@ -1,33 +1,39 @@
-# Rosu 🌹
+<div align="center">
 
-**A desktop manager for osu! beatmap-pack archives — unpack, dedupe, track gaps, and import straight into osu!.**
-*(Rosu = **rose** + **osu!**)*
+<img src="rosu/assets/icon.png" width="128" alt="Rosu" />
 
-![Latest release](https://img.shields.io/github/v/release/Kerevizodunu2000/rosu)
-![License](https://img.shields.io/github/license/Kerevizodunu2000/rosu)
-![Platform](https://img.shields.io/badge/platform-Windows-0078D6?logo=windows&logoColor=white)
-![Python](https://img.shields.io/badge/python-3.13-3776AB?logo=python&logoColor=white)
-![Built with PySide6](https://img.shields.io/badge/built%20with-PySide6-41CD52?logo=qt&logoColor=white)
+<h1>Rosu</h1>
+
+<p>
+  <b>A desktop manager for osu! beatmap-pack archives</b><br/>
+  unpack&nbsp;·&nbsp;dedupe&nbsp;·&nbsp;track&nbsp;gaps&nbsp;·&nbsp;back&nbsp;up&nbsp;·&nbsp;import&nbsp;straight&nbsp;into&nbsp;osu!
+</p>
+
+<p><sub><i>rose&nbsp;+&nbsp;osu!</i></sub></p>
+
+<p>
+  <a href="https://github.com/Kerevizodunu2000/rosu/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/Kerevizodunu2000/rosu?color=ff66aa&labelColor=2b2b2b"></a>
+  <a href="LICENSE"><img alt="License: GPL-3.0-or-later" src="https://img.shields.io/badge/license-GPL--3.0--or--later-ff66aa?labelColor=2b2b2b"></a>
+  <img alt="Platform: Windows" src="https://img.shields.io/badge/platform-Windows-ff66aa?labelColor=2b2b2b&logo=windows&logoColor=white">
+  <img alt="Python 3.13" src="https://img.shields.io/badge/python-3.13-ff66aa?labelColor=2b2b2b&logo=python&logoColor=white">
+  <img alt="Built with PySide6" src="https://img.shields.io/badge/built%20with-PySide6-ff66aa?labelColor=2b2b2b&logo=qt&logoColor=white">
+</p>
+
+<p>
+  <a href="#features">Features</a> ·
+  <a href="#how-it-works">How it works</a> ·
+  <a href="#gap-detection">Gap detection</a> ·
+  <a href="#installation">Install</a> ·
+  <a href="#themes">Themes</a> ·
+  <a href="#build-the-exe">Build</a> ·
+  <a href="#license">License</a>
+</p>
+
+</div>
 
 Rosu bulk-extracts `.zip`/`.7z`/`.tar` beatmap packs into a deduplicated `.osz` library, tracks everything — including **where each map lives** (osu!, your Library, the cloud) — in a local SQLite database, flags real gaps in numbered pack series in an Excel report, and imports the results into **either osu! client** with one click. It can also pull beatmaps you've already installed straight into the library, **back the whole library up to your Google Drive**, and flag maps that no longer exist on osu!.
 
 > **Note:** background logic, code, and logs are English by design. Only the user-facing UI is localized (English/Turkish, switchable in Settings).
-
-## Table of Contents
-
-- [Features](#features)
-- [Screenshots](#screenshots)
-- [How it works](#how-it-works)
-- [Gap detection](#gap-detection)
-- [Installation](#installation)
-- [Usage](#usage)
-- [Themes](#themes)
-- [Folder layout](#folder-layout)
-- [Run from source](#run-from-source)
-- [Build the exe](#build-the-exe)
-- [Testing](#testing)
-- [Roadmap](#roadmap)
-- [License](#license)
 
 ## Features
 
