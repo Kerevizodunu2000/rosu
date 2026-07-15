@@ -65,3 +65,24 @@ def test_update_banner_stays_hidden_when_not_newer(qapp, tmp_path, monkeypatch):
     assert win.update_banner.isHidden()
     win.close()
     ctx.db.close()
+
+
+def test_health_dialog_builds_and_renders_report(qapp, tmp_path, monkeypatch):
+    """The v1.1 Library Health dialog constructs and populates from a report."""
+    from rosu.ui.health_dialog import HealthDialog
+    ctx = _ctx(tmp_path, monkeypatch)
+    report = {
+        "usage": {"files": 2, "total_bytes": 3_500_000},
+        "scrub": {"present": 1, "orphans": ["x.osz"],
+                  "dead_links": [{"filename": "y.osz"}], "memory": 0},
+        "biggest": [{"filename": "big.osz", "size_bytes": 3_000_000,
+                     "display_name": "Artist - Big"}],
+    }
+    dlg = HealthDialog(ctx, report, None)
+    assert dlg.table.rowCount() == 1
+    assert "big" in dlg.table.item(0, 0).text().lower()
+    ctx.i18n.set_language("tr")
+    dlg.retranslate()
+    ctx.i18n.set_language("en")
+    dlg.close()
+    ctx.db.close()

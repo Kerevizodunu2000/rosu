@@ -492,6 +492,17 @@ class Database:
                 "SELECT * FROM tracks WHERE in_library=1")
             return [dict(r) for r in cur.fetchall()]
 
+    def library_records(self) -> list[dict]:
+        """Every track that is part of the Library's *memory* — physically
+        present (``in_library=1``) OR intentionally memory-only / already-gone
+        (``library_status`` in memory/disappeared). The health scrub (v1.1) uses
+        this so a purged-then-re-added file isn't mistaken for an orphan."""
+        with self._lock:
+            cur = self._conn.execute(
+                "SELECT * FROM tracks WHERE in_library=1 "
+                "OR library_status IN ('memory', 'disappeared')")
+            return [dict(r) for r in cur.fetchall()]
+
     def search_candidates(self, query: str, limit: int = 2000,
                           search_tags: bool = False) -> list[dict]:
         """Token-AND recall over the searchable fields.

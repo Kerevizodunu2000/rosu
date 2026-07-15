@@ -428,6 +428,38 @@ STRINGS: dict[str, dict[str, str]] = {
     "drive_login_failed": {"en": "Google sign-in failed or was cancelled.",
                            "tr": "Google girişi başarısız oldu veya iptal edildi."},
     "btn_backup_drive": {"en": "Back up to Drive", "tr": "Drive'a Yedekle"},
+
+    # Library Health (v1.1)
+    "btn_library_health": {"en": "Library Health", "tr": "Kütüphane Sağlığı"},
+    "health_done": {"en": "Library health checked ({files} files).",
+                    "tr": "Kütüphane sağlığı denetlendi ({files} dosya)."},
+    "health_title": {"en": "Library Health", "tr": "Kütüphane Sağlığı"},
+    "health_usage": {"en": "Library: {files} files · {size} on disk.",
+                     "tr": "Kütüphane: {files} dosya · diskte {size}."},
+    "health_scrub": {
+        "en": "{present} healthy · {orphans} orphan file(s) (on disk, no record) · "
+              "{dead} dead link(s) (record, file missing) · {memory} memory-only.",
+        "tr": "{present} sağlam · {orphans} yetim dosya (diskte var, kayıt yok) · "
+              "{dead} ölü bağlantı (kayıt var, dosya yok) · {memory} yalnızca-hafıza."},
+    "health_biggest": {"en": "Biggest beatmap sets (where the space goes):",
+                       "tr": "En büyük beatmap setleri (yer nereye gidiyor):"},
+    "btn_verify": {"en": "Verify (SHA-256)", "tr": "Doğrula (SHA-256)"},
+    "tip_verify": {
+        "en": "Re-hash each backed-up set and compare to the checksum stored when "
+              "it was backed up, flagging corruption or drift. Read-only.",
+        "tr": "Her yedeklenmiş seti yeniden özetler ve yedekleme sırasında saklanan "
+              "sağlama toplamıyla karşılaştırır; bozulma/kaymayı işaretler. Salt okunur."},
+    "health_verifying": {"en": "Verifying…", "tr": "Doğrulanıyor…"},
+    "health_verify_progress": {"en": "Verifying… {done}/{total}",
+                               "tr": "Doğrulanıyor… {done}/{total}"},
+    "health_verify_done": {
+        "en": "Verified {checked}: {ok} OK, {mismatch} mismatch, {unhashed} "
+              "un-backed-up, {missing} missing.",
+        "tr": "{checked} doğrulandı: {ok} sağlam, {mismatch} uyuşmazlık, {unhashed} "
+              "yedeksiz, {missing} eksik."},
+    "health_verify_cancelled": {"en": "Verify cancelled after {checked}.",
+                                "tr": "Doğrulama {checked} sonra iptal edildi."},
+
     "drive_connect_first": {"en": "Connect Google Drive in Settings first.",
                             "tr": "Önce Ayarlar'dan Google Drive'a bağlan."},
     "drive_backing_up": {"en": "Backing up to Google Drive…",
@@ -474,6 +506,12 @@ STRINGS: dict[str, dict[str, str]] = {
               "zenginleştirilen, kaybolan, mevcut)."},
     "tip_backup_drive": {"en": "Back up your Library to Google Drive.",
                         "tr": "Library'nizi Google Drive'a yedekler."},
+    "tip_library_health": {
+        "en": "Check your Library's integrity and disk usage: biggest sets, "
+              "orphan/missing files, and an optional SHA-256 verify. Read-only.",
+        "tr": "Kütüphanenizin bütünlüğünü ve disk kullanımını denetler: en büyük "
+              "setler, yetim/eksik dosyalar ve isteğe bağlı SHA-256 doğrulama. "
+              "Salt okunur."},
     "tip_rescan": {"en": "Rescan the Packs folder for new or updated archives.",
                   "tr": "Packs klasörünü yeni veya güncellenmiş arşivler için yeniden tarar."},
     "tip_cancel": {"en": "Cancel the operation currently in progress.",

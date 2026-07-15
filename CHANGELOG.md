@@ -10,6 +10,30 @@ the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-07-15
+
+**Library Maturity — integrity, health & disk insight.** The first feature minor
+of the Library Maturity line: know what your Library actually holds, where its
+disk space goes, and whether the files are intact.
+
+### Added
+- **Library Health** (a new Dashboard button) — a read-only report that:
+  - **Disk usage:** total size on disk and the **biggest beatmap sets**, so you
+    can see where the space goes.
+  - **DB ↔ disk scrub:** reconciles Rosu's memory with the actual files —
+    **orphans** (files on disk with no record), **dead links** (records whose
+    file is missing), and how many sets are intentionally memory-only.
+  - **Verify (SHA-256):** re-hashes each backed-up set and compares it to the
+    checksum stored when it was backed up, flagging **corruption or drift**
+    (or "un-backed-up" when there's no reference hash). Runs off the UI thread
+    with progress and is cancellable.
+- New pure `rosu/health.py` module (unit-tested) backing the above.
+
+### Notes
+- Everything here is **read-only** — a health check never modifies or deletes a
+  beatmap. Reclaiming space by pruning heavy assets, moving the Library across
+  drives, and watch-folder auto-import are planned for later minors of this line.
+
 ## [1.0.1] - 2026-07-15
 
 Search-relevance patch (first minor of the Library Maturity line).
@@ -402,7 +426,8 @@ Initial release. The core archive-management pipeline.
 - **EN/TR** localization; English-only code/logs.
 - Single-file **PyInstaller** build (`osu-archiver.spec`) + GitHub Actions build workflow.
 
-[Unreleased]: https://github.com/Kerevizodunu2000/rosu/compare/v1.0.1...HEAD
+[Unreleased]: https://github.com/Kerevizodunu2000/rosu/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/Kerevizodunu2000/rosu/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/Kerevizodunu2000/rosu/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/Kerevizodunu2000/rosu/compare/v0.8.1...v1.0.0
 [0.8.1]: https://github.com/Kerevizodunu2000/rosu/compare/v0.8.0...v0.8.1

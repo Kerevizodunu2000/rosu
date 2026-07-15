@@ -43,6 +43,7 @@ class Services:
         self._cancel = threading.Event()  # cooperative cancel for osu! import
         self._drive_cancel = threading.Event()  # separate cancel for Drive ops
         self._lostmap_cancel = threading.Event()  # separate cancel for lost-map scan
+        self._verify_cancel = threading.Event()  # separate cancel for SHA-256 verify
         self._rebuild_lock = threading.Lock()  # serialize tracking.xlsx writes
 
     def request_cancel(self) -> None:
@@ -53,6 +54,7 @@ class Services:
         self._cancel.set()
         self._drive_cancel.set()
         self._lostmap_cancel.set()
+        self._verify_cancel.set()
 
     # -- scanning / pre-check ------------------------------------------------
     def scan(self):
@@ -398,6 +400,84 @@ class Services:
         self.rebuild()
         self.log.info("LIBRARY_PURGE", deleted=deleted)
         return {"deleted": deleted}
+
+    # -- library health / integrity (v1.1) ----------------------------------
+    def _scan_library_files(self) -> dict:
+        """``{filename: size_bytes}`` for every ``.osz`` in the Library folder.
+        A stat failure records size 0 rather than dropping the file, so it still
+        shows up in the scrub as present."""
+        lib = self.cfg.library_path
+        out: dict[str, int] = {}
+        if lib.exists():
+            for p in lib.glob("*.osz"):
+                try:
+                    out[p.name] = p.stat().st_size
+                except OSError:
+                    out[p.name] = 0
+        return out
+
+    def library_health(self, progress=None) -> dict:
+        """Read-only Library report: disk usage, biggest sets, and a DB↔disk
+        scrub (orphans / dead links / memory-only). Never modifies anything."""
+        from . import health
+        disk = self._scan_library_files()
+        rows = self.db.library_records()   # includes memory/disappeared (not orphans)
+        scrub = health.scrub(rows, disk)
+        usage = health.disk_usage(disk)
+        biggest = health.biggest_sets(rows, disk, n=25)
+        self.log.info("LIBRARY_HEALTH", files=usage["files"],
+                      total_mb=usage["total_bytes"] // (1024 * 1024),
+                      orphans=len(scrub["orphans"]),
+                      dead=len(scrub["dead_links"]), memory=scrub["memory"])
+        return {"usage": usage, "scrub": scrub, "biggest": biggest}
+
+    def verify_library(self, progress=None, max_files: int | None = None) -> dict:
+        """Re-hash each physical Library ``.osz`` and compare to the SHA-256 that
+        was recorded when it was backed up to Drive. Read-only — flags corruption
+        or drift, never repairs. Sets without a stored hash count as ``unhashed``
+        (nothing to check against). ``max_files`` caps the run; cancellable."""
+        from . import health
+        from .drive import bundle
+        self._verify_cancel.clear()   # own token: never collides with import/Drive
+        lib = self.cfg.library_path
+        rows = [r for r in self.db.library_tracks()
+                if r.get("in_library") and r.get("filename")]
+        total = len(rows) if max_files is None else min(len(rows), max_files)
+        checked = ok = mismatch = unhashed = missing = 0
+        mismatches: list[str] = []
+        cancelled = False
+        for r in rows:
+            if self._verify_cancel.is_set():
+                cancelled = True
+                break
+            if max_files is not None and checked >= max_files:
+                break
+            p = lib / r["filename"]
+            if not p.exists():
+                missing += 1
+                continue
+            try:
+                computed = bundle.sha256_file(p)
+            except OSError:
+                missing += 1
+                continue
+            status = health.verify_classify(computed, r.get("drive_hash"))
+            checked += 1
+            if status == "ok":
+                ok += 1
+            elif status == "mismatch":
+                mismatch += 1
+                mismatches.append(r["filename"])
+            else:
+                unhashed += 1
+            if progress:
+                progress({"kind": "verify", "done": checked, "total": total,
+                          "name": r["filename"]})
+        self.log.info("LIBRARY_VERIFY", checked=checked, ok=ok, mismatch=mismatch,
+                      unhashed=unhashed, missing=missing, cancelled=cancelled)
+        return {"checked": checked, "ok": ok, "mismatch": mismatch,
+                "unhashed": unhashed, "missing": missing,
+                "mismatches": mismatches[:50], "cancelled": cancelled}
 
     def refresh(self, progress=None) -> dict:
         when = now_iso()

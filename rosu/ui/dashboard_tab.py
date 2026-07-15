@@ -54,11 +54,13 @@ class DashboardTab(QWidget):
         self.btn_import_stable = QPushButton()
         self.btn_refresh = QPushButton()
         self.btn_backup = QPushButton()
+        self.btn_health = QPushButton()
         for b in (self.btn_copy, self.btn_import_lazer, self.btn_import_stable,
-                  self.btn_refresh, self.btn_backup):
+                  self.btn_refresh, self.btn_backup, self.btn_health):
             b.setObjectName("secondary")
         for b in (self.btn_extract, self.btn_copy, self.btn_import_lazer,
-                  self.btn_import_stable, self.btn_refresh, self.btn_backup):
+                  self.btn_import_stable, self.btn_refresh, self.btn_backup,
+                  self.btn_health):
             btn_row.addWidget(b)
         btn_row.addStretch(1)
         self.btn_purge_known = QPushButton(objectName="secondary")
@@ -79,6 +81,7 @@ class DashboardTab(QWidget):
         self.btn_import_stable.clicked.connect(lambda: self.on_import("stable"))
         self.btn_refresh.clicked.connect(self.on_refresh)
         self.btn_backup.clicked.connect(self.on_backup)
+        self.btn_health.clicked.connect(self.on_health)
         self.btn_rescan.clicked.connect(self.refresh_scan)
 
         self.table = QTableWidget(0, 5)
@@ -116,6 +119,7 @@ class DashboardTab(QWidget):
         self.btn_import_stable.setText(t("btn_import_to_stable"))
         self.btn_refresh.setText(t("btn_refresh"))
         self.btn_backup.setText(t("btn_backup_drive"))
+        self.btn_health.setText(t("btn_library_health"))
         self.btn_purge_known.setText(t("btn_purge_known"))
         self.btn_clear_output.setText(t("btn_clear_output"))
         self.btn_rescan.setText(t("btn_rescan"))
@@ -126,6 +130,7 @@ class DashboardTab(QWidget):
         self.btn_import_stable.setToolTip(t("tip_import_to_stable"))
         self.btn_refresh.setToolTip(t("tip_refresh"))
         self.btn_backup.setToolTip(t("tip_backup_drive"))
+        self.btn_health.setToolTip(t("tip_library_health"))
         self.btn_purge_known.setToolTip(t("tip_purge_known"))
         self.btn_clear_output.setToolTip(t("tip_clear_output"))
         self.btn_rescan.setToolTip(t("tip_rescan"))
@@ -241,7 +246,8 @@ class DashboardTab(QWidget):
     def _lock(self, locked: bool) -> None:
         for b in (self.btn_extract, self.btn_copy, self.btn_import_lazer,
                   self.btn_import_stable, self.btn_refresh, self.btn_backup,
-                  self.btn_purge_known, self.btn_clear_output, self.btn_rescan):
+                  self.btn_health, self.btn_purge_known, self.btn_clear_output,
+                  self.btn_rescan):
             b.setEnabled(not locked)
 
     def _busy_generic(self, status_key: str) -> None:
@@ -588,3 +594,18 @@ class DashboardTab(QWidget):
             return
         self.status.setText(t("drive_backup_done", uploaded=res["uploaded"],
                                 chunks=res["chunks"]))
+
+    # -- Library Health (v1.1) ----------------------------------------------
+    def on_health(self) -> None:
+        """Compute the read-only Library health report off-thread, then show it
+        in a dialog (from which the user can run a SHA-256 verify)."""
+        self._busy_generic("working")
+        self._start_worker(self.services.library_health,
+                           on_success=self._after_health)
+
+    def _after_health(self, report) -> None:
+        self._idle()
+        self.status.setText(self.ctx.t("health_done",
+                                       files=report["usage"]["files"]))
+        from .health_dialog import HealthDialog
+        HealthDialog(self.ctx, report, self).exec()
