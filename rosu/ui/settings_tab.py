@@ -384,6 +384,12 @@ class SettingsTab(QWidget):
     def _toggle_drive(self) -> None:
         t = self.ctx.t
         if self.ctx.services.drive_status()["connected"]:
+            if self.mw._operation_running():
+                reply = QMessageBox.question(self, self.ctx.t("app_title"),
+                    self.ctx.t("drive_disconnect_busy_body"),
+                    QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+                if reply != QMessageBox.Yes:
+                    return
             self.ctx.services.disconnect_drive()
             self._refresh_drive_status()
             self.lbl_drive_status.setText(t("drive_disconnected_done"))

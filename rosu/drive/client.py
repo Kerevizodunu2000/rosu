@@ -117,6 +117,20 @@ class DriveClient:
     def delete_file(self, file_id: str) -> None:
         self._api("DELETE", f"/files/{urllib.parse.quote(file_id)}")
 
+    def share_anyone(self, file_id: str, role: str = "reader") -> None:
+        """Grant "anyone with the link" access to a file the app created. The
+        ``drive.file`` scope permits changing permissions on app-created files, so
+        this works without a broader scope — used for export share links."""
+        body = json.dumps({"role": role, "type": "anyone"}).encode("utf-8")
+        self._api("POST", f"/files/{urllib.parse.quote(file_id)}/permissions",
+                  body=body, content_type="application/json; charset=UTF-8")
+
+    def get_link(self, file_id: str) -> str | None:
+        """The shareable ``webViewLink`` for a file (None if Drive omits it)."""
+        _st, _h, data = self._api(
+            "GET", f"/files/{urllib.parse.quote(file_id)}?fields=webViewLink")
+        return json.loads(data).get("webViewLink")
+
     def upload_file(self, path: Path, name: str, parent: str,
                     progress: Callable[[int, int], None] | None = None,
                     cancel: Callable[[], bool] | None = None,

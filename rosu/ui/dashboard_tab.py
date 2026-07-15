@@ -196,8 +196,12 @@ class DashboardTab(QWidget):
         for r, (path, parsed) in enumerate(self._scan):
             known = self.ctx.db.get_pack_by_code(parsed.code) is not None
             state = t("state_known") if known else t("state_new")
+            try:
+                size = _fmt_size(path.stat().st_size)
+            except OSError:
+                size = "—"   # a scanned archive vanished (moved/deleted) before repaint
             values = [parsed.code, parsed.series or parsed.category, parsed.title,
-                      _fmt_size(path.stat().st_size), state]
+                      size, state]
             for c, v in enumerate(values):
                 item = QTableWidgetItem(str(v))
                 if c == 3:

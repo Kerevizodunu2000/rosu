@@ -33,10 +33,22 @@ class SortItem(QTableWidgetItem):
         self._sort = sort_value if sort_value is not None else text
 
     def __lt__(self, other):
+        # NEVER call super().__lt__(other) here: PySide6's virtual trampoline
+        # re-enters this very override for QTableWidgetItem::__lt__, so on a
+        # fallback path it recurses into itself until RecursionError (seen
+        # sorting a 14000-row table with mismatched/None sort keys). Instead,
+        # pull a comparable key straight out of `other` and fall back to a
+        # plain string compare if the keys turn out to be incomparable.
+        if isinstance(other, SortItem):
+            other_key = other._sort
+        elif isinstance(other, QTableWidgetItem):
+            other_key = other.text()
+        else:
+            other_key = other
         try:
-            return self._sort < other._sort
-        except (TypeError, AttributeError):
-            return super().__lt__(other)
+            return self._sort < other_key
+        except TypeError:
+            return str(self._sort) < str(other_key)
 
 
 class CopyTable(QTableWidget):

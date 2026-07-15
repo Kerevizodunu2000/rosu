@@ -76,7 +76,7 @@ def prescan_pack(zip_path: Path, parsed: ParsedPack,
 def extract_pack(archive_path: Path, parsed: ParsedPack, output_dir: Path, db,
                  when: str,
                  progress: Callable[[str, str], None] | None = None,
-                 read_meta: bool = True, log=None) -> dict:
+                 read_meta: bool = True, log=None, cancel=None) -> dict:
     """Extract one pack flat into Output and record it in the database.
 
     ``progress`` is called as ``progress(pack_name, osz_name)`` for each file.
@@ -101,6 +101,8 @@ def extract_pack(archive_path: Path, parsed: ParsedPack, output_dir: Path, db,
         pack_id = db.upsert_pack(parsed, len(osz), when)
 
         for m in osz:
+            if cancel is not None and cancel():
+                break
             t = parse_osz_entry(m.name, m.size)
             if t is None:
                 continue

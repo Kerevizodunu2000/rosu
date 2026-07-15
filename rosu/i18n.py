@@ -605,6 +605,126 @@ STRINGS: dict[str, dict[str, str]] = {
         "tr": "Log girdisi biçimlerini açıklayan log_formats.md dosyasını açar."},
     "tip_open_excel": {"en": "Open the Excel report of your library.",
                       "tr": "Kütüphanenizin Excel raporunu açar."},
+
+    # Shortcuts (Kısayollar) tab (v1.2)
+    "tab_shortcuts": {"en": "Shortcuts", "tr": "Kısayollar"},
+    "sc_summary_title": {"en": "Installed music", "tr": "Yüklü müzik"},
+    "sc_lazer": {"en": "osu!lazer", "tr": "osu!lazer"},
+    "sc_stable": {"en": "osu!(stable)", "tr": "osu!(stable)"},
+    "sc_library": {"en": "Library", "tr": "Kütüphane"},
+    "sc_drive": {"en": "Drive backup", "tr": "Drive yedeği"},
+    "sc_count_fmt": {"en": "{n} sets", "tr": "{n} set"},
+    "sc_installed": {"en": "installed", "tr": "kurulu"},
+    "sc_not_installed": {"en": "not installed", "tr": "yüklü değil"},
+
+    "sc_transfer_title": {"en": "Transfer between clients",
+                          "tr": "İstemciler arası aktarım"},
+    "btn_transfer_l2s": {"en": "osu!lazer → osu!(stable)",
+                         "tr": "osu!lazer → osu!(stable)"},
+    "btn_transfer_s2l": {"en": "osu!(stable) → osu!lazer",
+                         "tr": "osu!(stable) → osu!lazer"},
+    "sc_transfer_done": {
+        "en": "Transfer: {transferred} sent, {skipped} already in target "
+              "({found} candidates).",
+        "tr": "Aktarım: {transferred} gönderildi, {skipped} zaten hedefte "
+              "({found} aday)."},
+    "sc_no_target_exe": {
+        "en": "The target osu! client isn't set up. Set its path in Settings.",
+        "tr": "Hedef osu! istemcisi ayarlı değil. Yolunu Ayarlar'dan belirtin."},
+
+    "sc_save_title": {"en": "Save installed music to Library",
+                      "tr": "Yüklü müziği Library'ye kaydet"},
+    "btn_save_lib_lazer": {"en": "osu!lazer → Library", "tr": "osu!lazer → Library"},
+    "btn_save_lib_stable": {"en": "osu!(stable) → Library",
+                            "tr": "osu!(stable) → Library"},
+    "sc_save_done": {"en": "{new} new set(s) added to your Library.",
+                     "tr": "Kütüphanene {new} yeni set eklendi."},
+
+    "sc_unpack_title": {"en": "Unpack Packs → import to osu!",
+                        "tr": "Packs'i aç → osu!'ya aktar"},
+    "btn_unpack_lazer": {"en": "→ osu!lazer", "tr": "→ osu!lazer"},
+    "btn_unpack_stable": {"en": "→ osu!(stable)", "tr": "→ osu!(stable)"},
+    "btn_unpack_both": {"en": "→ both", "tr": "→ ikisi"},
+    "sc_unpack_done": {"en": "Unpacked and dispatched {tracks} beatmap(s).",
+                       "tr": "{tracks} müzik açıldı ve gönderildi."},
+
+    "sc_export_title": {"en": "Export", "tr": "Dışa aktar"},
+    "sc_source_library": {"en": "Library", "tr": "Kütüphane"},
+    "sc_source_drive": {"en": "Drive-backed sets", "tr": "Drive'a yedekli setler"},
+    "sc_source_lazer": {"en": "osu!lazer", "tr": "osu!lazer"},
+    "sc_source_stable": {"en": "osu!(stable)", "tr": "osu!(stable)"},
+    "sc_source_merged": {"en": "All merged", "tr": "Hepsi birleşik"},
+    "sc_split_none": {"en": "Single file", "tr": "Tek dosya"},
+    "sc_split_1g": {"en": "Split 1 GB", "tr": "1 GB'a böl"},
+    "sc_split_500m": {"en": "Split 500 MB", "tr": "500 MB'a böl"},
+    "sc_export_drive": {"en": "Upload to Drive", "tr": "Drive'a yükle"},
+    "sc_export_share": {"en": "Share link", "tr": "Paylaşım linki"},
+    "btn_export": {"en": "Export…", "tr": "Dışa aktar…"},
+    "sc_export_choose": {"en": "Save export as", "tr": "Dışa aktarımı kaydet"},
+    "sc_export_done": {
+        "en": "Exported {count} set(s) into {archives} archive(s).",
+        "tr": "{count} set {archives} arşive aktarıldı."},
+    "sc_export_empty": {"en": "Nothing to export from that source.",
+                        "tr": "Bu kaynakta dışa aktarılacak bir şey yok."},
+    "sc_export_link": {"en": "Shareable link(s):", "tr": "Paylaşılabilir link(ler):"},
+    "sc_export_upload_failed": {"en": "(Drive upload failed.)",
+                                "tr": "(Drive yükleme başarısız.)"},
+    "sc_export_shared_no_link": {
+        "en": "Some export archive(s) were made public (anyone with the link) but "
+              "Rosu couldn't retrieve the link. Open Google Drive to review or "
+              "revoke the sharing.",
+        "tr": "Bazı dışa-aktarım arşivleri herkese açık (linke sahip herkes) yapıldı "
+              "ama Rosu linki alamadı. Paylaşımı gözden geçirmek veya iptal etmek "
+              "için Google Drive'ı aç."},
+
+    "btn_dedup": {"en": "Dedupe Library", "tr": "Kütüphaneyi tekilleştir"},
+    "tip_dedup": {
+        "en": "Recycle redundant duplicate .osz in your Library (the same set "
+              "under different names), keeping one.",
+        "tr": "Library'deki gereksiz kopya .osz'leri (aynı set, farklı ad) Geri "
+              "Dönüşüm'e gönderir, birini bırakır."},
+    "sc_dedup_done": {"en": "Removed {removed} duplicate file(s), freed {freed}.",
+                      "tr": "{removed} kopya dosya kaldırıldı, {freed} boşaldı."},
+    "sc_dedup_none": {"en": "No duplicate files found.",
+                      "tr": "Kopya dosya bulunamadı."},
+    "sc_cancelled": {"en": "Cancelled.", "tr": "İptal edildi."},
+    "sc_exporting_lazer": {"en": "Reading osu!lazer… (can take a while — Cancel is OK)",
+                           "tr": "osu!lazer okunuyor… (uzun sürebilir — İptal edebilirsin)"},
+    "sc_uploading_drive": {"en": "Uploading to Google Drive…",
+                           "tr": "Google Drive'a yükleniyor…"},
+    "sc_export_saved_to": {"en": "Exported to: {path}",
+                           "tr": "Şuraya aktarıldı: {path}"},
+    "sc_dedup_confirm": {
+        "en": "Found {count} extra file(s) that are duplicate copies of sets you "
+              "already have (matched by beatmapset id — Rosu keeps one canonical "
+              "copy per set, these are the extras). They go to the Recycle Bin "
+              "(recoverable), freeing {freed}. Continue?",
+        "tr": "Zaten sahip olduğun setlerin fazladan kopyası olan {count} dosya "
+              "bulundu (beatmapset id ile eşleşti — Rosu her set için tek kanonik "
+              "kopya tutar, bunlar fazlalıklar). Geri Dönüşüm Kutusu'na gidecekler "
+              "(kurtarılabilir), {freed} boşalacak. Devam edilsin mi?"},
+    "drive_disconnect_busy_title": {"en": "Operation in progress",
+                                    "tr": "İşlem sürüyor"},
+    "drive_disconnect_busy_body": {
+        "en": "A Drive operation is still running. Disconnecting now will interrupt "
+              "it. Disconnect anyway?",
+        "tr": "Bir Drive işlemi hâlâ sürüyor. Şimdi bağlantıyı kesersen yarıda "
+              "kalır. Yine de kesilsin mi?"},
+    "sc_unpack_dupe_prompt": {
+        "en": "Unpack the new packs and send them to osu!. Skip sets already in the "
+              "target client, or send everything anyway?",
+        "tr": "Yeni arşivleri aç ve osu!'ya gönder. Hedef istemcide zaten olan "
+              "setleri atla, yoksa hepsini yine de gönder?"},
+    "sc_unpack_only_new": {"en": "Only new (skip duplicates)",
+                           "tr": "Sadece yeni (kopyaları atla)"},
+    "sc_unpack_all": {"en": "Send all anyway", "tr": "Yine de hepsini gönder"},
+    "sc_unpack_done2": {
+        "en": "Unpacked {tracks} beatmap(s); skipped {skipped} already in the client.",
+        "tr": "{tracks} müzik açıldı; istemcide zaten olan {skipped} atlandı."},
+    "sc_share_needs_upload": {
+        "en": "Tick 'Upload to Drive' first — a share link needs the file uploaded.",
+        "tr": "Önce 'Drive'a yükle'yi işaretle — paylaşım linki için dosyanın "
+              "yüklenmesi gerekir."},
 }
 
 

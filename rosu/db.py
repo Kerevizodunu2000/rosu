@@ -640,3 +640,24 @@ class Database:
             inlib = self._conn.execute(
                 "SELECT COUNT(*) c FROM tracks WHERE in_library=1").fetchone()["c"]
             return {"packs": packs, "tracks": tracks, "in_library": inlib}
+
+    def drive_count(self) -> int:
+        """How many beatmap sets are marked as backed up to Drive (in_drive=1)."""
+        with self._lock:
+            r = self._conn.execute(
+                "SELECT COUNT(*) c FROM tracks WHERE in_drive=1").fetchone()
+            return r["c"] if r else 0
+
+    def osu_client_ids(self, client: str) -> set[int]:
+        """Beatmapset ids Rosu has recorded as present in an osu! client
+        (``"stable"`` / ``"lazer"``) — i.e. sets it imported into or sent to it.
+        Lets a lazer→ transfer skip re-sending them (lazer's own set list is
+        Realm-opaque). An unknown client name yields an empty set."""
+        col = {"stable": "in_osu_stable", "lazer": "in_osu_lazer"}.get(client)
+        if col is None:
+            return set()
+        with self._lock:
+            cur = self._conn.execute(
+                f"SELECT beatmapset_id FROM tracks WHERE {col}=1 "
+                "AND beatmapset_id IS NOT NULL")
+            return {r["beatmapset_id"] for r in cur.fetchall()}

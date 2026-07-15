@@ -10,6 +10,54 @@ the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-07-15
+
+**Library Maturity — the Shortcuts (Kısayollar) tab.** One place for the common
+one-click flows over the music you already have: see what's installed where, move
+sets between clients, back it up / export it, and tidy duplicates.
+
+### Added
+- **Shortcuts tab** with an **installed-music summary** (osu!lazer / osu!(stable) /
+  Library / Drive-backup set counts) and one-click actions:
+  - **Transfer between clients** — osu!lazer ↔ osu!(stable), skipping sets the
+    target already has (id-based dedup; a lazer target reuses what Rosu already
+    knows is installed there rather than re-scanning everything).
+  - **Save installed music to Library** — pull osu!lazer / osu!(stable) straight
+    into the Library (automatic dedup).
+  - **Unpack Packs → import to osu!** — unpack new packs and send them to
+    osu!lazer / osu!(stable) / both, with an **"Only new (skip duplicates)"** vs
+    **"Send all anyway"** choice so sets already in the target aren't re-sent.
+  - **Export** — bundle {Library | Drive-backed | osu!lazer | osu!(stable) |
+    all-merged} into **zip or 7z**, as a single file or split into **1 GB / 500 MB**
+    volumes, with optional **upload to Google Drive** and a **shareable link** (the
+    export archive only, under the `drive.file` scope). New pure `rosu/exporter.py`.
+  - **Dedupe Library** — Recycle redundant duplicate `.osz` (extra copies of a set
+    you already have), keeping the canonical file. It **previews the count and
+    explains the criterion (matching beatmapset id) and never deletes without an
+    explicit confirmation.**
+- Long operations (client transfer, export, unpack, the osu!lazer read) are now
+  **cancellable**, and the Drive upload shows progress.
+
+### Fixed
+- **Sort crash on large tables.** Sorting a big Search/Library table (thousands of
+  rows, some with empty numeric cells) spammed the console with `RecursionError`
+  from a `QTableWidgetItem.__lt__` override that re-entered itself through PySide's
+  virtual trampoline. The comparison no longer calls `super().__lt__` and falls
+  back to a safe string compare.
+- **Crash on language change** when a scanned archive had been moved/deleted — the
+  Dashboard now tolerates a vanished file instead of raising `FileNotFoundError`.
+- A **share link can no longer be requested without uploading**, and the Drive
+  upload / share controls explain themselves when Drive isn't connected;
+  disconnecting Drive mid-upload now warns first. If a file is shared but its link
+  can't be retrieved, the user is told (it is public and should be reviewed).
+- Export now names the file after its source (`rosu-export-<source>.zip`) and the
+  completion dialog shows exactly **where** it was saved.
+- Shortcut status messages re-translate when you switch language.
+
+### Notes
+- Everything destructive uses the Recycle Bin (recoverable); Drive sharing is
+  always opt-in and per-file.
+
 ## [1.1.0] - 2026-07-15
 
 **Library Maturity — integrity, health & disk insight.** The first feature minor
@@ -426,7 +474,8 @@ Initial release. The core archive-management pipeline.
 - **EN/TR** localization; English-only code/logs.
 - Single-file **PyInstaller** build (`osu-archiver.spec`) + GitHub Actions build workflow.
 
-[Unreleased]: https://github.com/Kerevizodunu2000/rosu/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/Kerevizodunu2000/rosu/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/Kerevizodunu2000/rosu/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/Kerevizodunu2000/rosu/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/Kerevizodunu2000/rosu/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/Kerevizodunu2000/rosu/compare/v0.8.1...v1.0.0

@@ -147,3 +147,33 @@ def refresh_library(library_dir: Path, db, when: str,
 
     return {"added": added, "disappeared": disappeared, "enriched": enriched,
             "present": len(present_keys)}
+
+
+def plan_library_dedup(entries: list[dict]) -> list[str]:
+    """Decide which redundant duplicate ``.osz`` to remove from the Library.
+
+    Entries sharing a ``beatmapset_id`` are duplicates (e.g. ``"123 A - B.osz"``
+    plus a manual copy ``"123 A - B (1).osz"``). We keep the one whose name matches
+    the DB-canonical ``canonical`` filename and remove the rest. A group with NO
+    canonical file present is left untouched — removing one would orphan the DB row
+    (those surface in Library Health instead). ``beatmapset_id`` ``None`` is never a
+    duplicate (filename-keyed, inherently unique). Returns the names to remove.
+    """
+    from collections import defaultdict
+    groups: dict = defaultdict(list)
+    for e in entries:
+        bid = e.get("beatmapset_id")
+        if bid is None:
+            continue
+        groups[bid].append(e)
+    remove: list[str] = []
+    for items in groups.values():
+        if len(items) < 2:
+            continue
+        keeper = next((it for it in items
+                       if it.get("canonical") and it["name"] == it["canonical"]),
+                      None)
+        if keeper is None:
+            continue   # no canonical file to keep → leave the whole group alone
+        remove.extend(it["name"] for it in items if it is not keeper)
+    return remove

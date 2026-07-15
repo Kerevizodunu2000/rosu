@@ -10,5 +10,5 @@ All background/log/code text is English by design; only the user-facing UI is
 translated (see i18n.py).
 """
 
-__version__ = "1.1.0"
+__version__ = "1.2.0"
 __app_name__ = "Rosu"

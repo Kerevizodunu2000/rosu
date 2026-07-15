@@ -79,6 +79,7 @@ class Services:
 
     # -- extraction ----------------------------------------------------------
     def extract(self, approved: list[tuple[Path, ParsedPack]], progress=None) -> dict:
+        self._cancel.clear()   # fresh extract; makes unpacking cancellable
         when = now_iso()
         start = time.time()
         if self.cfg.clear_output_before_extract:
@@ -98,9 +99,12 @@ class Services:
         processed_dir = self.cfg.root_path / "Processed"
         rejected: list[dict] = []
         for zip_path, parsed in approved:
+            if self._cancel.is_set():
+                break
             try:
                 res = extractor.extract_pack(zip_path, parsed, self.cfg.output_path,
-                                             self.db, when, _cb, log=self.log)
+                                             self.db, when, _cb, log=self.log,
+                                             cancel=self._cancel.is_set)
             except archives.UnsafeArchive as exc:
                 # A zip-bomb / path-traversal pack: quarantine it (don't delete —
                 # the owner may want to inspect it) and keep processing the rest.
@@ -317,13 +321,18 @@ class Services:
         """Zip osu!(stable) Songs/ folders we don't already have into Output, then
         dedup them into the Library."""
         from . import client_import
+        self._cancel.clear()   # fresh op; own the token so its Cancel button works
         songs = client_import.stable_songs_dir()
         if not songs:
             return {"source": "stable", "found": False}
         known = self.db.known_track_ids()
         folders = list(client_import.iter_stable_folders(songs))
         made = 0
+        cancelled = False
         for i, folder in enumerate(folders, 1):
+            if self._cancel.is_set():
+                cancelled = True
+                break
             bid = client_import.beatmapset_id_for_folder(folder)
             if bid is None or bid in known:
                 continue  # unresolved id, or we already have this set
@@ -336,37 +345,77 @@ class Services:
         res = self.import_osz_folder(self.cfg.output_path, progress,
                                      source_label="local_osu_stable")
         self.log.info("CLIENT_IMPORT", client="stable", added=res["new"], made=made)
-        return {"source": "stable", "found": True, "made": made, **res}
+        return {"source": "stable", "found": True, "made": made,
+                "cancelled": cancelled, **res}
 
     def import_from_lazer(self, progress=None) -> dict:
         """Run the bundled .NET helper to re-export osu!lazer beatmapsets from its
-        Realm + files store, then dedup the exported .osz into the Library."""
+        Realm + files store, then dedup the exported .osz into the Library. The
+        (long) export is cancellable."""
         import shutil
-        import subprocess
         import tempfile
         from . import client_import
+        self._cancel.clear()   # fresh op; own the token for this import
         data = client_import.lazer_data_dir()
         if not data:
             return {"source": "lazer", "found": False}
-        helper = self._lazer_helper()
-        if not helper:
-            return {"source": "lazer", "found": True, "error": "helper_missing"}
         out = Path(tempfile.mkdtemp(prefix="rosu_lazer_"))
         try:
-            if progress:
-                progress("Exporting from osu!lazer…")
-            proc = subprocess.run([str(helper), str(data), str(out)],
-                                  capture_output=True, text=True, timeout=3600)
-            if proc.returncode != 0:
-                self.log.error("import:lazer", (proc.stderr or "helper failed")[:300])
+            ok, detail = self._run_lazer_export(data, out, progress,
+                                                cancel=self._cancel.is_set)
+            if not ok:
+                if detail == "helper_missing":
+                    return {"source": "lazer", "found": True, "error": "helper_missing"}
+                if detail == "cancelled":
+                    return {"source": "lazer", "found": True, "cancelled": True}
+                self.log.error("import:lazer", detail)
                 return {"source": "lazer", "found": True, "error": "helper_failed",
-                        "detail": (proc.stderr or "")[:300]}
+                        "detail": detail}
             res = self.import_osz_folder(out, progress,
                                          source_label="local_osu_lazer")
             self.log.info("CLIENT_IMPORT", client="lazer", added=res["new"], made=0)
             return {"source": "lazer", "found": True, **res}
         finally:
             shutil.rmtree(out, ignore_errors=True)
+
+    def _run_lazer_export(self, data, out, progress=None, cancel=None):
+        """Run the bundled osu!lazer export helper into ``out``, polling ``cancel``
+        so a long export can be interrupted (the subprocess is terminated). stderr
+        is captured to a temp file (no pipe-buffer deadlock). Returns
+        ``(ok: bool, detail: str)`` — detail is ``"cancelled"`` / ``"helper_missing"``
+        / the helper's stderr on failure, ``""`` on success."""
+        import subprocess
+        import tempfile
+        import time
+        helper = self._lazer_helper()
+        if not helper:
+            return False, "helper_missing"
+        if progress:
+            progress({"kind": "phase", "key": "sc_exporting_lazer"})
+        errf = tempfile.TemporaryFile(mode="w+")
+        try:
+            proc = subprocess.Popen([str(helper), str(data), str(out)],
+                                    stdout=subprocess.DEVNULL, stderr=errf, text=True)
+        except OSError as exc:
+            errf.close()
+            return False, str(exc)[:300]
+        try:
+            while proc.poll() is None:
+                if cancel is not None and cancel():
+                    proc.terminate()
+                    try:
+                        proc.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        proc.kill()
+                    return False, "cancelled"
+                time.sleep(0.2)
+            errf.seek(0)
+            err = errf.read()
+        finally:
+            errf.close()
+        if proc.returncode != 0:
+            return False, (err or "helper failed")[:300]
+        return True, ""
 
     def _lazer_helper(self):
         """Locate the bundled lazer-export .exe (works in the dev tree and the
@@ -513,30 +562,41 @@ class Services:
         """Send the Output .osz files to an installed osu! client. ``target`` is
         ``"lazer"`` or ``"stable"``; both import an .osz passed on the command
         line (single-instance forwarding), so the launch path is identical."""
-        self._cancel.clear()
+        self._cancel.clear()   # fresh import; a stale cancel must not kill it
         files = osu_import.output_osz_files(self.cfg.output_path)
+        return self._dispatch_to_client(target, files, progress)
+
+    def _dispatch_to_client(self, target: str, files, progress=None) -> dict:
+        """Launch osu! (``target`` = ``"lazer"``/``"stable"``) to import an explicit
+        list of ``.osz`` files, with the per-client staging + batching the client
+        needs, and flag the sets present in that client. Shared by the Dashboard
+        import (from Output) and the Shortcuts lazer↔stable transfer (from a temp
+        export). Stages COPIES, so the caller's originals survive.
+
+        Does NOT clear the cancel token — the caller owns it, so a cancel raised
+        during an earlier phase of the same operation (e.g. a transfer's export
+        step) still stops the dispatch."""
         if target == "stable":
             exe = self.cfg.osu_stable_exe or config.detect_stable_exe()
             # osu!(stable) *moves* each .osz into its Songs folder on import; a
-            # cross-drive move (Output on a different drive than Songs) fails with
-            # "Error moving file". Hand it copies staged on the install drive
-            # instead — the move becomes a same-drive rename, and Output is left
-            # intact so the same batch can also be sent to lazer.
+            # cross-drive move fails with "Error moving file". Stage copies on the
+            # install drive so the move is a same-drive rename, and the source is
+            # left intact. It also imports one file per launch (batching makes it
+            # fail), so send max_batch_files=1.
             files = self._stage_for_stable(files, exe)
+            batch_kw = {"max_batch_files": 1}
         else:
             exe = self.cfg.osu_lazer_exe or config.detect_osu_exe()
-            # osu!lazer consumes the source .osz on import (which emptied Output);
-            # stage copies so Output survives too, consistent with stable.
+            # osu!lazer consumes the source .osz on import; stage copies so the
+            # source survives too, consistent with stable.
             files = self._stage_copies(files, self.cfg.data_path / "_import_stage")
+            batch_kw = {}
 
         def _prog(i, total, n):
             self.log.info("OSU_IMPORT", target=target, batch=f"{i}/{total}", files=n)
             if progress:
                 progress({"kind": "import", "batch": i, "total": total, "files": n})
 
-        # osu!(stable) imports one file per launch — batching (as lazer uses)
-        # makes it fail with "Error moving file"; send it one at a time.
-        batch_kw = {"max_batch_files": 1} if target == "stable" else {}
         res = osu_import.import_files(exe, files, progress=_prog,
                                       cancel=self._cancel.is_set, **batch_kw)
         # Optimistically flag the dispatched sets as present in osu! so the Search
@@ -550,8 +610,6 @@ class Services:
             self.db._bump()   # let Search/Artists see the new 🎮 flags on reload
         self.log.info("OSU_IMPORT_DONE", target=target, files=res["files"],
                       batches=res["batches"])
-        # (Removed the "clear Output after import" option — item 7. osu! consumes the
-        # .osz on import, so Output empties itself; an explicit clear was redundant.)
         return res
 
     def _stage_copies(self, files, stage_dir):
@@ -608,6 +666,420 @@ class Services:
         if install is None:
             return files
         return self._stage_copies(files, install / "_rosu_import")
+
+    # -- shortcuts / quick-actions tab (v1.2) --------------------------------
+    def installed_summary(self, progress=None) -> dict:
+        """Read-only counts for the Shortcuts (Kısayollar) tab: how many beatmap
+        sets live in each place — osu!lazer, osu!(stable), the Library and the
+        Drive backup.
+
+        ``lazer['count']`` is ``None`` when lazer is installed: its set list lives
+        in an unreadable Realm database (only the bundled .NET helper can
+        enumerate it), so we report presence without a number here and fill the
+        number in after a transfer/import. ``stable`` counts ``Songs/`` subfolders
+        (≈ one per set), which is cheap. ``installed`` reflects on-disk detection
+        only — the per-client enable/disable toggle arrives in v1.3.
+        """
+        from . import client_import
+        songs = client_import.stable_songs_dir()
+        stable_count = (sum(1 for _ in client_import.iter_stable_folders(songs))
+                        if songs is not None else 0)
+        return {
+            "lazer": {"installed": client_import.lazer_data_dir() is not None,
+                      "count": None},
+            "stable": {"installed": songs is not None, "count": stable_count},
+            "library": {"count": self.db.counts().get("in_library", 0)},
+            "drive": {"connected": bool(self.cfg.drive_connected),
+                      "count": self.db.drive_count()},
+        }
+
+    def unpack_and_import(self, targets, skip_duplicates: bool = True,
+                          progress=None) -> dict:
+        """Shortcut ⑤: unpack every NEW pack in Packs/ into Output, then import the
+        result into the given osu! client(s). With ``skip_duplicates`` (default) each
+        target only receives Output sets it doesn't already have — so re-unpacking
+        sets that came from that client doesn't pointlessly re-send them. Both the
+        unpack and the send honor the cancel token. Returns ``{"extract": {...},
+        "imports": {target: {sent, skipped, ...}}, "cancelled": bool}``.
+        """
+        self._cancel.clear()
+        plans = self.prescan_all(progress)
+        approved = [(Path(p.zip_path), p.parsed) for p in plans if p.kind == "new"]
+        if approved or self.has_loose_osz():
+            extract_res = self.extract(approved, progress)
+        else:
+            extract_res = {"packs": 0, "tracks": 0}
+        imports: dict = {}
+        if not self._cancel.is_set():
+            files = osu_import.output_osz_files(self.cfg.output_path)
+            for target in targets:
+                if self._cancel.is_set():
+                    break
+                target_ids = self._client_set_ids(target) if skip_duplicates else set()
+                if target_ids:
+                    send = [f for f in files
+                            if (pt := parsing.parse_osz_entry(f.name, 0)) is None
+                            or pt.beatmapset_id not in target_ids]
+                else:
+                    send = list(files)
+                res = self._dispatch_to_client(target, send, progress)
+                imports[target] = {**res, "skipped": len(files) - len(send)}
+        return {"extract": extract_res, "imports": imports,
+                "cancelled": self._cancel.is_set()}
+
+    def save_installed_to_library(self, sources, progress=None) -> dict:
+        """Shortcut ③: import the beatmaps installed in the given osu! client(s)
+        (``"lazer"``/``"stable"``) straight into the Library (dedup is automatic —
+        reuses the existing client-import pipeline). Returns ``{source: {...}}``."""
+        out: dict = {}
+        for s in sources:
+            if s == "stable":
+                out["stable"] = self.import_from_stable(progress)
+            elif s == "lazer":
+                out["lazer"] = self.import_from_lazer(progress)
+        return out
+
+    def transfer_between_clients(self, source: str, target: str,
+                                 progress=None) -> dict:
+        """Shortcut ①/②: copy the beatmaps installed in one osu! client into the
+        other, skipping sets the target already has (id dedup — cheap for a stable
+        target; a lazer target relies on lazer's own import-time dedup). ``source``
+        and ``target`` are ``"lazer"``/``"stable"``. Returns
+        ``{"source","target","found","transferred","skipped","cancelled"}`` or
+        ``{"error": ...}``.
+        """
+        import shutil
+        import tempfile
+        if source == target:
+            return {"error": "same_client"}
+        target_exe = (self.cfg.osu_stable_exe or config.detect_stable_exe()
+                      if target == "stable"
+                      else self.cfg.osu_lazer_exe or config.detect_osu_exe())
+        if not target_exe or not Path(target_exe).exists():
+            return {"error": "no_target_exe", "source": source, "target": target}
+        self._cancel.clear()   # own the token for the whole transfer (export → send)
+        skip_ids = self._client_set_ids(target)
+        stage = Path(tempfile.mkdtemp(prefix="rosu_xfer_"))
+        try:
+            osz, skipped = self._export_client_sets(source, stage, skip_ids, progress)
+            found = len(osz) + skipped   # total examined = sent + already-in-target
+            if self._cancel.is_set():
+                return {"source": source, "target": target, "found": found,
+                        "transferred": 0, "skipped": skipped, "cancelled": True}
+            if not osz:
+                return {"source": source, "target": target, "found": found,
+                        "transferred": 0, "skipped": skipped, "cancelled": False}
+            res = self._dispatch_to_client(target, osz, progress)
+            transferred = res.get("sent", 0)
+            self.log.info("CLIENT_TRANSFER", source=source, target=target,
+                          found=found, transferred=transferred, skipped=skipped)
+            return {"source": source, "target": target, "found": found,
+                    "transferred": transferred, "skipped": skipped,
+                    "cancelled": res.get("cancelled", False)}
+        finally:
+            shutil.rmtree(stage, ignore_errors=True)
+
+    def _client_set_ids(self, client: str) -> set[int]:
+        """Beatmapset ids already in ``client`` — used to skip re-sending them on a
+        transfer. For **stable** we read the real ``Songs/`` folder ids
+        (authoritative). For **lazer**, whose set list is Realm-opaque, we fall back
+        to the ids Rosu has recorded as present there (``in_osu_lazer``); combined
+        with lazer's own import-time dedup this stops repeated transfers re-zipping
+        sets already sent. An empty set means "skip nothing"."""
+        from . import client_import
+        if client == "stable":
+            songs = client_import.stable_songs_dir()
+            if songs is None:
+                return set()
+            ids: set[int] = set()
+            for folder in client_import.iter_stable_folders(songs):
+                bid = client_import.beatmapset_id_for_folder(folder)
+                if bid is not None:
+                    ids.add(bid)
+            return ids
+        return self.db.osu_client_ids(client)
+
+    def _export_client_sets(self, source: str, stage, skip_ids,
+                            progress=None) -> tuple[list, int]:
+        """Materialise the beatmaps installed in ``source`` as ``.osz`` files under
+        ``stage``, skipping any whose id is in ``skip_ids`` (already in the target).
+        Returns ``(osz_paths, skipped_count)``."""
+        from . import client_import
+        stage = Path(stage)
+        stage.mkdir(parents=True, exist_ok=True)
+        out: list = []
+        skipped = 0
+        if source == "stable":
+            songs = client_import.stable_songs_dir()
+            if songs is None:
+                return out, skipped
+            folders = list(client_import.iter_stable_folders(songs))
+            for i, folder in enumerate(folders, 1):
+                if self._cancel.is_set():
+                    break
+                bid = client_import.beatmapset_id_for_folder(folder)
+                if skip_ids and bid is not None and bid in skip_ids:
+                    skipped += 1
+                    continue
+                # Never fabricate id 0 for a set with no resolvable id — a "0 …"
+                # name re-parses to beatmapset_id 0 and would collapse every id-less
+                # set onto the same merged-export dedup key (silent data loss).
+                if bid is not None:
+                    dest = stage / client_import._osz_name_for(folder, bid)
+                else:
+                    dest = stage / f"{folder.name}.osz"
+                try:
+                    client_import.zip_folder_to_osz(folder, dest)
+                    out.append(dest)
+                except OSError as exc:
+                    self.log.error("xfer:zip", str(exc)[:200])
+                if progress:
+                    progress({"kind": "export", "done": i, "total": len(folders)})
+            return out, skipped
+        # source == "lazer": re-export via the bundled .NET helper, then filter.
+        data = client_import.lazer_data_dir()
+        if data is None or self._cancel.is_set():
+            return out, skipped
+        ok, detail = self._run_lazer_export(data, stage, progress,
+                                            cancel=self._cancel.is_set)
+        if not ok:
+            if detail not in ("cancelled", "helper_missing"):
+                self.log.error("xfer:lazer", detail)
+            return out, skipped
+        for p in client_import.iter_osz_in_folder(stage):
+            if self._cancel.is_set():
+                break
+            t = parsing.parse_osz_entry(p.name, 0)
+            if skip_ids and t is not None and t.beatmapset_id in skip_ids:
+                skipped += 1
+                try:
+                    p.unlink()
+                except OSError:
+                    pass
+                continue
+            out.append(p)
+        return out, skipped
+
+    def _dedup_scan(self) -> tuple[list, dict, int]:
+        """Scan the Library and plan dedup without deleting: returns
+        ``(names_to_remove, sizes_by_name, groups)``. Duplicates are files sharing a
+        beatmapset id; the DB-canonical file is kept and a group with no canonical
+        file on disk is left alone (removing would orphan the DB row)."""
+        from .parsing import parse_osz_entry
+        lib = self.cfg.library_path
+        if not lib.exists():
+            return [], {}, 0
+        canon: dict = {}
+        for r in self.db.library_records():
+            bid = r.get("beatmapset_id")
+            if bid is not None and r.get("filename"):
+                canon.setdefault(bid, r["filename"])
+        entries: list = []
+        sizes: dict = {}
+        bid_of: dict = {}
+        for p in sorted(lib.glob("*.osz")):
+            try:
+                sz = p.stat().st_size
+            except OSError:
+                sz = 0
+            t = parse_osz_entry(p.name, sz)
+            bid = t.beatmapset_id if t is not None else None
+            sizes[p.name] = sz
+            bid_of[p.name] = bid
+            entries.append({"name": p.name, "size": sz, "beatmapset_id": bid,
+                            "canonical": canon.get(bid)})
+        to_remove = library.plan_library_dedup(entries)
+        groups = len({bid_of.get(n) for n in to_remove})
+        return to_remove, sizes, groups
+
+    def dedup_library_plan(self, progress=None) -> dict:
+        """Preview which duplicate files dedup WOULD recycle — feeds the
+        confirmation dialog, deletes nothing. Returns
+        ``{"count","freed_bytes","groups","names"}``."""
+        to_remove, sizes, groups = self._dedup_scan()
+        return {"count": len(to_remove),
+                "freed_bytes": sum(sizes.get(n, 0) for n in to_remove),
+                "groups": groups, "names": to_remove}
+
+    def dedup_library(self, names=None, progress=None) -> dict:
+        """Recycle redundant duplicate ``.osz`` in the Library (see
+        :meth:`dedup_library_plan` for how duplicates are identified). ``names`` is
+        an explicit list from a confirmed plan; when ``None`` it scans and removes in
+        one shot. Recycle Bin (recoverable). Returns
+        ``{"removed","freed_bytes","groups"}``."""
+        from send2trash import send2trash
+        lib = self.cfg.library_path
+        if names is None:
+            names, sizes, groups = self._dedup_scan()
+        else:
+            sizes = {}
+            for n in names:
+                try:
+                    sizes[n] = (lib / n).stat().st_size
+                except OSError:
+                    sizes[n] = 0
+            groups = 0
+        removed = freed = 0
+        for i, name in enumerate(names, 1):
+            try:
+                send2trash(str(lib / name))
+                removed += 1
+                freed += sizes.get(name, 0)
+            except OSError as exc:
+                self.log.error("dedup", str(exc)[:200])
+            if progress:
+                progress({"kind": "dedup", "done": i, "total": len(names)})
+        self.log.info("LIBRARY_DEDUP", removed=removed,
+                      freed_mb=freed // (1024 * 1024), groups=groups)
+        return {"removed": removed, "freed_bytes": freed, "groups": groups}
+
+    def export_sets(self, source: str, dest_base, fmt: str = "zip",
+                    split_bytes: int | None = None, upload_to_drive: bool = False,
+                    share: bool = False, progress=None) -> dict:
+        """Shortcut ④: gather the beatmaps from ``source`` and write them to
+        archive(s) at ``dest_base``.
+
+        ``source`` is ``"library"`` (every physical Library .osz), ``"drive"``
+        (only the Library sets already backed up to Drive), ``"lazer"`` /
+        ``"stable"`` (re-export from that client), or ``"merged"`` (the union of
+        Library + both clients, deduped by id). ``fmt`` is ``"zip"`` or ``"7z"``;
+        ``split_bytes`` splits into volumes (None = one archive). With
+        ``upload_to_drive`` the archive(s) are uploaded to a Drive ``Exports``
+        folder, and ``share`` adds an anyone-with-link permission + returns the
+        link. Returns ``{"source","count","archives":[...], ["drive": {...}]}``.
+        """
+        import shutil
+        import tempfile
+
+        from . import exporter
+        self._cancel.clear()   # own the token for this export (gather → write)
+        stage = Path(tempfile.mkdtemp(prefix="rosu_export_"))
+        try:
+            files = self._gather_export_sources(source, stage, progress)
+            if not files or self._cancel.is_set():
+                return {"source": source, "count": 0, "archives": [],
+                        "cancelled": self._cancel.is_set()}
+            written = exporter.write_export(files, Path(dest_base), fmt, split_bytes,
+                                            progress, cancel=self._cancel.is_set)
+            cancelled = self._cancel.is_set()
+            result = {"source": source, "count": len(files),
+                      "archives": [str(a) for a in written], "cancelled": cancelled}
+            if upload_to_drive and not cancelled:
+                result["drive"] = self._upload_export_to_drive(written, share,
+                                                               progress)
+            self.log.info("EXPORT", source=source, sets=len(files),
+                          archives=len(written), fmt=fmt, cancelled=cancelled)
+            return result
+        finally:
+            shutil.rmtree(stage, ignore_errors=True)
+
+    def _gather_export_sources(self, source: str, stage, progress=None) -> list:
+        """Collect the ``.osz`` file paths that make up an export ``source`` (see
+        :meth:`export_sets`). Client sources are materialised into ``stage``."""
+        from .parsing import parse_osz_entry
+        lib = self.cfg.library_path
+
+        def lib_files(only_drive: bool = False) -> list:
+            if not lib.exists():
+                return []
+            if not only_drive:
+                return sorted(lib.glob("*.osz"))
+            names = {r["filename"] for r in self.db.library_records()
+                     if r.get("in_drive") and r.get("filename")}
+            return sorted(p for n in names if (p := lib / n).exists())
+
+        if source == "library":
+            return lib_files()
+        if source == "drive":
+            return lib_files(only_drive=True)
+        if source in ("lazer", "stable"):
+            osz, _ = self._export_client_sets(source, stage, None, progress)
+            return osz
+        if source == "merged":
+            seen: set = set()
+            out: list = []
+
+            def _add(paths):
+                for p in paths:
+                    t = parse_osz_entry(p.name, 0)
+                    bid = t.beatmapset_id if t else None
+                    key = bid if bid else p.name   # id None or 0 → key by filename
+                    if key not in seen:
+                        seen.add(key)
+                        out.append(p)
+
+            _add(lib_files())
+            for client in ("lazer", "stable"):
+                osz, _ = self._export_client_sets(client, stage, None, progress)
+                _add(osz)
+            return out
+        return []
+
+    def _upload_export_to_drive(self, archives, share: bool,
+                                progress=None) -> dict:
+        """Upload the written export archive(s) to a Drive ``Exports`` folder and,
+        when ``share``, grant an anyone-with-link permission and collect the link
+        for each. Returns ``{"uploaded", "files": [{name,id,link}]}`` or
+        ``{"error": ...}``."""
+        from .drive.auth import DriveCancelled, DriveError
+        self._drive_cancel.clear()
+        if not self._drive_auth().is_connected():
+            return {"error": "not_connected"}
+        try:
+            client = self._make_drive_client()
+            folder = self.cfg.drive_folder_id or client.ensure_folder("Rosu")
+            if folder != self.cfg.drive_folder_id:
+                self.cfg.drive_folder_id = folder
+                config.save_config(self.cfg)
+            exports = client.ensure_folder("Exports", folder)
+            if progress:
+                progress({"kind": "phase", "key": "sc_uploading_drive"})
+            files: list = []
+            cancelled = False
+            for a in archives:
+                if self._drive_cancel.is_set():
+                    cancelled = True
+                    break
+                a = Path(a)
+
+                def _up(sent, size, _n=a.name):
+                    if progress:
+                        progress({"kind": "upload", "done": sent, "total": size,
+                                  "name": _n})
+
+                try:
+                    fid = client.upload_file(a, a.name, exports, progress=_up,
+                                             cancel=self._drive_cancel.is_set)
+                except DriveCancelled:
+                    cancelled = True
+                    break
+                link = None
+                shared = False
+                link_error = False
+                if share and fid:
+                    try:
+                        client.share_anyone(fid)
+                        shared = True
+                        # Record the grant BEFORE fetching the link: if get_link
+                        # then fails the file is ALREADY public, and the user must
+                        # be told so they can review/revoke it in Drive.
+                        self.log.info("EXPORT_SHARE", file=a.name)
+                    except DriveError as exc:
+                        self.log.error("export:share", str(exc)[:200])
+                    if shared:
+                        try:
+                            link = client.get_link(fid)
+                        except DriveError as exc:
+                            link_error = True
+                            self.log.error("export:link", str(exc)[:200])
+                files.append({"name": a.name, "id": fid, "link": link,
+                              "shared": shared, "link_error": link_error})
+            self.log.info("EXPORT_UPLOAD", files=len(files), shared=share,
+                          cancelled=cancelled)
+            return {"uploaded": len(files), "files": files, "cancelled": cancelled}
+        except DriveError as exc:
+            self.log.error("export:drive", str(exc)[:300])
+            return {"error": "drive", "detail": str(exc)[:300]}
 
     # -- reference (osu! API) ------------------------------------------------
     def _reference(self):

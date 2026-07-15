@@ -14,6 +14,7 @@ from .logs_tab import LogsTab
 from .packs_tab import PacksTab
 from .search_tab import SearchTab
 from .settings_tab import SettingsTab
+from .shortcuts_tab import ShortcutsTab
 
 
 def load_stylesheet(theme: str) -> str:
@@ -46,14 +47,15 @@ class MainWindow(QMainWindow):
         self._update_info: dict | None = None
 
         self.dashboard = DashboardTab(self)
+        self.shortcuts = ShortcutsTab(self)
         self.search = SearchTab(self)
         self.artists = ArtistsTab(self)
         self.packs = PacksTab(self)
         self.logs = LogsTab(self)
         self.settings = SettingsTab(self)
 
-        self._ordered_tabs = [self.dashboard, self.search, self.artists,
-                              self.packs, self.logs, self.settings]
+        self._ordered_tabs = [self.dashboard, self.shortcuts, self.search,
+                              self.artists, self.packs, self.logs, self.settings]
         for tab in self._ordered_tabs:
             self.tabs.addTab(tab, "")
 
@@ -111,8 +113,8 @@ class MainWindow(QMainWindow):
     def retranslate(self) -> None:
         t = self.ctx.t
         self.setWindowTitle(f"{t('app_title')}  ·  v{__version__}")
-        keys = ["tab_dashboard", "tab_search", "tab_artists", "tab_packs",
-                "tab_logs", "tab_settings"]
+        keys = ["tab_dashboard", "tab_shortcuts", "tab_search", "tab_artists",
+                "tab_packs", "tab_logs", "tab_settings"]
         for i, key in enumerate(keys):
             self.tabs.setTabText(i, t(key))
         for tab in self._ordered_tabs:
