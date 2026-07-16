@@ -129,3 +129,15 @@ def test_current_step_returns_first_non_terminal():
     assert j.current_step() is j.steps[1]
     j.steps[1].state = State.DONE
     assert j.current_step() is None
+
+
+def test_skipped_step_is_passed_over():
+    # v1.3.1 per-step cancel: a SKIPPED step is terminal, so current_step and the
+    # scheduler move past it to the next real step.
+    j = _pending_job("j", Lane.DISK, Lane.DISK, Lane.DISK)
+    j.steps[1].state = State.SKIPPED           # middle step removed by the user
+    assert j.current_step() is j.steps[0]
+    j.steps[0].state = State.DONE
+    assert j.current_step() is j.steps[2]      # skips the removed one
+    picks = select_next([j], set())
+    assert [(lane, step) for lane, _job, step in picks] == [(Lane.DISK, j.steps[2])]

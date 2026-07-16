@@ -65,36 +65,45 @@ def _dedupe_basenames(paths: list[Path]) -> list[str]:
     return names
 
 
-def _write_zip(members: list[tuple[str, Path]], out_path: Path) -> None:
-    """Zip ``members`` (arcname, source path) into ``out_path`` atomically.
+class _CancelledWrite(Exception):
+    """Internal: raised to abort a volume mid-write when ``cancel`` trips."""
 
-    ZIP_STORED (inputs are .osz, already compressed); writes to a ``.part``
-    file first, replacing the target only on full success.
+
+def _open_archive(tmp: Path, fmt: str):
+    if fmt == "zip":
+        # ZIP_STORED — inputs are .osz, already compressed.
+        return zipfile.ZipFile(tmp, "w", zipfile.ZIP_STORED, allowZip64=True)
+    import py7zr
+    return py7zr.SevenZipFile(tmp, "w")
+
+
+def _write_volume(members: list[tuple[str, Path]], out_path: Path, fmt: str,
+                  progress, cancel, counter: list[int], total: int) -> bool:
+    """Write one archive volume, checking ``cancel`` and emitting per-member
+    progress BETWEEN files (not just once per volume), so even a single large
+    archive is cancellable and shows live progress. Written to a ``.part`` temp
+    then swapped in. Returns True if the volume completed, False if it was
+    cancelled (the partial ``.part`` is removed). Other errors clean up + re-raise.
     """
     tmp = out_path.with_name(out_path.name + ".part")
     try:
-        with zipfile.ZipFile(tmp, "w", zipfile.ZIP_STORED, allowZip64=True) as z:
+        with _open_archive(tmp, fmt) as z:
             for name, path in members:
+                if cancel is not None and cancel():
+                    raise _CancelledWrite()
                 z.write(path, arcname=name)
+                counter[0] += 1
+                if progress:
+                    progress({"kind": "export", "done": counter[0],
+                              "total": total, "name": name})
         tmp.replace(out_path)
-    except BaseException:
+        return True
+    except _CancelledWrite:
         try:
             tmp.unlink()
         except OSError:
             pass
-        raise
-
-
-def _write_7z(members: list[tuple[str, Path]], out_path: Path) -> None:
-    """py7zr equivalent of :func:`_write_zip` (py7zr imported lazily)."""
-    import py7zr
-
-    tmp = out_path.with_name(out_path.name + ".part")
-    try:
-        with py7zr.SevenZipFile(tmp, "w") as z:
-            for name, path in members:
-                z.write(path, arcname=name)
-        tmp.replace(out_path)
+        return False
     except BaseException:
         try:
             tmp.unlink()
@@ -130,7 +139,6 @@ def write_export(files: list[Path], dest_base: Path, fmt: str = "zip",
     sizes = [p.stat().st_size for p in existing]
     volumes = plan_volumes(sizes, split_bytes)
     names = _dedupe_basenames(existing)
-    write_one = _write_zip if fmt == "zip" else _write_7z
     suffix = ".zip" if fmt == "zip" else ".7z"
 
     dest_base.parent.mkdir(parents=True, exist_ok=True)
@@ -140,7 +148,7 @@ def write_export(files: list[Path], dest_base: Path, fmt: str = "zip",
 
     written: list[Path] = []
     total = len(existing)
-    done = 0
+    counter = [0]
     for vol_num, vol in enumerate(volumes, start=1):
         if cancel is not None and cancel():
             break
@@ -150,11 +158,8 @@ def write_export(files: list[Path], dest_base: Path, fmt: str = "zip",
             out_path = dest_base.parent / (
                 f"{dest_base.stem}.part{vol_num:0{width}d}{suffix}")
         members = [(names[i], existing[i]) for i in vol]
-        write_one(members, out_path)
+        if not _write_volume(members, out_path, fmt, progress, cancel,
+                             counter, total):
+            break   # cancelled mid-volume — stop, keep the volumes finished so far
         written.append(out_path)
-        for name, _ in members:
-            done += 1
-            if progress:
-                progress({"kind": "export", "done": done, "total": total,
-                          "name": name})
     return written

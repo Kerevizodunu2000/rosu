@@ -16,6 +16,8 @@ from PySide6.QtCore import QObject, Signal
 from ..jobs import Lane, State, select_next
 from ..workers import Worker
 
+_JOB_TERMINAL = (State.DONE, State.FAILED, State.CANCELLED)
+
 
 class JobQueueController(QObject):
     changed = Signal()            # the model changed → the tab re-renders the list
@@ -42,9 +44,35 @@ class JobQueueController(QObject):
         the queue keeps going."""
         job.cancel()
         if not self._is_actively_running(job):
-            if job.state not in (State.DONE, State.FAILED, State.CANCELLED):
+            if job.state not in _JOB_TERMINAL:
+                self._mark_pending_cancelled(job)  # no dangling steps left runnable
                 job.state = State.CANCELLED
                 job.cleanup()
+        self.changed.emit()
+        self._pump()
+
+    @staticmethod
+    def _mark_pending_cancelled(job) -> None:
+        """Mark every not-yet-run step of a terminating job CANCELLED, so no live
+        skip/cancel button (which keys off step state) can later resurrect it."""
+        for s in job.steps:
+            if s.state in (State.PENDING, State.RUNNING):
+                s.state = State.CANCELLED
+
+    def skip_step(self, job, step) -> None:
+        """Remove ONE step from a job (per-step ✕) — the job keeps going with the
+        rest. A pending step is marked SKIPPED so the scheduler passes it; a
+        running step is stopped cooperatively (then :meth:`_on_done` marks it
+        SKIPPED and advances). The job's own cancel token is untouched, so other
+        steps are unaffected."""
+        if job.state in _JOB_TERMINAL:            # job already finished — ignore
+            return
+        if step.state == State.PENDING:
+            step.state = State.SKIPPED
+            if job.current_step() is None:        # was the last thing left to do
+                self._finalize_done(job)
+        elif step.state == State.RUNNING:
+            step.skip_event.set()
         self.changed.emit()
         self._pump()
 
@@ -104,7 +132,10 @@ class JobQueueController(QObject):
     def _start(self, lane, job, step) -> None:
         job.state = State.RUNNING
         step.state = State.RUNNING
-        cancel = job.cancel_cb
+        # The step stops on EITHER a whole-job cancel or this one step being
+        # individually skipped (per-step ✕).
+        def cancel():
+            return job.cancel_cb() or step.skip_event.is_set()
 
         def work(progress=None):
             return step.run(job.ctx, progress, cancel)
@@ -137,21 +168,37 @@ class JobQueueController(QObject):
 
     def _on_done(self, lane, job, step) -> None:
         self._free_lane(lane)
-        if job.cancel_cb():
-            step.state = State.CANCELLED
-            job.state = State.CANCELLED
-            job.cleanup()
+        # (1) This one step was individually skipped (per-step ✕) — mark it and
+        #     let the job carry on with its remaining steps.
+        if step.skip_event.is_set() and not job.cancel_cb():
+            step.state = State.SKIPPED
+            nxt = job.current_step()
             self.changed.emit()
             self._pump()
+            if nxt is None:
+                self._finalize_done(job)
+            elif nxt.gated:
+                self.gate_needed.emit(job)
             return
         step.state = State.DONE
         if step.total:
             step.done = step.total
         nxt = job.current_step()
+        # (2) Whole-job cancel with steps still to run → CANCELLED (skip the rest).
+        #     But if this was the LAST step and it finished, the cancel came too
+        #     late — the work IS done, so don't mislabel it "cancelled" (e.g. a
+        #     Drive upload that completed just as Cancel was clicked).
+        if job.cancel_cb() and nxt is not None:
+            for s in job.steps:
+                if s.state == State.PENDING:
+                    s.state = State.CANCELLED
+            job.state = State.CANCELLED
+            job.cleanup()
+            self.changed.emit()
+            self._pump()
+            return
         self.changed.emit()
-        # Put any freed lane back to work BEFORE we (possibly) pop a modal dialog
-        # for the finished/gated job — a modal confirm/completion dialog would
-        # otherwise leave a queued job idle on a free lane until the user answers.
+        # Put any freed lane back to work BEFORE we (possibly) pop a modal dialog.
         self._pump()
         if nxt is None:
             self._finalize_done(job)       # DONE → result presenter (may be modal)
@@ -169,11 +216,14 @@ class JobQueueController(QObject):
             step.state = State.FAILED
             job.state = State.FAILED
             job.error = err
+        self._mark_pending_cancelled(job)   # no later step left runnable on a dead job
         job.cleanup()
         self.changed.emit()
         self._pump()
 
     def _finalize_done(self, job) -> None:
+        if job.state in _JOB_TERMINAL:       # already cancelled/failed — never resurrect
+            return
         job.state = State.DONE
         if job.finalize is not None:
             try:

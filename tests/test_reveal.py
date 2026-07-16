@@ -19,7 +19,7 @@ def test_reveal_missing_file_warns_and_launches_nothing(tmp_path, monkeypatch):
     assert warned and not launched
 
 
-def test_reveal_windows_selects_with_single_combined_arg(tmp_path, monkeypatch):
+def test_reveal_windows_selects_with_switch_outside_quotes(tmp_path, monkeypatch):
     f = tmp_path / "123 Artist - Title.osz"    # a real filename (has spaces)
     f.write_bytes(b"x")
     launched = []
@@ -27,8 +27,9 @@ def test_reveal_windows_selects_with_single_combined_arg(tmp_path, monkeypatch):
     monkeypatch.setattr(reveal.subprocess, "Popen",
                         lambda args, **k: launched.append(args))
     reveal.reveal_in_explorer(None, FakeCtx(), f)
-    # flag + path MUST be one token, or Explorer ignores /select
-    assert launched == [["explorer", f"/select,{f}"]]
+    # The switch must sit OUTSIDE the quotes and the path INSIDE, as a raw string,
+    # or Explorer ignores /select and opens Documents for a path with spaces.
+    assert launched == [f'explorer /select,"{f}"']
 
 
 def test_reveal_non_windows_opens_containing_folder(tmp_path, monkeypatch):

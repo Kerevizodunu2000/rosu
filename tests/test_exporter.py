@@ -120,6 +120,25 @@ def test_write_export_missing_file_skipped(tmp_path):
         assert z.namelist() == ["a.osz"]
 
 
+def test_write_export_cancel_mid_write(tmp_path):
+    # v1.3.1: a single archive is one volume, so cancel must be honored BETWEEN
+    # members (not only once per volume) — otherwise a big 7z/zip can't be stopped.
+    files = [tmp_path / f"{i}.osz" for i in range(5)]
+    for f in files:
+        f.write_bytes(b"x" * 100)
+    dest = tmp_path / "out" / "E"
+    calls = [0]
+
+    def cancel():
+        calls[0] += 1
+        return calls[0] > 2    # trip partway through the member loop
+
+    written = exporter.write_export(files, dest, fmt="zip", cancel=cancel)
+    assert written == []                                  # cancelled → nothing kept
+    assert not dest.with_suffix(".zip").exists()
+    assert not (dest.parent / "E.zip.part").exists()      # partial .part cleaned up
+
+
 def test_write_export_empty_list(tmp_path):
     dest = tmp_path / "export"
     written = exporter.write_export([], dest, fmt="zip")

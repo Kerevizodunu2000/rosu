@@ -10,9 +10,44 @@ the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-07-16
+
+**Bug-fix release** for issues found while testing v1.3.0.
+
+### Fixed
+- **Double-click "open file location" opened Documents** for the Dashboard Output
+  view (and any archive whose path contained spaces). The reveal command quoted
+  the whole `/select,<path>` token, so Explorer didn't recognise the switch; it now
+  passes `/select,` outside the quotes and the path inside, selecting the file
+  correctly.
+- **osu!lazer installed-music count now shows a number.** osu!lazer's own list
+  can't be read directly, so the count is derived from your Library sets recorded
+  as installed in osu!lazer, with a tooltip explaining where the number comes from.
+- **Export was hard to follow in the queue.** The export job now names the source,
+  archive file, and format (e.g. "Export Library → MyExport.zip"), the steps say
+  where sets are gathered from and what file is written, and the row tooltip shows
+  the destination folder.
+- **A large single-archive or 7z export couldn't be cancelled** mid-write — cancel
+  was only checked once per volume. It's now honoured between files, and cancelling
+  removes the partial archive.
+- **A job that finished could still be labelled "cancelled".** If you clicked cancel
+  but the last step (e.g. a Drive upload) already completed, the job is now marked
+  **Done** and its result is shown, instead of "cancelled" while the file was in fact
+  uploaded.
+- **The cancel button showed an empty box** in some themes (the `✕` glyph didn't
+  render). Job and step buttons now use a `×` that renders everywhere.
+- **Running jobs can now be cancelled** reliably (not just queued ones), and each
+  step has its own remove button: removing one step strikes it through and the job
+  **continues** with the rest, instead of only being able to cancel the whole job.
+- **About → Licenses now shows a contact line** for reporting bugs / suggestions.
+
+### Note
+- Google Drive requires the CI build's OAuth client secret to be set correctly for
+  the shipped `.exe`; see the repo's release process.
+
 ## [1.3.0] - 2026-07-16
 
-**İş Kuyruğu — a job queue on the Shortcuts tab.** Every shortcut action is now a
+**A job queue on the Shortcuts tab.** Every shortcut action is now a
 **queued job broken into named sub-steps** with live status, so you can see exactly
 which phase it's in, **cancel jobs one at a time** (the rest keep going), and **run
 work concurrently** — a disk operation runs while a Drive upload runs. Plus a few
@@ -519,7 +554,8 @@ Initial release. The core archive-management pipeline.
 - **EN/TR** localization; English-only code/logs.
 - Single-file **PyInstaller** build (`osu-archiver.spec`) + GitHub Actions build workflow.
 
-[Unreleased]: https://github.com/Kerevizodunu2000/rosu/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/Kerevizodunu2000/rosu/compare/v1.3.1...HEAD
+[1.3.1]: https://github.com/Kerevizodunu2000/rosu/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/Kerevizodunu2000/rosu/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/Kerevizodunu2000/rosu/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/Kerevizodunu2000/rosu/compare/v1.0.1...v1.1.0

@@ -37,6 +37,9 @@ def test_installed_summary_counts(tmp_path, monkeypatch):
     _add_lib(db, 1, "a.osz", in_drive=1)
     _add_lib(db, 2, "b.osz", in_drive=0)
     _add_lib(db, 3, "c.osz", in_drive=1)
+    # two of the Library sets are recorded as installed in osu!lazer
+    db._conn.execute("UPDATE tracks SET in_osu_lazer=1 WHERE beatmapset_id IN (1, 2)")
+    db._conn.commit()
 
     songs = tmp_path / "Songs"
     songs.mkdir()
@@ -51,7 +54,9 @@ def test_installed_summary_counts(tmp_path, monkeypatch):
     summ = svc.installed_summary()
     assert summ["stable"] == {"installed": True, "count": 3}    # only the folders
     assert summ["lazer"]["installed"] is True
-    assert summ["lazer"]["count"] is None                        # Realm-opaque
+    # lazer's Realm is opaque → the number comes from Library sets flagged in lazer
+    assert summ["lazer"]["count"] == 2
+    assert summ["lazer"]["from_library"] is True
     assert summ["library"]["count"] == 3
     assert summ["drive"]["count"] == 2
     db.close()
@@ -63,7 +68,7 @@ def test_installed_summary_none_installed(tmp_path, monkeypatch):
     monkeypatch.setattr(client_import, "lazer_data_dir", lambda: None)
     summ = svc.installed_summary()
     assert summ["stable"] == {"installed": False, "count": 0}
-    assert summ["lazer"] == {"installed": False, "count": None}
+    assert summ["lazer"] == {"installed": False, "count": None, "from_library": True}
     assert summ["library"]["count"] == 0
     assert summ["drive"]["count"] == 0
     db.close()

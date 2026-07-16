@@ -10,8 +10,10 @@ several jobs can be queued at once.
 """
 from __future__ import annotations
 
+import html
 from pathlib import Path
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QFileDialog, QFrame, QGridLayout, QGroupBox,
     QHBoxLayout, QLabel, QMessageBox, QProgressBar, QPushButton, QScrollArea,
@@ -26,8 +28,10 @@ from .job_queue import JobQueueController
 _GIB = 1024 ** 3
 _MIB = 1024 ** 2
 
-_GLYPH = {State.PENDING: "○", State.RUNNING: "⟳", State.DONE: "✓",
-          State.FAILED: "✗", State.CANCELLED: "⊘", State.SKIPPED: "–"}
+# Glyphs kept to characters present in essentially every font (the heavier
+# ✕/✗ variants render as an empty box in some themes).
+_GLYPH = {State.PENDING: "○", State.RUNNING: "▸", State.DONE: "✓",
+          State.FAILED: "×", State.CANCELLED: "–", State.SKIPPED: "–"}
 _STATE_KEY = {
     State.PENDING: "job_state_pending", State.RUNNING: "job_state_running",
     State.DONE: "job_state_done", State.FAILED: "job_state_failed",
@@ -57,8 +61,9 @@ class JobRowWidget(QFrame):
         head = QHBoxLayout()
         self.lbl_title = QLabel(objectName="status")
         self.lbl_state = QLabel(objectName="status")
-        self.btn_cancel = QPushButton("✕", objectName="secondary")
-        self.btn_cancel.setFixedWidth(32)
+        self.btn_cancel = QPushButton("×", objectName="secondary")
+        self.btn_cancel.setFixedWidth(30)
+        self.btn_cancel.setToolTip(ctx.t("job_cancel_tip"))
         self.btn_cancel.clicked.connect(lambda: self.controller.cancel_job(self.job))
         head.addWidget(self.lbl_title, 1)
         head.addWidget(self.lbl_state)
@@ -66,17 +71,25 @@ class JobRowWidget(QFrame):
         lay.addLayout(head)
 
         self.step_rows: list = []
-        for _step in job.steps:
+        for step in job.steps:
             r = QHBoxLayout()
+            r.setContentsMargins(16, 0, 0, 0)   # indent so steps sit under the title
             lbl = QLabel(objectName="status")
+            lbl.setTextFormat(Qt.RichText)
             bar = QProgressBar()
             bar.setMaximumHeight(8)
             bar.setTextVisible(False)
             bar.setVisible(False)
+            skip = QPushButton("×", objectName="secondary")
+            skip.setFixedWidth(24)
+            skip.setToolTip(ctx.t("job_step_skip"))
+            skip.clicked.connect(
+                lambda _=False, s=step: self.controller.skip_step(self.job, s))
             r.addWidget(lbl, 3)
             r.addWidget(bar, 2)
+            r.addWidget(skip)
             lay.addLayout(r)
-            self.step_rows.append((lbl, bar))
+            self.step_rows.append((step, lbl, bar, skip))
 
     def update_view(self) -> None:
         t = self.ctx.t
@@ -85,15 +98,24 @@ class JobRowWidget(QFrame):
             + t(self.job.title_key, **self.job.title_kwargs))
         self.lbl_state.setText(t(_STATE_KEY.get(self.job.state, "job_state_pending")))
         self.btn_cancel.setVisible(self.job.state in (State.PENDING, State.RUNNING))
-        self.setToolTip(self.job.error or "")
-        for (lbl, bar), step in zip(self.step_rows, self.job.steps):
-            lbl.setText(f"    {_GLYPH.get(step.state, '○')} {t(step.key)}")
+        self.setToolTip(self.job.error or self.job.tooltip or "")
+        for step, lbl, bar, skip in self.step_rows:
+            # The label is rich text (for the strikethrough), and label_kwargs can
+            # carry a user-chosen filename — escape it so an '&' or '<' in the name
+            # can't corrupt the render.
+            label = html.escape(t(step.key, **step.label_kwargs))
+            text = f"{_GLYPH.get(step.state, '○')} {label}"
+            if step.state in (State.SKIPPED, State.CANCELLED):
+                text = f"<s>{text}</s>"          # struck through — removed / cancelled
+            lbl.setText(text)
             if step.state == State.RUNNING and step.total:
                 bar.setMaximum(step.total)
                 bar.setValue(step.done)
                 bar.setVisible(True)
             else:
                 bar.setVisible(False)
+            # A step can be individually removed only while it's queued or running.
+            skip.setVisible(step.state in (State.PENDING, State.RUNNING))
 
 
 class ShortcutsTab(QWidget):
@@ -353,11 +375,12 @@ class ShortcutsTab(QWidget):
         t = self.ctx.t
         s = self._summary
         for key in ("lazer", "stable", "library", "drive"):
-            _head, val = self.sum_labels[key]
+            head, val = self.sum_labels[key]
             if s is None:
                 val.setText("—")
                 continue
             info = s.get(key, {})
+            tip = ""
             if key in ("library", "drive"):
                 val.setText(t("sc_count_fmt", n=info.get("count", 0)))
             elif not info.get("installed"):
@@ -366,6 +389,10 @@ class ShortcutsTab(QWidget):
                 val.setText(t("sc_installed"))
             else:
                 val.setText(t("sc_count_fmt", n=info["count"]))
+                if key == "lazer" and info.get("from_library"):
+                    tip = t("sc_lazer_from_library")   # explain where the number came from
+            head.setToolTip(tip)
+            val.setToolTip(tip)
 
     # -- actions: build a job and queue it -------------------------------------
     def on_transfer(self, source: str, target: str) -> None:
@@ -426,7 +453,11 @@ class ShortcutsTab(QWidget):
             dest_base = dest_base.with_suffix("")   # exporter re-appends the suffix
         job = self.services.build_export_job(source, dest_base, fmt, split,
                                              upload, share, limit)
-        job.title_kwargs["source"] = t(f"sc_source_{source}")   # translated label
+        src_label = t(f"sc_source_{source}")
+        job.title_kwargs["source"] = src_label              # translated in the title
+        for st in job.steps:
+            if st.key == "job_step_gather":
+                st.label_kwargs["source"] = src_label       # ...and in the gather step
         self.queue.enqueue(job)
         self._set_status("job_added")
 

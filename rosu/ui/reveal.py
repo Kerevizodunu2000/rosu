@@ -27,10 +27,14 @@ def reveal_in_explorer(parent, ctx, path) -> None:
         return
     if sys.platform.startswith("win"):
         try:
-            # explorer wants the flag and path as ONE token: "/select,<path>".
-            # Splitting them into two args makes Explorer ignore /select and just
-            # open the default folder. Backslash path (str on a Windows Path).
-            subprocess.Popen(["explorer", f"/select,{p}"])
+            # Reliable reveal-and-select is: explorer /select,"C:\dir\file" — the
+            # switch OUTSIDE the quotes, the path INSIDE. Passing ["explorer",
+            # "/select,<path>"] as a list quotes the WHOLE token when the path has
+            # spaces ("/select,C:\...\a b.osz"), so Explorer treats it as a path,
+            # fails, and just opens Documents. A raw command string goes straight
+            # to CreateProcess (no shell); Windows file names can't contain '"',
+            # so there is no injection surface.
+            subprocess.Popen(f'explorer /select,"{p}"')
             return
         except OSError:
             pass   # fall through to opening the containing folder

@@ -711,9 +711,14 @@ class Services:
         songs = client_import.stable_songs_dir()
         stable_count = (sum(1 for _ in client_import.iter_stable_folders(songs))
                         if songs is not None else 0)
+        lazer_installed = client_import.lazer_data_dir() is not None
+        # lazer's set list is Realm-opaque, so we can't count it directly. Fill the
+        # number from the Library sets Rosu has recorded as present in lazer
+        # (``in_osu_lazer``) and flag it so the UI can explain where it came from.
+        lazer_count = len(self.db.osu_client_ids("lazer")) if lazer_installed else None
         return {
-            "lazer": {"installed": client_import.lazer_data_dir() is not None,
-                      "count": None},
+            "lazer": {"installed": lazer_installed, "count": lazer_count,
+                      "from_library": True},
             "stable": {"installed": songs is not None, "count": stable_count},
             "library": {"count": self.db.counts().get("in_library", 0)},
             "drive": {"connected": bool(self.cfg.drive_connected),
@@ -1257,8 +1262,11 @@ class Services:
         import shutil
         import tempfile
         from . import exporter
+        dest_base = Path(dest_base)
+        name = f"{dest_base.name}{'.7z' if fmt == '7z' else '.zip'}"
         job = jobs.Job(jobs.new_id(), "job_export", kind="export",
-                       title_kwargs={"source": source})
+                       title_kwargs={"source": source, "name": name},
+                       tooltip=str(dest_base.parent))
         stage = Path(tempfile.mkdtemp(prefix="rosu_export_"))
         job.ctx["stage"] = stage
         job.on_cleanup.append(lambda: shutil.rmtree(stage, ignore_errors=True))
@@ -1282,8 +1290,11 @@ class Services:
             ctx["drive"] = self._upload_export_to_drive(
                 ctx["written"], share, progress, cancel=cancel)
 
-        job.steps = [jobs.Step("job_step_gather", jobs.Lane.DISK, s_gather),
-                     jobs.Step("job_step_archive", jobs.Lane.DISK, s_archive)]
+        job.steps = [
+            jobs.Step("job_step_gather", jobs.Lane.DISK, s_gather,
+                      label_kwargs={"source": source}),
+            jobs.Step("job_step_archive", jobs.Lane.DISK, s_archive,
+                      label_kwargs={"name": name})]
         if upload:
             job.steps.append(jobs.Step("job_step_upload", jobs.Lane.DRIVE, s_upload))
 
@@ -1294,7 +1305,7 @@ class Services:
             res = {"source": source,
                    "count": len(ctx.get("files", [])) if written else 0,
                    "archives": [str(a) for a in written],
-                   "cancelled": job.cancel_cb()}
+                   "cancelled": job.cancel_cb() and not written}
             if "drive" in ctx:
                 res["drive"] = ctx["drive"]
             self.log.info("EXPORT", source=source, sets=res["count"],

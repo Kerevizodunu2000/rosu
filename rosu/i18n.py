@@ -395,6 +395,12 @@ STRINGS: dict[str, dict[str, str]] = {
               "sonrası</a> ile lisanslanmıştır. HİÇBİR GARANTİSİ YOKTUR.<br>"
               "© 2026 Halil Şafak Şimşek — gayriresmî, hayran yapımı bir araçtır; "
               "ppy Pty Ltd veya osu! ile bağlantılı ya da onaylı değildir."},
+    "about_contact": {
+        "en": "Found a bug or have a suggestion for improving Rosu? Email "
+              "<a href='mailto:halilsafaksimsek@gmail.com'>halilsafaksimsek@gmail.com</a>.",
+        "tr": "Bir hatayla mı karşılaştınız ya da Rosu için bir geliştirme öneriniz "
+              "mi var? <a href='mailto:halilsafaksimsek@gmail.com'>halilsafaksimsek"
+              "@gmail.com</a> adresine yazabilirsiniz."},
     "about_third_party": {"en": "Bundled third-party components:",
                           "tr": "Paketlenmiş üçüncü taraf bileşenleri:"},
     "about_third_party_missing": {
@@ -616,6 +622,11 @@ STRINGS: dict[str, dict[str, str]] = {
     "sc_count_fmt": {"en": "{n} sets", "tr": "{n} set"},
     "sc_installed": {"en": "installed", "tr": "kurulu"},
     "sc_not_installed": {"en": "not installed", "tr": "yüklü değil"},
+    "sc_lazer_from_library": {
+        "en": "osu!lazer's own list can't be read directly, so this is the number "
+              "of your Library sets recorded as installed in osu!lazer.",
+        "tr": "osu!lazer'in kendi listesi doğrudan okunamadığından bu sayı, "
+              "Library'nde osu!lazer'da kayıtlı görünen setlerden oluşturulmuştur."},
 
     "sc_transfer_title": {"en": "Transfer between clients",
                           "tr": "İstemciler arası aktarım"},
@@ -749,8 +760,11 @@ STRINGS: dict[str, dict[str, str]] = {
                      "tr": "Aktar {source} → {target}"},
     "job_save": {"en": "Save {sources} → Library",
                  "tr": "{sources} → Library'ye kaydet"},
-    "job_export": {"en": "Export: {source}", "tr": "Dışa aktar: {source}"},
+    "job_export": {"en": "Export {source} → {name}",
+                   "tr": "Dışa aktar {source} → {name}"},
     "job_dedup": {"en": "Dedupe Library", "tr": "Kütüphaneyi tekilleştir"},
+    "job_cancel_tip": {"en": "Cancel this job", "tr": "Bu işi iptal et"},
+    "job_step_skip": {"en": "Remove this step", "tr": "Bu adımı çıkar"},
     # step labels
     "job_step_prescan": {"en": "Pre-scan packs", "tr": "Paketleri ön tara"},
     "job_step_extract": {"en": "Extract", "tr": "Çıkart"},
@@ -764,8 +778,9 @@ STRINGS: dict[str, dict[str, str]] = {
     "job_step_save_lazer": {"en": "osu!lazer → Library", "tr": "osu!lazer → Library"},
     "job_step_save_stable": {"en": "osu!(stable) → Library",
                              "tr": "osu!(stable) → Library"},
-    "job_step_gather": {"en": "Gather sets", "tr": "Setleri topla"},
-    "job_step_archive": {"en": "Write archive", "tr": "Arşiv oluştur"},
+    "job_step_gather": {"en": "Gather sets from {source}",
+                        "tr": "{source} kaynağından setleri topla"},
+    "job_step_archive": {"en": "Write {name}", "tr": "{name} yaz"},
     "job_step_upload": {"en": "Upload to Drive", "tr": "Drive'a yükle"},
     "job_step_scan": {"en": "Scan for duplicates", "tr": "Kopyaları tara"},
     "job_step_remove": {"en": "Recycle duplicates",

@@ -49,6 +49,8 @@ class Step:
     lane: Lane
     run: StepFn
     gated: bool = False  # True → the scheduler waits for a UI confirm before running
+    label_kwargs: dict = field(default_factory=dict)  # kwargs for the i18n label
+    skip_event: threading.Event = field(default_factory=threading.Event)  # per-step cancel
     state: State = State.PENDING
     done: int = 0        # progress counters for the active step (from progress dicts)
     total: int = 0
@@ -60,6 +62,7 @@ class Job:
     title_key: str
     title_kwargs: dict = field(default_factory=dict)
     kind: str = ""                       # routes the result to a UI presenter
+    tooltip: str = ""                    # extra detail shown on the queue row (e.g. dest path)
     steps: list = field(default_factory=list)
     ctx: dict = field(default_factory=dict)
     finalize: Optional[Callable[[dict], dict]] = None

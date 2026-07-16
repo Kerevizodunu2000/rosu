@@ -48,6 +48,12 @@ class AboutDialog(QDialog):
         lic.setOpenExternalLinks(True)
         root.addWidget(lic)
 
+        contact = QLabel(t("about_contact"))
+        contact.setWordWrap(True)
+        contact.setTextFormat(Qt.RichText)
+        contact.setOpenExternalLinks(True)
+        root.addWidget(contact)
+
         root.addWidget(QLabel(t("about_third_party")))
         view = QPlainTextEdit()
         view.setReadOnly(True)
