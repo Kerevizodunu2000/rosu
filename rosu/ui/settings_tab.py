@@ -417,8 +417,10 @@ class SettingsTab(QWidget):
             else:
                 self.lbl_drive_status.setText(self.ctx.t("drive_login_failed"))
             return
-        # Success: the browser had focus — bring Rosu back to the front so the
-        # user "returns to the app" automatically (the tab also self-closes).
+        # Success: the browser had focus — bring Rosu back to the front so the user
+        # "returns to the app" automatically. (The OAuth tab can't be reliably
+        # script-closed — browsers only let a script close tabs it opened — so we
+        # rely on this raise; the result page just says the tab can be closed.)
         self.mw.raise_()
         self.mw.activateWindow()
 

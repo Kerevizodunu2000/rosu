@@ -179,54 +179,87 @@ class _KeyringStore:
 
 
 def _result_page(status: str | None) -> str:
-    """A small, self-contained branded page for the loopback redirect (item 5).
+    """A polished, self-contained branded page for the loopback redirect (item 5).
 
-    No external assets (served by the stdlib loopback server) and adapts to the OS
-    light/dark theme. ``status`` is ``"ok"`` (consent granted), ``"error"`` (denied /
-    state mismatch), or ``None`` (an unrelated request such as favicon)."""
+    No external assets (served by the stdlib loopback server); adapts to the OS
+    light/dark theme; styled on Rosu's pink brand with a drawn-in success tick.
+    ``status`` is ``"ok"`` (consent granted), ``"error"`` (denied / state
+    mismatch), or ``None`` (an unrelated request such as favicon)."""
     if status == "error":
-        icon, accent = "&#10007;", "#e0405e"   # ✗
+        accent, accent2, rgb = "#ff6b81", "#e0405e", "224,64,94"
         title = "Sign-in didn't complete"
         msg = "Something went wrong. Close this tab and try Connect again in Rosu."
+        badge = '<div class="glyph">&#10007;</div>'   # ✗
     elif status == "ok":
-        icon, accent = "&#10003;", "#28c76f"   # ✓
+        accent, accent2, rgb = "#ff66aa", "#ff2e97", "255,102,170"
         title = "Connected to Google Drive"
-        msg = "You're all set — returning to Rosu. You can close this tab."
+        msg = ("You're all set — Rosu can now back up and share your beatmaps. "
+               "Rosu is back in focus; you can close this tab whenever you like.")
+        badge = ('<svg class="tick" viewBox="0 0 52 52" aria-hidden="true">'
+                 '<circle class="tick-c" cx="26" cy="26" r="23" fill="none"/>'
+                 '<path class="tick-p" fill="none" d="M15 27l7.5 7.5L37.5 19"/></svg>')
     else:
-        icon, accent = "&#9679;", "#ff4f92"     # ●
+        accent, accent2, rgb = "#ff66aa", "#ff2e97", "255,102,170"
         title = "Rosu — Google Drive"
         msg = "You can close this tab and return to Rosu."
-    # Best-effort auto-close once the flow completed (some browsers permit it for
-    # the OAuth tab); harmless where blocked. Rosu also raises its own window.
-    script = ("<script>setTimeout(function(){try{window.close();}catch(e){}},1200);</script>"
-              if status else "")
+        badge = '<div class="glyph">&#9679;</div>'      # ●
+    # Best-effort tab close after a couple of seconds. Browsers BLOCK window.close()
+    # for a tab the user navigated to themselves (only script-opened tabs may be
+    # closed), so this only succeeds where the browser allows it — it never blanks
+    # the tab where it doesn't. Rosu itself raises its window on connect, so the
+    # user returns to the app regardless; the page copy doesn't promise a close.
+    script = ("<script>setTimeout(function(){try{window.close();}catch(e){}},2500);</script>"
+              if status == "ok" else "")
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Rosu — Google Drive</title>
 <style>
-  :root {{ color-scheme: light dark; }}
-  * {{ box-sizing: border-box; }}
-  body {{ margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
-    font-family:"Segoe UI",system-ui,-apple-system,sans-serif; background:#f6f6fb; color:#1e1e2e; }}
-  .card {{ background:#fff; border-radius:16px; padding:40px 44px; max-width:420px; width:90%;
-    text-align:center; box-shadow:0 10px 40px rgba(0,0,0,.12); }}
-  .badge {{ width:72px; height:72px; border-radius:50%; margin:0 auto 20px; display:flex;
-    align-items:center; justify-content:center; font-size:38px; color:#fff; background:{accent}; }}
-  h1 {{ font-size:21px; margin:0 0 10px; }}
-  p {{ margin:0; color:#6b6b80; line-height:1.5; }}
-  .brand {{ margin-top:22px; font-weight:700; color:{accent}; letter-spacing:.5px; }}
+  :root {{ color-scheme: light dark; --accent:{accent}; --accent2:{accent2}; }}
+  * {{ box-sizing:border-box; }}
+  html,body {{ height:100%; }}
+  body {{ margin:0; display:flex; align-items:center; justify-content:center; padding:24px;
+    font-family:"Segoe UI Variable Text","Segoe UI",system-ui,-apple-system,Roboto,sans-serif;
+    color:#211f2b;
+    background:radial-gradient(130% 100% at 50% -20%, rgba({rgb},.20), transparent 62%), #f4f3f9; }}
+  .card {{ position:relative; background:#fff; border-radius:24px; padding:48px 44px 32px;
+    max-width:460px; width:100%; text-align:center; border:1px solid rgba(0,0,0,.05);
+    box-shadow:0 26px 80px -24px rgba({rgb},.55), 0 8px 24px -12px rgba(0,0,0,.2);
+    animation:rise .55s cubic-bezier(.2,.9,.25,1) both; }}
+  .badge {{ width:92px; height:92px; border-radius:50%; margin:0 auto 24px; display:flex;
+    align-items:center; justify-content:center;
+    background:linear-gradient(135deg, var(--accent), var(--accent2));
+    box-shadow:0 14px 34px -8px rgba({rgb},.7);
+    animation:pop .6s .08s cubic-bezier(.2,1.35,.35,1) both; }}
+  .glyph {{ font-size:44px; color:#fff; line-height:1; }}
+  .tick {{ width:56px; height:56px; }}
+  .tick-c {{ stroke:rgba(255,255,255,.5); stroke-width:2.5;
+    stroke-dasharray:145; stroke-dashoffset:145; animation:draw .6s .2s ease forwards; }}
+  .tick-p {{ stroke:#fff; stroke-width:5.5; stroke-linecap:round; stroke-linejoin:round;
+    stroke-dasharray:44; stroke-dashoffset:44; animation:draw .5s .5s ease forwards; }}
+  h1 {{ font-size:23px; font-weight:750; margin:0 0 12px; letter-spacing:-.3px; }}
+  p {{ margin:0 auto; max-width:36ch; color:#6a6a80; line-height:1.6; font-size:15px; }}
+  .brand {{ margin-top:26px; font-weight:800; letter-spacing:4px; font-size:12px;
+    text-transform:uppercase; color:var(--accent); opacity:.85;
+    cursor:default; user-select:none; }}
+  @keyframes rise {{ from{{opacity:0; transform:translateY(16px) scale(.97);}} to{{opacity:1; transform:none;}} }}
+  @keyframes pop {{ from{{opacity:0; transform:scale(.35);}} to{{opacity:1; transform:scale(1);}} }}
+  @keyframes draw {{ to{{stroke-dashoffset:0;}} }}
   @media (prefers-color-scheme: dark) {{
-    body {{ background:#15151f; color:#e6e6f0; }}
-    .card {{ background:#20202e; box-shadow:0 10px 40px rgba(0,0,0,.5); }}
-    p {{ color:#a8a8c0; }}
+    body {{ color:#ecebf5;
+      background:radial-gradient(130% 100% at 50% -20%, rgba({rgb},.26), transparent 62%), #121019; }}
+    .card {{ background:#1b1926; border-color:rgba(255,255,255,.06);
+      box-shadow:0 26px 80px -24px rgba({rgb},.5), 0 8px 24px -12px rgba(0,0,0,.6); }}
+    p {{ color:#a6a5c0; }}
   }}
+  @media (prefers-reduced-motion: reduce) {{
+    * {{ animation:none !important; }} .tick-c,.tick-p {{ stroke-dashoffset:0; }} }}
 </style></head>
-<body><div class="card">
-  <div class="badge">{icon}</div>
+<body><main class="card">
+  <div class="badge">{badge}</div>
   <h1>{title}</h1>
   <p>{msg}</p>
   <div class="brand">Rosu</div>
-</div>{script}</body></html>"""
+</main>{script}</body></html>"""
 
 
 def _make_handler(expected_state: str, sink: dict):
