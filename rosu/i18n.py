@@ -397,9 +397,9 @@ STRINGS: dict[str, dict[str, str]] = {
               "ppy Pty Ltd veya osu! ile bağlantılı ya da onaylı değildir."},
     "about_contact": {
         "en": "Found a bug or have a suggestion for improving Rosu? Email "
-              "<a href='mailto:halilsafaksimsek@gmail.com'>halilsafaksimsek@gmail.com</a>.",
+              "<a href='mailto:rosu.app@gmail.com'>rosu.app@gmail.com</a>.",
         "tr": "Bir hatayla mı karşılaştınız ya da Rosu için bir geliştirme öneriniz "
-              "mi var? <a href='mailto:halilsafaksimsek@gmail.com'>halilsafaksimsek"
+              "mi var? <a href='mailto:rosu.app@gmail.com'>rosu.app"
               "@gmail.com</a> adresine yazabilirsiniz."},
     "about_third_party": {"en": "Bundled third-party components:",
                           "tr": "Paketlenmiş üçüncü taraf bileşenleri:"},

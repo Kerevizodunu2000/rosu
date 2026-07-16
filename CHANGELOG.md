@@ -10,6 +10,16 @@ the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.3.3] - 2026-07-16
+
+### Changed
+- **Contact address is now rosu.app@gmail.com** (README and in-app About → Licenses),
+  replacing the previous personal email.
+- **Google Drive backup now uses Rosu's own dedicated Google Cloud project.** The
+  Drive sign-in screen now shows "Rosu" as the app; the scope and behaviour are
+  unchanged (per-file `drive.file` access only). If you had already connected Drive,
+  reconnect once from Settings after updating.
+
 ## [1.3.2] - 2026-07-16
 
 ### Changed
@@ -64,7 +74,7 @@ work concurrently** — a disk operation runs while a Drive upload runs. Plus a 
 quick-UX wins that came out of testing.
 
 ### Added
-- **Job queue (İş Kuyruğu)** on the Shortcuts tab. Clicking Transfer / Save /
+- **Job queue** on the Shortcuts tab. Clicking Transfer / Save /
   Unpack / Export / Dedupe now **adds a job to the queue** instead of locking the
   tab. Each job shows its **sub-steps** (e.g. unpack → *Pre-scan → Extract → Send to
   osu!lazer → Send to osu!(stable)*) with a per-step status glyph and progress bar.
@@ -102,7 +112,7 @@ quick-UX wins that came out of testing.
 
 ## [1.2.0] - 2026-07-15
 
-**Library Maturity — the Shortcuts (Kısayollar) tab.** One place for the common
+**Library Maturity — the Shortcuts tab.** One place for the common
 one-click flows over the music you already have: see what's installed where, move
 sets between clients, back it up / export it, and tidy duplicates.
 
@@ -564,7 +574,8 @@ Initial release. The core archive-management pipeline.
 - **EN/TR** localization; English-only code/logs.
 - Single-file **PyInstaller** build (`osu-archiver.spec`) + GitHub Actions build workflow.
 
-[Unreleased]: https://github.com/Kerevizodunu2000/rosu/compare/v1.3.2...HEAD
+[Unreleased]: https://github.com/Kerevizodunu2000/rosu/compare/v1.3.3...HEAD
+[1.3.3]: https://github.com/Kerevizodunu2000/rosu/compare/v1.3.2...v1.3.3
 [1.3.2]: https://github.com/Kerevizodunu2000/rosu/compare/v1.3.1...v1.3.2
 [1.3.1]: https://github.com/Kerevizodunu2000/rosu/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/Kerevizodunu2000/rosu/compare/v1.2.0...v1.3.0
