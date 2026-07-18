@@ -133,9 +133,26 @@ def rank(rows: list[dict], query: str, limit: int = 500,
 
 def search(db, query: str, limit: int = 500,
            search_tags: bool = False) -> list[dict]:
-    if not query.strip():
+    """Structured filters (``star>5 mode=mania``) + free-text relevance search.
+
+    The query is split into filters and free text (:mod:`rosu.query`). Filters are
+    hard constraints applied as SQL; free text is ranked. A filters-only query has
+    nothing to rank (``rank`` on zero tokens drops every row), so it returns the
+    filter-recalled rows name-sorted instead.
+    """
+    from .query import parse
+    parsed = parse(query)
+    free = parsed.free_text.strip()
+    if not free and not parsed.filters:
         return []
-    candidates = db.search_candidates(query, search_tags=search_tags)
-    ranked = rank(candidates, query, limit, search_tags=search_tags)
+    if not free:   # filters only — no ranking, return name-sorted matches
+        rows = db.filtered_tracks(parsed.filters, limit)
+        db.attach_sources_bulk(rows)
+        db.attach_difficulties_bulk(rows)
+        return rows
+    candidates = db.search_candidates(free, search_tags=search_tags,
+                                      filters=parsed.filters)
+    ranked = rank(candidates, free, limit, search_tags=search_tags)
     db.attach_sources_bulk(ranked)  # only the displayed rows — no N+1
+    db.attach_difficulties_bulk(ranked)
     return ranked

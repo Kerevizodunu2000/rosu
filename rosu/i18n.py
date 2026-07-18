@@ -239,6 +239,44 @@ STRINGS: dict[str, dict[str, str]] = {
     "col_length": {"en": "Length", "tr": "Süre"},
     "col_mapper": {"en": "Mapper", "tr": "Mapper"},
     "col_mode": {"en": "Mode", "tr": "Mod"},
+    "col_star": {"en": "Star", "tr": "Yıldız"},
+    "col_keys": {"en": "Keys", "tr": "Tuş"},
+    "col_avg_star": {"en": "Avg ★", "tr": "Ort. ★"},
+    "col_version": {"en": "Difficulty", "tr": "Zorluk"},
+    "col_cs": {"en": "CS", "tr": "CS"},
+    "col_ar": {"en": "AR", "tr": "AR"},
+    "col_od": {"en": "OD", "tr": "OD"},
+    "col_hp": {"en": "HP", "tr": "HP"},
+    "map_details_title": {"en": "Map details", "tr": "Map detayları"},
+    "map_details_mapper": {"en": "Mapper: {mapper}", "tr": "Mapper: {mapper}"},
+    "map_details_status": {"en": "Status: {status}", "tr": "Durum: {status}"},
+    "map_details_plays": {"en": "{n} plays", "tr": "{n} oynanma"},
+    "map_details_favs": {"en": "{n} favourites", "tr": "{n} favori"},
+    "map_details_ranked_on": {"en": "ranked {d}", "tr": "ranked {d}"},
+    "map_details_no_enrich": {
+        "en": "Ranked status, dates & play counts appear here once you run "
+              "“Enrich from osu! API” in Settings.",
+        "tr": "Ranked durumu, tarihler ve oynanma sayıları, Ayarlar’dan "
+              "“osu! API’den Zenginleştir”i çalıştırınca burada görünür."},
+    "tip_col_version": {"en": "Difficulty name.", "tr": "Zorluk adı."},
+    "tip_col_mode": {"en": "Game mode (osu! / taiko / catch / mania).",
+                     "tr": "Oyun modu (osu! / taiko / catch / mania)."},
+    "tip_col_keys": {"en": "Key count — number of columns in a mania chart.",
+                     "tr": "Tuş sayısı — bir mania haritasındaki kolon sayısı."},
+    "tip_col_star": {"en": "Star rating — the difficulty's overall hardness.",
+                     "tr": "Yıldız derecesi — zorluğun genel zorluk seviyesi."},
+    "tip_col_cs": {
+        "en": "CS — Circle Size: smaller circles in osu!, and the key count in mania.",
+        "tr": "CS — Circle Size: osu!'da daire boyutu, mania'da tuş sayısı."},
+    "tip_col_ar": {
+        "en": "AR — Approach Rate: how fast the approach circles/notes appear.",
+        "tr": "AR — Approach Rate: yaklaşma çemberlerinin/notaların ne kadar hızlı geldiği."},
+    "tip_col_od": {
+        "en": "OD — Overall Difficulty: how strict the hit timing / accuracy is.",
+        "tr": "OD — Overall Difficulty: vuruş zamanlaması / isabet ne kadar sıkı."},
+    "tip_col_hp": {
+        "en": "HP — HP Drain: how fast health drains and how punishing misses are.",
+        "tr": "HP — HP Drain: canın ne kadar hızlı azaldığı ve ıskaların cezası."},
     "col_songs": {"en": "Songs", "tr": "Şarkı"},
 
     # Packs / artists
@@ -251,6 +289,8 @@ STRINGS: dict[str, dict[str, str]] = {
     "sort_len_short": {"en": "Shortest average length", "tr": "En kısa ortalama süre"},
     "sort_bpm_high": {"en": "Highest average BPM", "tr": "En yüksek ortalama BPM"},
     "sort_bpm_low": {"en": "Lowest average BPM", "tr": "En düşük ortalama BPM"},
+    "sort_star_high": {"en": "Highest average star", "tr": "En yüksek ortalama yıldız"},
+    "sort_star_low": {"en": "Lowest average star", "tr": "En düşük ortalama yıldız"},
     "col_avg_length": {"en": "Avg length", "tr": "Ort. süre"},
     "col_avg_bpm": {"en": "Avg BPM", "tr": "Ort. BPM"},
     "artist_songs": {"en": "{artist} — {n} songs", "tr": "{artist} — {n} şarkı"},
@@ -293,6 +333,7 @@ STRINGS: dict[str, dict[str, str]] = {
 
     # Auto-import from installed osu! clients (item 15)
     "set_import": {"en": "Import installed songs", "tr": "Yüklü şarkıları içe aktar"},
+    "set_library_section": {"en": "Library", "tr": "Kütüphane"},
     "set_import_help": {
         "en": "Pull the beatmaps already installed in your osu! client straight into "
               "your library (dedup is automatic). osu!lazer export bundles a helper — "
@@ -429,6 +470,9 @@ STRINGS: dict[str, dict[str, str]] = {
               "<a href='https://www.youtube.com/@RosuApp'>YouTube</a> · "
               "<a href='https://www.reddit.com/user/RosuApp/'>Reddit</a> · "
               "<a href='https://x.com/RosuApp'>X</a>"},
+    "about_website": {
+        "en": "Website: <a href='https://rosu-web.vercel.app'>rosu-web</a>",
+        "tr": "Web sitesi: <a href='https://rosu-web.vercel.app'>rosu-web</a>"},
     "about_third_party": {"en": "Bundled third-party components:",
                           "tr": "Paketlenmiş üçüncü taraf bileşenleri:"},
     "about_third_party_missing": {
@@ -465,6 +509,94 @@ STRINGS: dict[str, dict[str, str]] = {
 
     # Library Health (v1.1)
     "btn_library_health": {"en": "Library Health", "tr": "Kütüphane Sağlığı"},
+    # -- v1.5: star ratings (rosu-pp) + osu! API metadata enrichment ----------
+    "btn_compute_ratings": {"en": "Compute Star Ratings",
+                            "tr": "Yıldız Derecelerini Hesapla"},
+    "tip_compute_ratings": {
+        "en": "Compute star ratings for every Library difficulty locally (rosu-pp).",
+        "tr": "Kütüphanedeki her zorluk için yıldız derecelerini yerel olarak hesapla (rosu-pp)."},
+    "btn_enrich_api": {"en": "Enrich from osu! API", "tr": "osu! API’den Zenginleştir"},
+    "tip_enrich_api": {
+        "en": "Fetch ranked status, dates, play/favourite counts, genre & language "
+              "from the osu! API.",
+        "tr": "osu! API’den ranked durumu, tarihler, oynanma/favori sayıları, tür "
+              "ve dil bilgisini çek."},
+    "tip_enrich_disabled": {
+        "en": "Enable “Fetch metadata from the osu! API” in Settings first.",
+        "tr": "Önce Ayarlar’dan “osu! API’den meta veri çek”i etkinleştir."},
+    "ratings_no_engine": {"en": "rosu-pp not available — no local star ratings.",
+                          "tr": "rosu-pp yok — yerel yıldız derecesi hesaplanamadı."},
+    "ratings_no_engine_msg": {
+        "en": "The rosu-pp difficulty engine isn't installed, so star ratings can't "
+              "be computed locally. Difficulty data (key count, mode, CS/AR/OD/HP) is "
+              "still recorded, and the osu! API can fill in star ratings via "
+              "“Enrich from osu! API”.",
+        "tr": "rosu-pp zorluk motoru kurulu değil, bu yüzden yıldız dereceleri yerel "
+              "olarak hesaplanamıyor. Zorluk verileri (tuş sayısı, mod, CS/AR/OD/HP) "
+              "yine de kaydedilir; yıldız dereceleri “osu! API’den Zenginleştir” ile "
+              "doldurulabilir."},
+    "ratings_done": {"en": "Star ratings: {scanned} sets scanned, {rated} rated.",
+                     "tr": "Yıldız dereceleri: {scanned} set tarandı, {rated} derecelendirildi."},
+    "ratings_title": {"en": "Star Ratings", "tr": "Yıldız Dereceleri"},
+    "ratings_summary": {
+        "en": "Scanned {scanned} sets · {rated} rated · {remaining} remaining.",
+        "tr": "{scanned} set tarandı · {rated} derecelendirildi · {remaining} kaldı."},
+    "ratings_cancelled": {
+        "en": "Cancelled — run again to continue where it left off.",
+        "tr": "İptal edildi — kaldığı yerden devam etmek için tekrar çalıştır."},
+    "ratings_distribution": {"en": "Library star distribution",
+                             "tr": "Kütüphane yıldız dağılımı"},
+    "enrich_progress": {"en": "Enriching from osu! API… {done}/{total}",
+                        "tr": "osu! API’den zenginleştiriliyor… {done}/{total}"},
+    "enrich_disabled": {"en": "osu! API enrichment is off",
+                        "tr": "osu! API zenginleştirmesi kapalı"},
+    "enrich_disabled_msg": {
+        "en": "Enable “Fetch metadata from the osu! API” in Settings to use this.",
+        "tr": "Bunu kullanmak için Ayarlar’dan “osu! API’den meta veri çek”i etkinleştir."},
+    "enrich_no_api": {"en": "osu! API credentials needed",
+                      "tr": "osu! API kimlik bilgileri gerekli"},
+    "enrich_no_api_msg": {
+        "en": "Add your osu! API client id and secret in Settings to enrich metadata.",
+        "tr": "Meta veriyi zenginleştirmek için Ayarlar’a osu! API istemci kimliğini "
+              "ve gizli anahtarını ekle."},
+    "enrich_done": {
+        "en": "Enriched {updated} of {checked} sets · {remaining} remaining.",
+        "tr": "{checked} setten {updated} tanesi zenginleştirildi · {remaining} kaldı."},
+    "set_enrich_api": {
+        "en": "Fetch metadata from the osu! API (ranked status, dates, play counts)",
+        "tr": "osu! API’den meta veri çek (ranked durumu, tarihler, oynanma sayıları)"},
+    "btn_star_dist": {"en": "★ Distribution", "tr": "★ Dağılımı"},
+    "tip_star_dist": {"en": "Show the star-rating distribution of the current results.",
+                      "tr": "Mevcut sonuçların yıldız derecesi dağılımını göster."},
+    "star_dist_title": {"en": "Star distribution", "tr": "Yıldız dağılımı"},
+    "star_dist_head": {"en": "{n} rated sets in the current results",
+                       "tr": "Mevcut sonuçlarda {n} derecelendirilmiş set"},
+    "star_dist_hint": {
+        "en": "Click a bar to select it (drag across bars for a range); "
+              "double-click a bar to search that range.",
+        "tr": "Bir çubuğa tıklayıp seç (aralık için çubuklar üzerinde sürükle); "
+              "bir çubuğa çift tıklayınca o aralık aratılır."},
+    "star_dist_selected": {
+        "en": "{lo}★–{hi}★ · {count} sets ({pct}% of these results)",
+        "tr": "{lo}★–{hi}★ · {count} set (bu sonuçların %{pct}'i)"},
+    "star_dist_search": {"en": "Search this range", "tr": "Bu aralığı ara"},
+    "star_dist_empty": {
+        "en": "No star ratings in the current results yet.",
+        "tr": "Mevcut sonuçlarda henüz yıldız derecesi yok."},
+    "star_dist_no_library": {
+        "en": "Your Library is empty — add some music first, then star ratings can "
+              "be computed.",
+        "tr": "Kütüphanen boş — önce müzik ekle, sonra yıldız dereceleri hesaplanabilir."},
+    "star_dist_scan_prompt": {
+        "en": "{n} set(s) don't have a star rating yet. Scan them now to determine "
+              "their star values?",
+        "tr": "{n} setin henüz yıldız derecesi yok. Yıldız değerlerini belirlemek "
+              "için şimdi taransın mı?"},
+    "ratings_scanning": {"en": "Scanning maps to determine star values…",
+                         "tr": "Yıldız değerleri belirlenmek üzere müzikler taranıyor…"},
+    "cancelling": {"en": "Cancelling…", "tr": "İptal ediliyor…"},
+    "ratings_progress": {"en": "Computing star ratings… {done}/{total}",
+                         "tr": "Yıldız dereceleri hesaplanıyor… {done}/{total}"},
     "health_done": {"en": "Library health checked ({files} files).",
                     "tr": "Kütüphane sağlığı denetlendi ({files} dosya)."},
     "health_title": {"en": "Library Health", "tr": "Kütüphane Sağlığı"},

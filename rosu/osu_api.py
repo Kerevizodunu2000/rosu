@@ -65,6 +65,24 @@ def _get(url: str, token: str) -> dict:
         return json.loads(resp.read())
 
 
+def _get_json(url: str, token: str) -> tuple[dict | None, int, int | None]:
+    """GET a URL → ``(body_or_None, http_status, retry_after_seconds)``. Never
+    raises: a 404/other HTTP error returns ``(None, code, retry_after)`` and a
+    transport failure returns ``(None, 0, None)``, so one blip degrades one id
+    instead of aborting a whole enrichment scan."""
+    req = urllib.request.Request(
+        url, headers={"Authorization": f"Bearer {token}", "Accept": "application/json",
+                      "User-Agent": USER_AGENT})
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            return json.loads(resp.read()), resp.status, None
+    except urllib.error.HTTPError as exc:
+        ra = exc.headers.get("Retry-After") if exc.headers else None
+        return None, exc.code, (int(ra) if (ra and str(ra).isdigit()) else None)
+    except (urllib.error.URLError, ValueError):
+        return None, 0, None
+
+
 def _status_code(url: str, token: str) -> tuple[int, int | None]:
     """GET a URL and return ``(http_status, retry_after_seconds)``. Never raises:
     an HTTP error status is returned as its code, and a transport failure (DNS,
@@ -133,6 +151,95 @@ def beatmapset_availability(ids, client_id: str, client_secret: str,
             progress({"kind": "lostmap", "done": len(out), "total": total})
         _interruptible_sleep(_MIN_INTERVAL, cancel)  # ~2-3/s, a good API citizen
     return out
+
+
+def beatmapset_details(ids, client_id: str, client_secret: str,
+                       progress=None, max_calls: int = 500,
+                       cancel=None) -> dict[int, dict | None]:
+    """Fetch full osu!-API metadata for each owned beatmapset (v1.5 enrichment).
+
+    Returns ``{beatmapset_id: normalized_dict | None}`` — ``None`` means a 404
+    (deleted / taken down) or a transport blip. Same auth, pacing (~2-3/s), 429
+    backoff, ``max_calls`` cap and ``cancel`` polling as
+    :func:`beatmapset_availability`; the only difference is it parses and returns
+    the response *body* (status/dates/counts/genre/language + per-diff attributes)
+    instead of only the HTTP status.
+    """
+    unique = [i for i in dict.fromkeys(ids) if i]
+    token = _token(client_id, client_secret)
+    out: dict[int, dict | None] = {}
+    total = len(unique) if max_calls is None else min(len(unique), max_calls)
+    for bid in unique:
+        if cancel is not None and cancel():
+            break
+        if max_calls is not None and len(out) >= max_calls:
+            break
+        url = f"{API_BASE}/beatmapsets/{bid}"
+        retries = 0
+        body = None
+        while True:
+            if cancel is not None and cancel():
+                return out          # stop promptly, keeping partial results
+            data, code, retry_after = _get_json(url, token)
+            if code == 429 and retries < 5:
+                _interruptible_sleep(min(retry_after or 2 ** retries, 60), cancel)
+                retries += 1
+                continue
+            body = data if code == 200 else None
+            break
+        out[bid] = _normalize_beatmapset_details(body) if body is not None else None
+        if progress:
+            progress({"kind": "enrich", "done": len(out), "total": total})
+        _interruptible_sleep(_MIN_INTERVAL, cancel)  # ~2-3/s, a good API citizen
+    return out
+
+
+def _normalize_beatmapset_details(data: dict) -> dict:
+    """Pure: extract the fields Rosu stores from a ``/beatmapsets/{id}`` body.
+
+    ``genre``/``language`` are nested ``{"name": …}`` objects; ``beatmaps[]``
+    carries each difficulty's star rating + MD5 checksum + attributes (the API
+    names OD ``accuracy`` and HP ``drain``). Unit-testable on a plain dict — no
+    network, no clock (the caller stamps ``api_checked_at``).
+    """
+    # Defensive against a malformed/unexpected API body (untrusted external JSON):
+    # never let a wrong shape (a non-dict, a genre that's a list, a beatmaps map
+    # instead of a list) raise and abort the whole enrichment scan.
+    def _obj_name(v):
+        if isinstance(v, dict):
+            v = v.get("name")
+        return v if isinstance(v, str) else None
+
+    if not isinstance(data, dict):
+        data = {}
+    beatmaps = []
+    raw_beatmaps = data.get("beatmaps")
+    for b in raw_beatmaps if isinstance(raw_beatmaps, list) else []:
+        if not isinstance(b, dict):
+            continue
+        beatmaps.append({
+            "checksum": b.get("checksum"),
+            "version": b.get("version"),
+            "mode_int": b.get("mode_int"),
+            "difficulty_rating": b.get("difficulty_rating"),
+            "cs": b.get("cs"),
+            "ar": b.get("ar"),
+            "od": b.get("accuracy"),      # the API names OD "accuracy"
+            "hp": b.get("drain"),         # the API names HP "drain"
+            "bpm": b.get("bpm"),
+            "length_seconds": b.get("total_length"),
+        })
+    return {
+        "status": data.get("status"),
+        "ranked_date": data.get("ranked_date"),
+        "submitted_date": data.get("submitted_date"),
+        "last_updated": data.get("last_updated"),
+        "play_count": data.get("play_count"),
+        "favourite_count": data.get("favourite_count"),
+        "genre": _obj_name(data.get("genre")),
+        "language": _obj_name(data.get("language")),
+        "beatmaps": beatmaps,
+    }
 
 
 def fetch_reference(client_id: str, client_secret: str, progress=None) -> dict:

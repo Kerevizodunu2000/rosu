@@ -76,6 +76,28 @@ class TrackMeta:
 
 
 @dataclass
+class DiffMeta:
+    """Per-difficulty metadata read from ONE .osu file inside an .osz (v1.5).
+
+    Unlike :class:`TrackMeta` (one aggregate per beatmapset), there is one
+    ``DiffMeta`` per ``.osu``. The star rating is NOT here — it is computed
+    separately by :mod:`rosu.ratings` (rosu-pp) and stored alongside these fields.
+    """
+    filename: str                    # the .osu member name inside the .osz
+    version: str | None = None       # difficulty name ("Insane", "7K Oni", ...)
+    mode_int: int | None = None      # 0/1/2/3 from [General] Mode
+    mode: str | None = None          # display name (MODE_NAMES vocabulary)
+    keycount: int | None = None      # mania only: round(CircleSize); None otherwise
+    cs: float | None = None
+    ar: float | None = None
+    od: float | None = None
+    hp: float | None = None
+    bpm: float | None = None         # this diff's own dominant BPM
+    length_seconds: int | None = None
+    checksum: str | None = None      # MD5 of the raw .osu bytes = osu!'s per-diff hash
+
+
+@dataclass
 class GapRow:
     """A row in a series listing: either a present pack or a missing gap."""
     series: str

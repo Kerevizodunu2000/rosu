@@ -51,7 +51,7 @@ class ArtistsTab(QWidget):
 
         splitter = QSplitter(Qt.Horizontal)
         self.artists = CopyTable(name_column=0)
-        self.artists.setColumnCount(4)  # Artist, Songs, Avg length, Avg BPM
+        self.artists.setColumnCount(5)  # Artist, Songs, Avg length, Avg BPM, Avg Star
         self.artists.cellClicked.connect(self._on_artist)
         self.songs = CopyTable(name_column=0)
         self.songs.setColumnCount(len(self._SONG_KEYS))
@@ -74,6 +74,8 @@ class ArtistsTab(QWidget):
         ("sort_len_short", ("avg_length", False)),
         ("sort_bpm_high", ("avg_bpm", True)),
         ("sort_bpm_low", ("avg_bpm", False)),
+        ("sort_star_high", ("avg_star", True)),
+        ("sort_star_low", ("avg_star", False)),
     )
 
     def retranslate(self) -> None:
@@ -92,7 +94,8 @@ class ArtistsTab(QWidget):
         self.filter.setPlaceholderText(t("artist_filter_placeholder"))
         self.filter.setToolTip(t("tip_artist_filter"))
         self.artists.setHorizontalHeaderLabels(
-            [t("col_artist"), t("col_songs"), t("col_avg_length"), t("col_avg_bpm")])
+            [t("col_artist"), t("col_songs"), t("col_avg_length"), t("col_avg_bpm"),
+             t("col_avg_star")])
         self.artists.set_menu_labels(t("copy_names_action"), t("copy_table_action"))
         self.songs.setHorizontalHeaderLabels([t(k) for k in self._SONG_KEYS])
         self.songs.set_menu_labels(t("copy_names_action"), t("copy_table_action"))
@@ -144,6 +147,10 @@ class ArtistsTab(QWidget):
         self.selected.setText("")
 
     def _fill_artists(self, rows: list[dict]) -> None:
+        # The Sort combo is the authoritative order for the artist list, so keep
+        # the table's own header-click sorting OFF — otherwise Qt re-sorts by the
+        # header's sort indicator right after the fill and the combo appears to do
+        # nothing (the songs sub-table keeps its interactive sorting).
         self.artists.setUpdatesEnabled(False)   # coalesce paints during the build
         self.artists.setSortingEnabled(False)
         try:
@@ -151,6 +158,7 @@ class ArtistsTab(QWidget):
             for r, a in enumerate(rows):
                 avg_len = a.get("avg_length")
                 avg_bpm = a.get("avg_bpm")
+                avg_star = a.get("avg_star")
                 name_item = SortItem(a["artist"])
                 name_item.setToolTip(a["artist"] or "")   # full artist on hover (item 15)
                 self.artists.setItem(r, 0, name_item)
@@ -159,10 +167,13 @@ class ArtistsTab(QWidget):
                     human_duration(int(avg_len)) if avg_len else "", avg_len or 0))
                 self.artists.setItem(r, 3, SortItem(
                     f"{avg_bpm:.0f}" if avg_bpm else "", avg_bpm or 0.0))
-                for c in (1, 2, 3):
+                self.artists.setItem(r, 4, SortItem(
+                    f"{avg_star:.2f}" if avg_star else "", avg_star or 0.0))
+                for c in (1, 2, 3, 4):
                     self.artists.item(r, c).setTextAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
         finally:
-            self.artists.setSortingEnabled(True)
+            # Leave sorting OFF: the combo controls the order (see note above).
+            self.artists.setSortingEnabled(False)
             self.artists.setUpdatesEnabled(True)
         self.artists.seed_widths_once(name_min=220)
 

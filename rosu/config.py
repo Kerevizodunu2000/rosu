@@ -60,9 +60,13 @@ class Config:
     language: str = "en"      # default English per spec
     theme: str = "dark"       # default Dark Mode per spec
 
-    # osu! API (optional) for the authoritative pack reference
+    # osu! API (optional) for the authoritative pack reference + metadata enrichment
     osu_client_id: str = ""
     osu_client_secret: str = ""
+    # v1.5: opt in to pulling ranked status/dates/play & favourite counts/genre/
+    # language (and a fallback star) from the osu! API. Off by default; needs the
+    # client id/secret above. Local rosu-pp star ratings never require this.
+    enrich_from_api_enabled: bool = False
 
     # Behaviour toggles
     library_physical_copy: bool = True   # keep real .osz backups in Library

@@ -97,6 +97,8 @@ class ReportDialog(QDialog):
         self.web_alt.setTextFormat(Qt.RichText)
         self.web_alt.setOpenExternalLinks(True)
         root.addWidget(self.web_alt)
+        from .links import wire_link_hover
+        wire_link_hover(self.agree, self.web_alt)
 
         self.status = QLabel("", objectName="status")
         self.status.setWordWrap(True)

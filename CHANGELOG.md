@@ -10,6 +10,41 @@ the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-07-19
+
+**Metadata & rosu-pp foundation** — Rosu now knows each map's star rating and every
+difficulty's attributes, with a much richer, filterable Search.
+
+### Added
+- **Local star ratings** for every difficulty via **rosu-pp-py** (a pinned, compiled
+  dependency; import-guarded so the app still runs without it). Computed at unpack /
+  "Refresh Library", and for the whole Library from the Search **Distribution** flow.
+- **Per-difficulty data**: a new normalized `difficulties` table stores each `.osu`'s
+  star, mania key count, CS/AR/OD/HP, mode, difficulty name and MD5 — parsed from
+  *every* `.osu` in a set (previously only one representative diff was read).
+- **Search — Star & Keys columns**: the Star column lists each difficulty's exact
+  star (e.g. `1.05, 2.14, 6.22`), with a per-diff hover breakdown; a Keys column shows
+  mania key counts.
+- **Map Details dialog** (double-click a result): every difficulty's Difficulty/Mode/
+  Keys/Star/CS·AR·OD·HP with sortable, tooltip-explained columns, plus the osu!-API
+  metadata (ranked status, dates, play/favourite counts, genre, language).
+- **Query-syntax search**: `star>5`, `mode=mania`, `key=7`, `bpm>=180`, `cs`/`ar`/`od`/
+  `hp`, `status=ranked`, `length` as `4:03` or seconds, and `artist=`/`mapper=`/`name=`
+  (contains) — combinable with free text; diff-level filters must hold on the *same*
+  difficulty.
+- **Interactive star histogram** (Search → Distribution): click a bar for its count/%,
+  drag to select a range, double-click to jump to a Search at that star range.
+- **osu!-API metadata enrichment** (opt-in, Settings): ranked status/dates, play &
+  favourite counts, genre and language; also refreshes lost-map availability.
+- **Artists tab**: average-star column and sort.
+- **About**: website link and app-wide "hover a link to see where it goes".
+
+### Changed
+- **Library Health** moved from the Dashboard to Settings; **Enrich from osu! API**
+  lives in Settings and processes the whole Library in one cancellable run.
+- The app now starts **maximized**; About's third-party notices render as formatted
+  Markdown instead of raw text.
+
 ## [1.4.2] - 2026-07-18
 
 **Mini polish release** on the v1.4.1 Settings commit model.

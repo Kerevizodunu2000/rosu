@@ -11,9 +11,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import BinaryIO, Callable
 
-from . import archives
+from . import archives, ratings
+from .beatmap import read_osz_full
 from .models import ExtractPlan, ParsedPack, ParsedTrack
-from .osz_meta import read_osz_meta
 from .parsing import parse_osz_entry, parse_pack_name
 
 _CHUNK = 1 << 20  # 1 MiB streaming buffer
@@ -118,8 +118,13 @@ def extract_pack(archive_path: Path, parsed: ParsedPack, output_dir: Path, db,
                 if not (target.exists() and target.stat().st_size == m.size):
                     with r.open(m.name) as src:
                         _stream_copy(src, target, _MAX_OSZ_BYTES)
-                meta = read_osz_meta(target) if read_meta else None
-                track_id, _is_new = db.upsert_track(t, when, meta)
+                if read_meta:
+                    meta, diffs, raw = read_osz_full(target)
+                    track_id, _is_new = db.upsert_track(t, when, meta)
+                    db.upsert_difficulties(
+                        track_id, diffs, ratings.stars_for_diffs(diffs, raw), when)
+                else:
+                    track_id, _is_new = db.upsert_track(t, when, None)
                 db.add_track_source(track_id, pack_id, t.subfolder, when)
             except Exception as exc:  # keep going on a single bad beatmap
                 if log is not None:

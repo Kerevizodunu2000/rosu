@@ -56,10 +56,15 @@ class SortItem(QTableWidgetItem):
 
 class CopyTable(QTableWidget):
     openLocationRequested = Signal(str)   # emitted with a file path (v1.3)
+    rowActivated = Signal(int)            # double-click a row (v1.5, opt-in)
 
-    def __init__(self, name_column: int = 0, parent=None):
+    def __init__(self, name_column: int = 0, parent=None,
+                 activate_details: bool = False):
         super().__init__(parent)
         self._name_column = name_column
+        # When True, a double-click emits rowActivated (e.g. Search → map details)
+        # instead of copying the cell — the tab wires it to open a detail view.
+        self._activate_details = activate_details
         self._menu_names = "Copy names"          # overridable via set_menu_labels
         self._menu_table = "Copy as table (Ctrl+C)"
         self._menu_open_location = ""            # set via retranslate; empty = hidden
@@ -175,10 +180,14 @@ class CopyTable(QTableWidget):
 
     def _on_cell_double_clicked(self, row: int, col: int) -> None:
         """A primary-URL row (missing pack) opens its osu! page in the browser;
-        otherwise copy just this one cell's value — its Ctrl+C override if set
-        (e.g. the full source names), else the shown text (item 3)."""
+        an opt-in details table emits rowActivated; otherwise copy just this one
+        cell's value — its Ctrl+C override if set (e.g. the full source names),
+        else the shown text (item 3)."""
         if self._row_url_primary(row):
             self._open_url(self._row_url(row))
+            return
+        if self._activate_details:
+            self.rowActivated.emit(row)
             return
         item = self.item(row, col)
         if item is None:

@@ -36,6 +36,8 @@ class MainWindow(QMainWindow):
         self.update_banner = QLabel(objectName="banner")
         self.update_banner.setWordWrap(True)
         self.update_banner.setOpenExternalLinks(True)
+        from .links import wire_link_hover
+        wire_link_hover(self.update_banner)
         self.update_banner.setContentsMargins(12, 6, 12, 6)
         self.update_banner.setVisible(False)
         col.addWidget(self.update_banner)

@@ -8,10 +8,11 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QDialog, QDialogButtonBox, QLabel, QPlainTextEdit, QVBoxLayout,
+    QDialog, QDialogButtonBox, QLabel, QTextBrowser, QVBoxLayout,
 )
 
 from .. import __version__
+from .links import wire_link_hover
 
 
 def _bundled_text(name: str) -> str:
@@ -58,6 +59,12 @@ class AboutDialog(QDialog):
         # Social + legal are https:// — safe as clickable RichText (they open in
         # the browser via QDesktopServices; only mailto: crashes, which is why the
         # e-mail line above stays plain selectable text).
+        website = QLabel(t("about_website"))
+        website.setWordWrap(True)
+        website.setTextFormat(Qt.RichText)
+        website.setOpenExternalLinks(True)
+        root.addWidget(website)
+
         social = QLabel(t("about_social"))
         social.setWordWrap(True)
         social.setTextFormat(Qt.RichText)
@@ -70,11 +77,18 @@ class AboutDialog(QDialog):
         legal.setOpenExternalLinks(True)
         root.addWidget(legal)
 
+        # Every link shows where it goes on hover (app-wide convention).
+        wire_link_hover(lic, website, social, legal)
+
         root.addWidget(QLabel(t("about_third_party")))
-        view = QPlainTextEdit()
-        view.setReadOnly(True)
-        view.setPlainText(_bundled_text("THIRD-PARTY-LICENSES.md")
-                          or t("about_third_party_missing"))
+        view = QTextBrowser()   # render the .md as formatted text, not raw source
+        view.setOpenExternalLinks(True)
+        md = _bundled_text("THIRD-PARTY-LICENSES.md")
+        if md:
+            view.setMarkdown(md)
+        else:
+            view.setPlainText(t("about_third_party_missing"))
+        wire_link_hover(view)
         root.addWidget(view, 1)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Close)

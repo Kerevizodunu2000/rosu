@@ -18,7 +18,7 @@ from pathlib import Path
 
 from .models import ParsedPack, ParsedTrack
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta (
@@ -77,9 +77,33 @@ CREATE TABLE IF NOT EXISTS track_sources (
     seen_at   TEXT,
     UNIQUE(track_id, pack_id)
 );
+CREATE TABLE IF NOT EXISTS difficulties (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    track_id       INTEGER NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,
+    filename       TEXT NOT NULL,   -- the .osu member name inside the .osz
+    version        TEXT,            -- difficulty name ("Insane", "7K Oni", ...)
+    mode_int       INTEGER,         -- 0/1/2/3
+    mode           TEXT,            -- MODE_NAMES display string
+    keycount       INTEGER,         -- mania only: round(CircleSize); NULL otherwise
+    cs             REAL,
+    ar             REAL,
+    od             REAL,
+    hp             REAL,
+    bpm            REAL,
+    length_seconds INTEGER,
+    checksum       TEXT,            -- MD5 of the raw .osu bytes (osu!'s per-diff hash)
+    star_rating    REAL,
+    star_source    TEXT,            -- 'rosu-pp' | 'api' | NULL
+    star_mods      TEXT DEFAULT '', -- '' = nomod (v1.5 computes nomod only)
+    UNIQUE(track_id, filename)
+);
 CREATE INDEX IF NOT EXISTS idx_tracks_display ON tracks(display_name);
 CREATE INDEX IF NOT EXISTS idx_tracks_lib ON tracks(in_library);
 CREATE INDEX IF NOT EXISTS idx_packs_series ON packs(series);
+CREATE INDEX IF NOT EXISTS idx_diff_track ON difficulties(track_id);
+CREATE INDEX IF NOT EXISTS idx_diff_star ON difficulties(star_rating);
+CREATE INDEX IF NOT EXISTS idx_diff_mode_key ON difficulties(mode_int, keycount);
+CREATE INDEX IF NOT EXISTS idx_diff_checksum ON difficulties(checksum);
 """
 
 # Indexes on columns that may have just been added by a migration — created
@@ -88,6 +112,8 @@ _POST_INDEXES = """
 CREATE INDEX IF NOT EXISTS idx_tracks_artist ON tracks(artist);
 CREATE INDEX IF NOT EXISTS idx_packs_category ON packs(category);
 CREATE INDEX IF NOT EXISTS idx_tracks_drive ON tracks(in_drive);
+CREATE INDEX IF NOT EXISTS idx_tracks_star_max ON tracks(star_max);
+CREATE INDEX IF NOT EXISTS idx_tracks_ranked_status ON tracks(ranked_status);
 """
 
 # Columns added after v1, applied via ALTER for databases upgrading in place.
@@ -100,6 +126,14 @@ _MIGRATIONS = {
         "in_osu_stable": "INTEGER DEFAULT 0", "in_osu_lazer": "INTEGER DEFAULT 0",
         "drive_chunk": "TEXT", "drive_hash": "TEXT",
         "availability": "TEXT",  # NULL/'unknown'/'available'/'gone' (item F, v1.0)
+        # -- v1.5 metadata & rosu-pp foundation ------------------------------
+        "star_min": "REAL", "star_max": "REAL",   # rollup of difficulties.star_rating
+        "diffs_scanned_at": "TEXT",               # NULL = never full-parsed by beatmap.py
+        "ranked_status": "TEXT",                  # graveyard/wip/pending/ranked/…/loved
+        "ranked_date": "TEXT", "submitted_date": "TEXT", "last_updated": "TEXT",
+        "play_count": "INTEGER", "favourite_count": "INTEGER",
+        "genre": "TEXT", "language": "TEXT",
+        "api_checked_at": "TEXT",                 # NULL = never enriched from the osu! API
     },
 }
 
@@ -398,6 +432,135 @@ class Database:
             self._conn.commit()
             self._bump()
 
+    # -- difficulties & metadata (v1.5) --------------------------------------
+    def upsert_difficulties(self, track_id: int, diffs: list, stars: dict,
+                            when: str) -> None:
+        """Replace this track's per-difficulty rows with the freshly parsed set and
+        refresh the ``star_min``/``star_max`` rollup on the parent ``tracks`` row.
+
+        ``diffs`` is a list of :class:`~.models.DiffMeta`; ``stars`` maps a diff's
+        ``filename`` to its locally-computed star (a float, or ``None`` when
+        rosu-pp-py was unavailable/failed — left NULL for the osu! API to fill
+        later). A re-parse reconciles: rows whose ``.osu`` no longer exists are
+        deleted; a run without a fresh local star never wipes a star already stored
+        (so re-running the parser without rosu-pp installed doesn't lose ratings).
+        """
+        with self._lock:
+            present = {d.filename for d in diffs}
+            for r in self._conn.execute(
+                    "SELECT filename FROM difficulties WHERE track_id=?",
+                    (track_id,)).fetchall():
+                if r["filename"] not in present:
+                    self._conn.execute(
+                        "DELETE FROM difficulties WHERE track_id=? AND filename=?",
+                        (track_id, r["filename"]))
+            for d in diffs:
+                star_val = stars.get(d.filename)
+                row = self._conn.execute(
+                    "SELECT id FROM difficulties WHERE track_id=? AND filename=?",
+                    (track_id, d.filename)).fetchone()
+                if row:
+                    if star_val is not None:
+                        self._conn.execute(
+                            """UPDATE difficulties SET version=?, mode_int=?, mode=?,
+                               keycount=?, cs=?, ar=?, od=?, hp=?, bpm=?,
+                               length_seconds=?, checksum=?, star_rating=?,
+                               star_source='rosu-pp', star_mods='' WHERE id=?""",
+                            (d.version, d.mode_int, d.mode, d.keycount, d.cs, d.ar,
+                             d.od, d.hp, d.bpm, d.length_seconds, d.checksum,
+                             star_val, row["id"]))
+                    else:
+                        self._conn.execute(
+                            """UPDATE difficulties SET version=?, mode_int=?, mode=?,
+                               keycount=?, cs=?, ar=?, od=?, hp=?, bpm=?,
+                               length_seconds=?, checksum=? WHERE id=?""",
+                            (d.version, d.mode_int, d.mode, d.keycount, d.cs, d.ar,
+                             d.od, d.hp, d.bpm, d.length_seconds, d.checksum, row["id"]))
+                else:
+                    self._conn.execute(
+                        """INSERT INTO difficulties(track_id, filename, version,
+                           mode_int, mode, keycount, cs, ar, od, hp, bpm,
+                           length_seconds, checksum, star_rating, star_source)
+                           VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                        (track_id, d.filename, d.version, d.mode_int, d.mode,
+                         d.keycount, d.cs, d.ar, d.od, d.hp, d.bpm, d.length_seconds,
+                         d.checksum, star_val,
+                         "rosu-pp" if star_val is not None else None))
+            agg = self._conn.execute(
+                "SELECT MIN(star_rating) mn, MAX(star_rating) mx FROM difficulties "
+                "WHERE track_id=?", (track_id,)).fetchone()
+            self._conn.execute(
+                "UPDATE tracks SET star_min=?, star_max=?, diffs_scanned_at=? "
+                "WHERE id=?", (agg["mn"], agg["mx"], when, track_id))
+            self._conn.commit()
+            self._bump()
+
+    def difficulties_for_track(self, track_id: int) -> list[dict]:
+        with self._lock:
+            cur = self._conn.execute(
+                "SELECT * FROM difficulties WHERE track_id=? "
+                "ORDER BY star_rating", (track_id,))
+            return [dict(r) for r in cur.fetchall()]
+
+    def apply_api_enrichment(self, beatmapset_id: int, fields: dict,
+                             when: str) -> None:
+        """Write live osu!-API metadata onto a track and fill any still-missing
+        per-diff star from the API's ``difficulty_rating``.
+
+        Unlike :meth:`upsert_track` (COALESCE — never clobber a static local value),
+        the fields here (ranked status/dates, play/favourite counts, genre, language)
+        are **live and the API is authoritative**, so they use a plain ``SET``: a set
+        that goes pending→ranked, or whose play count climbs, must keep updating on
+        every enrichment run. A successful fetch also implies the set still exists,
+        so ``availability`` is refreshed to 'available'. Per-diff star is matched by
+        ``.osu`` MD5 checksum (falling back to version+mode_int) and only written
+        where none exists — never overwriting a local rosu-pp rating.
+        """
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT id FROM tracks WHERE beatmapset_id=?",
+                (beatmapset_id,)).fetchone()
+            if not row:
+                return
+            tid = row["id"]
+            self._conn.execute(
+                """UPDATE tracks SET ranked_status=?, ranked_date=?, submitted_date=?,
+                   last_updated=?, play_count=?, favourite_count=?, genre=?,
+                   language=?, availability='available', api_checked_at=? WHERE id=?""",
+                (fields.get("status"), fields.get("ranked_date"),
+                 fields.get("submitted_date"), fields.get("last_updated"),
+                 fields.get("play_count"), fields.get("favourite_count"),
+                 fields.get("genre"), fields.get("language"),
+                 when, tid))
+            for b in fields.get("beatmaps", []):
+                dr = b.get("difficulty_rating")
+                if dr is None:
+                    continue
+                drow = None
+                if b.get("checksum"):
+                    drow = self._conn.execute(
+                        "SELECT id, star_rating FROM difficulties "
+                        "WHERE track_id=? AND checksum=?",
+                        (tid, b["checksum"])).fetchone()
+                if drow is None and b.get("version") is not None:
+                    drow = self._conn.execute(
+                        "SELECT id, star_rating FROM difficulties "
+                        "WHERE track_id=? AND version=? AND mode_int IS ?",
+                        (tid, b.get("version"), b.get("mode_int"))).fetchone()
+                if drow is not None and drow["star_rating"] is None:
+                    self._conn.execute(
+                        "UPDATE difficulties SET star_rating=?, star_source='api' "
+                        "WHERE id=?", (dr, drow["id"]))
+            agg = self._conn.execute(
+                "SELECT MIN(star_rating) mn, MAX(star_rating) mx FROM difficulties "
+                "WHERE track_id=?", (tid,)).fetchone()
+            self._conn.execute(
+                "UPDATE tracks SET star_min=COALESCE(?, star_min), "
+                "star_max=COALESCE(?, star_max) WHERE id=?",
+                (agg["mn"], agg["mx"], tid))
+            self._conn.commit()
+            self._bump()
+
     def bump_copy_attempt(self, track_id: int) -> int:
         with self._lock:
             self._conn.execute(
@@ -504,14 +667,20 @@ class Database:
             return [dict(r) for r in cur.fetchall()]
 
     def search_candidates(self, query: str, limit: int = 2000,
-                          search_tags: bool = False) -> list[dict]:
-        """Token-AND recall over the searchable fields.
+                          search_tags: bool = False,
+                          filters: list | None = None) -> list[dict]:
+        """Token-AND recall over the searchable fields, optionally AND'd with
+        structured ``filters`` (query-syntax, v1.5).
 
         Each query word must appear in some **strong** field (name/artist/title)
         — the old whole-query ``tags LIKE '%…%'`` recall flooded results with maps
         merely tagged with a word (e.g. every Vocaloid map for "Hatsune Miku").
         ``creator``/``tags`` are only recalled when ``search_tags`` is on. A purely
-        numeric query also matches on ``beatmapset_id``.
+        numeric query also matches on ``beatmapset_id``. ``filters`` (a list of
+        :class:`rosu.query.Filter`) are hard constraints applied as SQL — diff-level
+        ones collapse into one ``EXISTS`` subquery so ``star>5 mode=mania key=7``
+        must be satisfied by the *same* difficulty. This entry point is for queries
+        with free text; a filters-only query goes through :meth:`filtered_tracks`.
 
         Ranking is done in :mod:`rosu.search`. Sources are NOT attached here — that
         would be one JOIN per candidate (an N+1 that froze the UI on common words);
@@ -531,18 +700,79 @@ class Database:
             ors = " OR ".join(f"{f} LIKE ? COLLATE NOCASE" for f in fields)
             clauses.append(f"({ors})")
             params.extend([like] * len(fields))
-        where = " AND ".join(clauses) if clauses else "0"
+        where = " AND ".join(clauses) if clauses else ""
 
         if raw.isdigit():   # allow an id prefix match regardless of word tokens
-            where = f"({where}) OR CAST(beatmapset_id AS TEXT) LIKE ?"
+            id_clause = "CAST(beatmapset_id AS TEXT) LIKE ?"
+            where = f"({where}) OR {id_clause}" if where else id_clause
             params.append(f"{raw}%")
-        elif not tokens:
-            return []       # nothing searchable
 
-        params.append(limit)
+        filter_where, filter_params = self._build_filter_sql(filters or [])
+        parts: list[str] = []
+        if where:
+            parts.append(f"({where})")
+        if filter_where:
+            parts.append(f"({filter_where})")
+        if not parts:
+            return []       # nothing searchable (no tokens, no id, no filters)
+        params = params + filter_params + [limit]
+        final_where = " AND ".join(parts)
         with self._lock:
             cur = self._conn.execute(
-                f"SELECT * FROM tracks WHERE {where} LIMIT ?", params)
+                f"SELECT * FROM tracks WHERE {final_where} LIMIT ?", params)
+            return [dict(r) for r in cur.fetchall()]
+
+    def _build_filter_sql(self, filters: list) -> tuple[str, list]:
+        """Turn structured query filters into (where_fragment, params).
+
+        Track-level fields compare directly against a ``tracks`` column; diff-level
+        fields collapse into ONE ``EXISTS`` subquery so several diff constraints must
+        hold on the *same* difficulty row (e.g. a 7K chart that is *also* > 5★, not a
+        set that merely has some 7K diff and some >5★ diff). ``op`` is validated
+        against a whitelist so the field/op strings (never the value) are the only
+        thing interpolated into SQL.
+        """
+        track_cols = {"bpm": "bpm", "status": "ranked_status",
+                      "length": "length_seconds"}
+        diff_cols = {"star": "star_rating", "mode": "mode", "key": "keycount",
+                     "keys": "keycount", "cs": "cs", "ar": "ar", "od": "od", "hp": "hp"}
+        text_cols = {"artist": "artist", "creator": "creator", "title": "title",
+                     "source": "source", "tags": "tags"}
+        cmp_ops = {">", ">=", "<", "<=", "="}
+        frags: list[str] = []
+        params: list = []
+        diff_frags: list[str] = []
+        diff_params: list = []
+        for f in filters:
+            if f.op == "contains" and f.field in text_cols:
+                frags.append(f"tracks.{text_cols[f.field]} LIKE ? COLLATE NOCASE")
+                params.append(f"%{f.value}%")
+            elif f.op not in cmp_ops:
+                continue
+            elif f.field in track_cols:
+                frags.append(f"tracks.{track_cols[f.field]} {f.op} ?")
+                params.append(f.value)
+            elif f.field in diff_cols:
+                diff_frags.append(f"d.{diff_cols[f.field]} {f.op} ?")
+                diff_params.append(f.value)
+        if diff_frags:
+            frags.append("EXISTS (SELECT 1 FROM difficulties d "
+                         "WHERE d.track_id = tracks.id AND "
+                         + " AND ".join(diff_frags) + ")")
+            params.extend(diff_params)
+        return (" AND ".join(frags), params)
+
+    def filtered_tracks(self, filters: list, limit: int = 5000) -> list[dict]:
+        """Name-sorted rows matching only structured filters (no free text). Used
+        for a filters-only query like ``star>5 mode=mania`` — there is nothing to
+        rank, so results come back ordered by name directly."""
+        where, params = self._build_filter_sql(filters or [])
+        if not where:
+            return self.all_tracks(limit)
+        with self._lock:
+            cur = self._conn.execute(
+                f"SELECT * FROM tracks WHERE {where} "
+                f"ORDER BY display_name COLLATE NOCASE LIMIT ?", params + [limit])
             return [dict(r) for r in cur.fetchall()]
 
     def all_tracks(self, limit: int = 5000) -> list[dict]:
@@ -604,23 +834,43 @@ class Database:
 
     # -- artists -------------------------------------------------------------
     _ARTIST_METRICS = {"count": "song_count", "avg_length": "avg_length",
-                       "avg_bpm": "avg_bpm"}
+                       "avg_bpm": "avg_bpm", "avg_star": "avg_star"}
 
     def artists_ranked(self, metric: str = "count",
                        descending: bool = True) -> list[dict]:
-        """Per-artist aggregates ranked by song count, avg length or avg BPM
-        (item 14). Artists with no data for the chosen metric sort last."""
+        """Per-artist aggregates ranked by song count, avg length, avg BPM or avg
+        star (item 14 / v1.5). Artists with no data for the chosen metric sort last."""
         col = self._ARTIST_METRICS.get(metric, "song_count")
         order = "DESC" if descending else "ASC"
         with self._lock:
             cur = self._conn.execute(
                 f"""SELECT artist, COUNT(*) AS song_count,
                            AVG(NULLIF(length_seconds, 0)) AS avg_length,
-                           AVG(NULLIF(bpm, 0)) AS avg_bpm
+                           AVG(NULLIF(bpm, 0)) AS avg_bpm,
+                           AVG(star_max) AS avg_star
                     FROM tracks WHERE artist IS NOT NULL AND artist <> ''
                     GROUP BY artist
                     ORDER BY ({col} IS NULL), {col} {order}, artist ASC""")
             return [dict(r) for r in cur.fetchall()]
+
+    def attach_difficulties_bulk(self, rows: list[dict]) -> None:
+        """Attach each row's per-difficulty records (star/keys/cs/ar/od/hp/version/
+        mode) as ``row["difficulties"]`` in one grouped query — only for the
+        displayed rows, so the Search list can show each diff's exact star and key
+        count without an N+1 (same idea as :meth:`attach_sources_bulk`)."""
+        ids = [r["id"] for r in rows if r.get("id") is not None]
+        by_track: dict[int, list] = {}
+        with self._lock:
+            for i in range(0, len(ids), 900):   # stay under SQLite's variable cap
+                chunk = ids[i:i + 900]
+                ph = ",".join("?" * len(chunk))
+                cur = self._conn.execute(
+                    f"""SELECT * FROM difficulties WHERE track_id IN ({ph})
+                        ORDER BY (star_rating IS NULL), star_rating""", chunk)
+                for r in cur.fetchall():
+                    by_track.setdefault(r["track_id"], []).append(dict(r))
+        for row in rows:
+            row["difficulties"] = by_track.get(row["id"], [])
 
     def artists_by_count(self, descending: bool = True) -> list[dict]:
         return self.artists_ranked("count", descending)

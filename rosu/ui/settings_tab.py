@@ -132,6 +132,8 @@ class SettingsTab(QWidget):
         self.lbl_api_help.setWordWrap(True)
         self.lbl_api_help.setTextFormat(Qt.RichText)
         self.lbl_api_help.setOpenExternalLinks(True)   # the osu! link is clickable
+        from .links import wire_link_hover
+        wire_link_hover(self.lbl_api_help)
         root.addWidget(self.lbl_api_help)
         api_form = QFormLayout()
         self.client_id = QLineEdit(cfg.osu_client_id)
@@ -141,6 +143,18 @@ class SettingsTab(QWidget):
         api_form.addRow(self.lbl_cid, self.client_id)
         api_form.addRow(self.lbl_cs, self.client_secret)
         root.addLayout(api_form)
+        # v1.5: opt in to pulling ranked status/dates/counts/genre/language (and a
+        # fallback star) from the osu! API — needs the creds above.
+        self.cb_enrich = QCheckBox(); self.cb_enrich.setChecked(cfg.enrich_from_api_enabled)
+        self.cb_enrich.toggled.connect(self._on_setting_changed)
+        root.addWidget(self.cb_enrich)
+        enrich_row = QHBoxLayout()
+        self.btn_enrich = QPushButton(objectName="secondary")
+        self.btn_enrich.clicked.connect(self._enrich_metadata)
+        self.lbl_enrich_status = QLabel(objectName="status")
+        enrich_row.addWidget(self.btn_enrich)
+        enrich_row.addWidget(self.lbl_enrich_status, 1)
+        root.addLayout(enrich_row)
         ref_row = QHBoxLayout()
         self.btn_reference = QPushButton(objectName="secondary")
         self.btn_reference.clicked.connect(self._update_reference)
@@ -180,6 +194,17 @@ class SettingsTab(QWidget):
         self.import_bar.setRange(0, 0)     # marquee / indeterminate
         self.import_bar.setVisible(False)
         root.addWidget(self.import_bar)
+
+        # Library health (v1.1) — moved here from the Dashboard in v1.5.
+        self.lbl_library = QLabel(objectName="h1")
+        root.addWidget(self.lbl_library)
+        health_row = QHBoxLayout()
+        self.btn_health = QPushButton(objectName="secondary")
+        self.btn_health.clicked.connect(self._library_health)
+        self.lbl_health_status = QLabel(objectName="status")
+        health_row.addWidget(self.btn_health)
+        health_row.addWidget(self.lbl_health_status, 1)
+        root.addLayout(health_row)
 
         # Google Drive backup (item 11)
         self.lbl_drive = QLabel(objectName="h1")
@@ -294,6 +319,7 @@ class SettingsTab(QWidget):
                 "clear_before": self.cb_clear_before.isChecked(),
                 "check_updates": self.cb_check_updates.isChecked(),
                 "auto_refresh": self.cb_auto_refresh.isChecked(),
+                "enrich": self.cb_enrich.isChecked(),
                 "lazer_enabled": self.cb_lazer_enabled.isChecked(),
                 "stable_enabled": self.cb_stable_enabled.isChecked(),
                 "zip": self.zip.currentData()}
@@ -313,6 +339,7 @@ class SettingsTab(QWidget):
                  (self.cb_clear_before, "clear_before"),
                  (self.cb_check_updates, "check_updates"),
                  (self.cb_auto_refresh, "auto_refresh"),
+                 (self.cb_enrich, "enrich"),
                  (self.cb_lazer_enabled, "lazer_enabled"),
                  (self.cb_stable_enabled, "stable_enabled"))
         for cb, key in boxes:
@@ -389,6 +416,10 @@ class SettingsTab(QWidget):
         self.cb_check_updates.setToolTip(t("tip_check_updates"))
         self.cb_auto_refresh.setText(t("set_auto_refresh"))
         self.cb_auto_refresh.setToolTip(t("tip_auto_refresh"))
+        self.cb_enrich.setText(t("set_enrich_api"))
+        self.cb_enrich.setToolTip(t("tip_enrich_api"))
+        self.btn_enrich.setText(t("btn_enrich_api"))
+        self.btn_enrich.setToolTip(t("tip_enrich_api"))
         self.cb_lazer_enabled.setText(t("set_lazer_enabled"))
         self.cb_lazer_enabled.setToolTip(t("tip_lazer_enabled"))
         self.cb_stable_enabled.setText(t("set_stable_enabled"))
@@ -408,6 +439,9 @@ class SettingsTab(QWidget):
         self.lbl_import_help.setText(t("set_import_help"))
         self.btn_import_stable.setText(t("btn_import_stable"))
         self.btn_import_lazer.setText(t("btn_import_lazer"))
+        self.lbl_library.setText(t("set_library_section"))
+        self.btn_health.setText(t("btn_library_health"))
+        self.btn_health.setToolTip(t("tip_library_health"))
         self.lbl_drive.setText(t("set_drive"))
         self.lbl_drive_help.setText(t("set_drive_help"))
         self.btn_about.setText(t("btn_about"))
@@ -652,6 +686,81 @@ class SettingsTab(QWidget):
         self._refresh_lost_status()
         QMessageBox.critical(self, self.ctx.t("app_title"), msg)
 
+    # -- osu! API metadata enrichment (v1.5) ---------------------------------
+    def _enrich_metadata(self) -> None:
+        if getattr(self, "_enriching", False):   # button doubles as Cancel mid-run
+            self.ctx.services.cancel_enrich()
+            self.lbl_enrich_status.setText(self.ctx.t("cancelling"))
+            return
+        if not self.cb_enrich.isChecked():
+            QMessageBox.information(self, self.ctx.t("app_title"),
+                                    self.ctx.t("enrich_disabled_msg"))
+            return
+        if not self._commit_api_creds():
+            QMessageBox.information(self, self.ctx.t("app_title"),
+                                    self.ctx.t("enrich_no_api_msg"))
+            return
+        self.ctx.cfg.enrich_from_api_enabled = True   # an explicit click opts in
+        self._enriching = True
+        self.btn_enrich.setText(self.ctx.t("btn_cancel"))
+        self.lbl_enrich_status.setText(self.ctx.t("working"))
+        # max_calls=None → enrich the WHOLE library in one run (paced ~2-3/s); it's
+        # cancellable and shows progress, so there's no need for an artificial cap.
+        w = Worker(lambda progress=None:
+                   self.ctx.services.enrich_metadata(progress, max_calls=None))
+        self._threads.append(w)
+        w.progressed.connect(self._on_enrich_progress)
+        w.succeeded.connect(self._enrich_done)
+        w.failed.connect(self._enrich_failed)
+        w.finished.connect(lambda: self._threads.remove(w) if w in self._threads else None)
+        w.start()
+
+    def _on_enrich_progress(self, msg) -> None:
+        if isinstance(msg, dict) and msg.get("kind") == "enrich":
+            self.lbl_enrich_status.setText(f"{msg['done']}/{msg['total']}")
+
+    def _enrich_done(self, res) -> None:
+        self._enriching = False
+        self.btn_enrich.setText(self.ctx.t("btn_enrich_api"))
+        err = res.get("error")
+        if err == "no_api":
+            self.lbl_enrich_status.setText(self.ctx.t("enrich_no_api"))
+            return
+        if err == "disabled":
+            self.lbl_enrich_status.setText(self.ctx.t("enrich_disabled"))
+            return
+        self.lbl_enrich_status.setText(self.ctx.t(
+            "enrich_done", checked=res["checked"], updated=res["updated"],
+            remaining=res["remaining"]))
+        self.mw.search.reload()
+
+    def _enrich_failed(self, msg) -> None:
+        self._enriching = False
+        self.btn_enrich.setText(self.ctx.t("btn_enrich_api"))
+        QMessageBox.critical(self, self.ctx.t("app_title"), msg)
+
+    # -- Library health (v1.1, moved from Dashboard in v1.5) -----------------
+    def _library_health(self) -> None:
+        self.btn_health.setEnabled(False)
+        self.lbl_health_status.setText(self.ctx.t("working"))
+        w = Worker(self.ctx.services.library_health)
+        self._threads.append(w)
+        w.succeeded.connect(self._health_done)
+        w.failed.connect(self._health_failed)
+        w.finished.connect(lambda: self._threads.remove(w) if w in self._threads else None)
+        w.start()
+
+    def _health_done(self, report) -> None:
+        self.btn_health.setEnabled(True)
+        self.lbl_health_status.setText(self.ctx.t(
+            "health_done", files=report["usage"]["files"]))
+        from .health_dialog import HealthDialog
+        HealthDialog(self.ctx, report, self).exec()
+
+    def _health_failed(self, msg) -> None:
+        self.btn_health.setEnabled(True)
+        QMessageBox.critical(self, self.ctx.t("app_title"), msg)
+
     # -- auto-import from installed osu! clients (item 15) -------------------
     def _run_import(self, client: str) -> None:
         self.btn_import_stable.setEnabled(False)
@@ -732,7 +841,8 @@ class SettingsTab(QWidget):
 
     # -- toggle commit model (v1.4.1) ----------------------------------------
     _TOGGLE_KEYS = ("auto_backup", "clear_before", "check_updates",
-                    "auto_refresh", "lazer_enabled", "stable_enabled", "zip")
+                    "auto_refresh", "enrich", "lazer_enabled", "stable_enabled",
+                    "zip")
 
     def _mark_dirty(self) -> None:
         self.saved_label.setText(self.ctx.t("settings_dirty"))
@@ -776,13 +886,14 @@ class SettingsTab(QWidget):
         cfg.clear_output_before_extract = self.cb_clear_before.isChecked()
         cfg.check_updates = self.cb_check_updates.isChecked()
         cfg.auto_refresh_on_tab = self.cb_auto_refresh.isChecked()
+        cfg.enrich_from_api_enabled = self.cb_enrich.isChecked()
         cfg.lazer_enabled = self.cb_lazer_enabled.isChecked()
         cfg.stable_enabled = self.cb_stable_enabled.isChecked()
         cfg.settings_autosave = self.cb_autosave.isChecked()
         cfg.zip_disposal = self.zip.currentData()
         self.ctx.save_config()
         self.saved_label.setText(self.ctx.t("saved"))
-        # auto-copy toggle changes whether the Dashboard shows its Copy button
+        # auto-copy toggle changes whether the Dashboard shows its Copy button.
         self.mw.dashboard._sync_auto_copy()
 
     # -- per-client enable/disable (v1.4) ------------------------------------

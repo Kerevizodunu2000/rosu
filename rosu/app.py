@@ -124,7 +124,7 @@ def run() -> int:
 
     win = MainWindow(ctx, app)
     win.setWindowIcon(QIcon(asset_path("icon.png")))
-    win.show()
+    win.showMaximized()   # start maximized so the wide tables fit on screen
     if splash:
         splash.finish(win)
     code = app.exec()

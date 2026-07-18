@@ -54,8 +54,13 @@ a = Analysis(
     # send2trash: collect ALL submodules — recent versions moved the Windows
     # backend to send2trash.win.modern / .win.legacy (the old flat plat_win is
     # gone), and __init__ picks one at runtime, so a hardcoded name is fragile.
+    # rosu_pp_py is a compiled (Rust/PyO3) extension; PyInstaller's static
+    # analysis can't follow the try/except ImportError in rosu.ratings, so name it
+    # explicitly (same reason as rapidfuzz/py7zr/pybcj). If the wheel isn't
+    # installed the import guard degrades gracefully — the app still builds/runs.
     hiddenimports=['rapidfuzz', 'py7zr', 'pyppmd', 'pybcj', 'brotli',
-                   'inflate64', 'multivolumefile', 'texttable', 'Cryptodome']
+                   'inflate64', 'multivolumefile', 'texttable', 'Cryptodome',
+                   'rosu_pp_py']
                   + collect_submodules('send2trash') + _drive_hidden,
     hookspath=[],
     hooksconfig={},

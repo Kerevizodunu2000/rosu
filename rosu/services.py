@@ -59,6 +59,8 @@ class Services:
         self._drive_cancel = threading.Event()  # separate cancel for Drive ops
         self._lostmap_cancel = threading.Event()  # separate cancel for lost-map scan
         self._verify_cancel = threading.Event()  # separate cancel for SHA-256 verify
+        self._ratings_cancel = threading.Event()  # separate cancel for star-rating scan
+        self._enrich_cancel = threading.Event()  # separate cancel for API enrichment
         self._rebuild_lock = threading.Lock()  # serialize tracking.xlsx writes
         self._reference_cache = None           # lazy osu! reference (invalidated on sync)
 
@@ -71,6 +73,8 @@ class Services:
         self._drive_cancel.set()
         self._lostmap_cancel.set()
         self._verify_cancel.set()
+        self._ratings_cancel.set()
+        self._enrich_cancel.set()
 
     # -- scanning / pre-check ------------------------------------------------
     def scan(self):
@@ -179,7 +183,8 @@ class Services:
         """Move loose .osz dropped straight into Packs into Output and record them
         with a 'Direct' source (they need no unpacking). Returns the count."""
         import shutil
-        from .osz_meta import read_osz_meta
+        from . import ratings
+        from .beatmap import read_osz_full
         out = self.cfg.output_path
         out.mkdir(parents=True, exist_ok=True)
         when = now_iso()
@@ -199,7 +204,10 @@ class Services:
                 continue
             if pack_id is None:
                 pack_id = self.db.get_or_create_local_pack("Direct")   # Source label
-            track_id, _ = self.db.upsert_track(t, when, read_osz_meta(target))
+            meta, diffs, raw = read_osz_full(target)
+            track_id, _ = self.db.upsert_track(t, when, meta)
+            self.db.upsert_difficulties(
+                track_id, diffs, ratings.stars_for_diffs(diffs, raw), when)
             self.db.add_track_source(track_id, pack_id, None, when)
             moved += 1
             if progress:
@@ -556,6 +564,130 @@ class Services:
         return {"checked": checked, "ok": ok, "mismatch": mismatch,
                 "unhashed": unhashed, "missing": missing,
                 "mismatches": mismatches[:50], "cancelled": cancelled}
+
+    def compute_ratings(self, progress=None, max_files: int | None = None) -> dict:
+        """Compute local (rosu-pp) star ratings for every Library difficulty and
+        store them, refreshing each set's ``star_min``/``star_max`` rollup.
+
+        Shaped like :meth:`verify_library`: own cancel token, per-file progress,
+        resumable. Never-scanned sets go FIRST, then sets that were scanned but
+        still have no star (e.g. parsed before rosu-pp-py was installed) — so a
+        re-run after installing the engine actually fills the gap. Returns
+        ``{"error": "no_rosu_pp"}`` up front when the engine is unavailable (the
+        difficulty rows themselves are still created at ingest / "Refresh Library").
+        Otherwise ``{"scanned", "rated", "cancelled", "remaining"}``.
+        """
+        from . import ratings
+        from .beatmap import read_osz_full
+        if not ratings.available():
+            return {"error": "no_rosu_pp"}
+        self._ratings_cancel.clear()   # own token: never collides with other ops
+        lib = self.cfg.library_path
+        rows = [r for r in self.db.library_tracks()
+                if r.get("in_library") and r.get("filename")]
+        unscanned = [r for r in rows if not r.get("diffs_scanned_at")]
+        missing_star = [r for r in rows
+                        if r.get("diffs_scanned_at") and r.get("star_max") is None]
+        ordered = unscanned + missing_star
+        total = len(ordered) if max_files is None else min(len(ordered), max_files)
+        scanned = rated = 0
+        cancelled = False
+        # 'remaining' = pool items we never reached (cap/cancel). A missing file is
+        # 'reached' (skipped, not remaining) so a full run always ends at 0 even
+        # if some .osz vanished — re-running wouldn't process them anyway.
+        remaining = 0
+        for i, r in enumerate(ordered):
+            if self._ratings_cancel.is_set():
+                cancelled = True
+                remaining = len(ordered) - i
+                break
+            if max_files is not None and scanned >= max_files:
+                remaining = len(ordered) - i
+                break
+            p = lib / r["filename"]
+            if not p.exists():
+                continue
+            _meta, diffs, raw = read_osz_full(p)
+            stars = ratings.stars_for_diffs(diffs, raw)
+            self.db.upsert_difficulties(r["id"], diffs, stars, now_iso())
+            scanned += 1
+            if any(v is not None for v in stars.values()):
+                rated += 1
+            if progress:
+                progress({"kind": "ratings", "done": scanned, "total": total,
+                          "name": r["filename"]})
+        self.log.info("COMPUTE_RATINGS", scanned=scanned, rated=rated,
+                      cancelled=cancelled, remaining=remaining)
+        return {"scanned": scanned, "rated": rated, "cancelled": cancelled,
+                "remaining": remaining}
+
+    def enrich_metadata(self, progress=None, max_calls: int | None = 500) -> dict:
+        """Pull live osu!-API metadata (ranked status/dates, play & favourite
+        counts, genre, language) plus a fallback star for every Library beatmapset.
+
+        Shaped like :meth:`scan_lost_maps`: opt-in + creds-gated, own cancel token,
+        never-checked sets first, capped at ``max_calls``, resumable. A successful
+        fetch also refreshes ``availability`` (so this doubles as a lost-map scan);
+        a 404 marks the set gone. Returns ``{"error": ...}`` when disabled/uncredited,
+        else ``{"checked", "updated", "total", "remaining"}``.
+        """
+        if not self.cfg.enrich_from_api_enabled:
+            return {"error": "disabled"}
+        if not (self.cfg.osu_client_id and self.cfg.osu_client_secret):
+            return {"error": "no_api"}
+        self._enrich_cancel.clear()   # own token: never collides with other ops
+        when = now_iso()
+        rows = self.db.library_tracks()
+        # Only the sets NOT yet enriched (api_checked_at IS NULL) — so the progress
+        # total is the remaining work, not the whole library, and repeated runs walk
+        # forward instead of re-fetching everything.
+        unchecked = list(dict.fromkeys(
+            r["beatmapset_id"] for r in rows
+            if r.get("beatmapset_id") and not r.get("api_checked_at")))
+        result = osu_api.beatmapset_details(
+            unchecked, self.cfg.osu_client_id, self.cfg.osu_client_secret,
+            progress=progress, max_calls=max_calls,
+            cancel=self._enrich_cancel.is_set)
+        updated = 0
+        for bid, data in result.items():
+            if data is None:
+                self.db.set_availability(bid, "gone")   # 404 = deleted/taken down
+            else:
+                self.db.apply_api_enrichment(bid, data, when)
+                updated += 1
+        remaining = max(0, len(unchecked) - len(result))
+        self.log.info("ENRICH_METADATA", checked=len(result), updated=updated,
+                      total=len(unchecked), remaining=remaining)
+        return {"checked": len(result), "updated": updated,
+                "total": len(unchecked), "remaining": remaining}
+
+    def cancel_enrich(self) -> None:
+        """Cancel only an in-progress metadata enrichment (leaves other ops alone)."""
+        self._enrich_cancel.set()
+
+    def rating_status(self) -> dict:
+        """Snapshot for the Search "Distribution" flow: how many in-Library sets
+        exist, how many still lack a star, and whether the local engine is present.
+        """
+        from . import ratings
+        rows = self.db.library_tracks()
+        inlib = len(rows)
+        unrated = sum(1 for r in rows if r.get("star_max") is None)
+        return {"in_library": inlib, "unrated": unrated,
+                "rated": inlib - unrated, "engine": ratings.available()}
+
+    def star_histogram_data(self, scope: str = "library",
+                            bins: int = 20) -> list[tuple[float, float, int]]:
+        """Binned distribution of set star ratings (``star_max``) for a histogram.
+
+        Synchronous — binning a few thousand floats is microseconds, so no worker
+        is needed. ``scope`` is ``"library"`` (in-Library sets) or ``"all"``.
+        """
+        from . import stats
+        rows = (self.db.library_tracks() if scope == "library"
+                else self.db.all_tracks())
+        values = [r["star_max"] for r in rows if r.get("star_max") is not None]
+        return stats.histogram_bins(values, bins)
 
     def refresh(self, progress=None) -> dict:
         when = now_iso()
@@ -1491,6 +1623,7 @@ class Services:
         else:
             rows = self.db.all_tracks()
             self.db.attach_sources_bulk(rows)
+            self.db.attach_difficulties_bulk(rows)
         self.log.info("SEARCH", query=query or "(all)", results=len(rows),
                       tags=search_tags)
         return rows

@@ -64,6 +64,8 @@ class PacksTab(QWidget):
         self.download_hint.setWordWrap(True)
         self.download_hint.setTextFormat(Qt.RichText)
         self.download_hint.setOpenExternalLinks(True)
+        from .links import wire_link_hover
+        wire_link_hover(self.download_hint)
         root.addWidget(self.download_hint)
 
         self.table = CopyTable(name_column=3)  # Code column

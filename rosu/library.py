@@ -12,7 +12,8 @@ import shutil
 from pathlib import Path
 from typing import Callable
 
-from .osz_meta import read_osz_meta
+from . import ratings
+from .beatmap import read_osz_full
 from .parsing import parse_osz_entry
 
 
@@ -120,15 +121,25 @@ def refresh_library(library_dir: Path, db, when: str,
         present_keys.add(key)
         row = db.find_track_row(t.beatmapset_id, t.filename)
         if row is None:
-            # manually-added file: read its metadata too
-            track_id, _ = db.upsert_track(t, when, read_osz_meta(path))
+            # manually-added file: read its metadata + per-difficulty data
+            meta, diffs, raw = read_osz_full(path)
+            track_id, _ = db.upsert_track(t, when, meta)
+            db.upsert_difficulties(
+                track_id, diffs, ratings.stars_for_diffs(diffs, raw), when)
             db.set_library_state(track_id, True, "present", when)
             added += 1
         else:
-            # backfill metadata for tracks imported before metadata existed
-            if row["bpm"] is None and row["mode"] is None:
-                db.upsert_track(t, when, read_osz_meta(path))
-                enriched += 1
+            # backfill metadata (imported before it existed) and/or difficulties
+            # (imported before v1.5). A single full read covers both.
+            needs_meta = row["bpm"] is None and row["mode"] is None
+            needs_diffs = not row["diffs_scanned_at"]
+            if needs_meta or needs_diffs:
+                meta, diffs, raw = read_osz_full(path)
+                if needs_meta:
+                    db.upsert_track(t, when, meta)
+                    enriched += 1
+                db.upsert_difficulties(
+                    row["id"], diffs, ratings.stars_for_diffs(diffs, raw), when)
             if row["library_status"] != "present" or row["in_library"] != 1:
                 db.set_library_state(row["id"], True, "present", when)
         if progress:
