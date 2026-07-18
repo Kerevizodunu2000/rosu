@@ -10,6 +10,25 @@ the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.4.2] - 2026-07-18
+
+**Mini polish release** on the v1.4.1 Settings commit model.
+
+### Changed
+- **A client's path field now hides/shows the moment its Enable box is
+  (un)ticked**, even with Auto-Save off — the visual reacts instantly while the
+  setting itself still commits on Save (Discard re-ticks the box and the field
+  comes straight back). Same for the client's "import installed songs" button
+  on the tab.
+- **Cleaner client rows**: the separate "osu!lazer executable" / "osu!(stable)
+  executable" labels are gone — each client is one row where the **Enable
+  osu!lazer / Enable osu!(stable) checkbox is the row's label**, aligned in the
+  same column as the other setting names, with the path field + Browse beside
+  it (the field describes itself via placeholder text and tooltip).
+- **Settings form alignment**: every label — including the new Enable
+  checkboxes — is now vertically centered on its field box instead of sitting
+  slightly above it.
+
 ## [1.4.1] - 2026-07-18
 
 **Bug-fix + polish release** for issues found live-testing v1.4.0.

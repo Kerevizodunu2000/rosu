@@ -43,6 +43,10 @@ class SettingsTab(QWidget):
         form.setSpacing(10)
         # Fields fill the column so combos and path pickers share the same width (item 22).
         form.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
+        # Labels sit vertically CENTERED on their field boxes (v1.4.2) — the
+        # wrapper widgets below zero their margins for the same reason: a
+        # taller-than-field wrapper made every label look shifted upward.
+        form.setLabelAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         root.addLayout(form)
         self._form = form   # kept: per-client rows are shown/hidden live (v1.4)
 
@@ -68,12 +72,17 @@ class SettingsTab(QWidget):
         # osu! client executables, each with its per-client enable toggle right
         # beneath its path (v1.4): a disabled client's path row VANISHES entirely
         # (it comes back when the toggle is re-enabled) and it is never written to.
-        self.osu = self._path_row(form, cfg.osu_lazer_exe, is_dir=False)
+        # Each client = ONE row: the "Enable …" checkbox IS the row's label
+        # (same column + centering as Language/Packs folder), with the path
+        # field + Browse beside it. Disabling hides only the field side — the
+        # checkbox stays so the client can be re-enabled (v1.4.2). The path
+        # field carries its description as placeholder + tooltip.
         self.cb_lazer_enabled = QCheckBox(); self.cb_lazer_enabled.setChecked(cfg.lazer_enabled)
-        form.addRow("", self.cb_lazer_enabled)
-        self.osu_stable = self._path_row(form, cfg.osu_stable_exe, is_dir=False)
+        self.osu = self._path_row(form, cfg.osu_lazer_exe, is_dir=False,
+                                  label_widget=self.cb_lazer_enabled)
         self.cb_stable_enabled = QCheckBox(); self.cb_stable_enabled.setChecked(cfg.stable_enabled)
-        form.addRow("", self.cb_stable_enabled)
+        self.osu_stable = self._path_row(form, cfg.osu_stable_exe, is_dir=False,
+                                         label_widget=self.cb_stable_enabled)
         self._sync_client_rows()
 
         self.cb_physical = QCheckBox(); self.cb_physical.setChecked(cfg.library_physical_copy)
@@ -220,10 +229,11 @@ class SettingsTab(QWidget):
         idx = self.theme.findData(theme)
         self.theme.setCurrentIndex(idx if idx >= 0 else 0)
 
-    def _path_row(self, form: QFormLayout, value: str, is_dir: bool) -> QLineEdit:
+    def _path_row(self, form: QFormLayout, value: str, is_dir: bool,
+                  label_widget: QWidget | None = None) -> QLineEdit:
         field = QLineEdit(value)
         browse = QPushButton(objectName="secondary")
-        label = QLabel()
+        label = label_widget if label_widget is not None else QLabel()
 
         def pick():
             if is_dir:
@@ -242,12 +252,19 @@ class SettingsTab(QWidget):
         field._browse = browse
         field._label = label
         holder = QHBoxLayout()
+        holder.setContentsMargins(0, 0, 0, 0)   # wrapper = exactly field height
         holder.addWidget(field, 1)
         holder.addWidget(browse)
         container = QWidget()
         container.setLayout(holder)
         field._container = container
         form.addRow(label, container)
+        # A non-QLabel label widget (the Enable checkbox) defaults to the TOP of
+        # its cell — pin every label item to vertical center explicitly so the
+        # checkbox rows line up exactly like the plain-label rows above them.
+        item = form.itemAt(form.rowCount() - 1, QFormLayout.LabelRole)
+        if item is not None:
+            item.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         return field
 
     def _combo_holder(self, combo, key: str) -> QWidget:
@@ -255,6 +272,7 @@ class SettingsTab(QWidget):
         right edge lines up with the path fields above the Browse buttons (item 22).
         The trailing spacer is sized to the Browse button in retranslate()."""
         holder = QHBoxLayout()
+        holder.setContentsMargins(0, 0, 0, 0)   # wrapper = exactly combo height
         holder.addWidget(combo, 1)
         spacer = QWidget()
         holder.addWidget(spacer)
@@ -306,6 +324,10 @@ class SettingsTab(QWidget):
         if idx >= 0:
             self.zip.setCurrentIndex(idx)
         self.zip.blockSignals(False)
+        # The client boxes were restored with signals blocked — re-sync the
+        # instant visuals they normally drive (path rows + import buttons).
+        self._sync_client_rows()
+        self._sync_client_import_buttons()
 
     def confirm_leave(self) -> bool:
         """Called before leaving Settings / on quit. Returns True when it's OK to
@@ -350,8 +372,10 @@ class SettingsTab(QWidget):
         self.packs._label.setText(t("set_packs_dir"))
         self.output._label.setText(t("set_output_dir"))
         self.library._label.setText(t("set_library_dir"))
-        self.osu._label.setText(t("set_osu_lazer_exe"))
-        self.osu_stable._label.setText(t("set_osu_stable_exe"))
+        # The client exe rows are labelled by their "Enable …" checkboxes
+        # (translated below); the fields explain themselves via placeholder.
+        self.osu.setPlaceholderText(t("set_osu_lazer_exe"))
+        self.osu_stable.setPlaceholderText(t("set_osu_stable_exe"))
         for f in (self.packs, self.output, self.library, self.osu, self.osu_stable):
             f._browse.setText(t("btn_browse"))
         # Match the combo spacers to the (localized) Browse button width (item 22).
@@ -736,7 +760,13 @@ class SettingsTab(QWidget):
             self._apply_client_toggles()
             self._sync_toggle_baseline()
         else:
-            self._mark_dirty()   # visibility re-syncs when Save commits it
+            # Deferred COMMIT, instant VISUALS (v1.4.2): this tab's path row +
+            # import button react to the tick right away; the config (and the
+            # other tabs) only change when Save commits it. A Discard re-ticks
+            # the box via _restore, which re-syncs these visuals back.
+            self._sync_client_rows()
+            self._sync_client_import_buttons()
+            self._mark_dirty()
 
     # -- toggle apply (called on commit) -------------------------------------
     def _apply_toggles(self, *_) -> None:
@@ -768,19 +798,22 @@ class SettingsTab(QWidget):
             self.mw.shortcuts.refresh_client_visibility()
 
     def _sync_client_rows(self) -> None:
-        """A disabled client's exe path row (label + field + Browse) disappears
-        entirely until the client is re-enabled — only the enable toggle stays."""
-        cfg = self.ctx.cfg
-        self._form.setRowVisible(self.osu._container, bool(cfg.lazer_enabled))
-        self._form.setRowVisible(self.osu_stable._container, bool(cfg.stable_enabled))
+        """A disabled client's exe path field + Browse disappear until the
+        client is re-enabled — the Enable checkbox (the row's label) stays.
+        Follows the CHECKBOX (not the saved config), so unticking hides the
+        field instantly even in manual mode where the commit itself waits for
+        Save — a Discard re-ticks the box and the field comes straight back."""
+        self.osu._container.setVisible(self.cb_lazer_enabled.isChecked())
+        self.osu_stable._container.setVisible(self.cb_stable_enabled.isChecked())
 
     def _sync_client_import_buttons(self) -> None:
         """Hide a disabled client's 'import installed songs' button (v1.4) —
-        consistent with its path row vanishing above. While an import runs the
-        visible buttons stay disabled (the busy bar is showing)."""
+        consistent with its path row vanishing above; follows the checkbox so
+        the whole tab reacts instantly even in manual mode (v1.4.2). While an
+        import runs the visible buttons stay disabled (the busy bar is showing)."""
         running = self.import_bar.isVisible()
-        for btn, on in ((self.btn_import_lazer, self.ctx.cfg.lazer_enabled),
-                        (self.btn_import_stable, self.ctx.cfg.stable_enabled)):
+        for btn, on in ((self.btn_import_lazer, self.cb_lazer_enabled.isChecked()),
+                        (self.btn_import_stable, self.cb_stable_enabled.isChecked())):
             btn.setVisible(bool(on))
             btn.setEnabled(not running)
 
