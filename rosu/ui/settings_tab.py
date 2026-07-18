@@ -96,20 +96,22 @@ class SettingsTab(QWidget):
         zip_row.addWidget(self.lbl_zip); zip_row.addWidget(self.zip); zip_row.addStretch(1)
         root.addLayout(zip_row)
 
-        # Toggles apply immediately (like Language/Theme) so a checked box takes
-        # effect without also pressing Save — fixes "I enabled Auto-copy but it
-        # didn't run" (item 6). Paths still commit via the Save button.
+        # Commit model (v1.4.1): toggles/combos apply immediately ONLY in
+        # Auto-Save mode. In manual mode they just mark the tab dirty and wait
+        # for Save — "Auto-Save off" must genuinely mean nothing saves itself.
+        # (Language/Theme stay live in both modes: they're visual pickers whose
+        # effect you need to SEE to choose. Physical-copy keeps its own guarded
+        # confirm flow because turning it off deletes files.)
         for cb in (self.cb_auto_backup, self.cb_clear_before, self.cb_check_updates,
                    self.cb_auto_refresh):
-            cb.toggled.connect(self._apply_toggles)
-        # Turning OFF physical copies deletes files, so it gets a guarded confirm
-        # (item 17) instead of the plain live-apply.
+            cb.toggled.connect(self._on_setting_changed)
         self.cb_physical.toggled.connect(self._on_physical_toggled)
-        self.zip.currentIndexChanged.connect(self._apply_toggles)
-        # Per-client toggles persist + reactively hide that client's controls
-        # everywhere; the save-mode toggle rewires the commit model (v1.4).
-        self.cb_lazer_enabled.toggled.connect(self._apply_client_toggles)
-        self.cb_stable_enabled.toggled.connect(self._apply_client_toggles)
+        self.zip.currentIndexChanged.connect(self._on_setting_changed)
+        # Per-client toggles: commit + reactive hide/show in Auto mode; dirty
+        # in manual mode (the UI re-syncs on Save). The save-mode toggle itself
+        # is always live — it's the switch that decides the commit model.
+        self.cb_lazer_enabled.toggled.connect(self._on_client_toggle_changed)
+        self.cb_stable_enabled.toggled.connect(self._on_client_toggle_changed)
         self.cb_autosave.toggled.connect(self._on_autosave_toggled)
         # Combos must not change on an accidental wheel scroll (item 16).
         wheel_guard.guard(self.lang, self.theme, self.zip)
@@ -212,6 +214,7 @@ class SettingsTab(QWidget):
         self._baseline = self._snapshot()
         self._sync_client_import_buttons()   # hide a disabled client's import button
         self._apply_save_mode()              # set Save-button visibility + live commits
+        self._ui_ready = True   # from here on, dropped combo picks may react (v1.4.1)
 
     def _select_theme(self, theme: str) -> None:
         idx = self.theme.findData(theme)
@@ -266,7 +269,16 @@ class SettingsTab(QWidget):
                 "library": self.library.text(), "osu": self.osu.text(),
                 "osu_stable": self.osu_stable.text(),
                 "client_id": self.client_id.text(),
-                "client_secret": self.client_secret.text()}
+                "client_secret": self.client_secret.text(),
+                # Toggles/combos are deferred in manual mode too (v1.4.1), so
+                # they take part in the dirty check + Discard restore.
+                "auto_backup": self.cb_auto_backup.isChecked(),
+                "clear_before": self.cb_clear_before.isChecked(),
+                "check_updates": self.cb_check_updates.isChecked(),
+                "auto_refresh": self.cb_auto_refresh.isChecked(),
+                "lazer_enabled": self.cb_lazer_enabled.isChecked(),
+                "stable_enabled": self.cb_stable_enabled.isChecked(),
+                "zip": self.zip.currentData()}
 
     def _is_dirty(self) -> bool:
         return self._snapshot() != self._baseline
@@ -277,6 +289,23 @@ class SettingsTab(QWidget):
         self.osu_stable.setText(snap["osu_stable"])
         self.client_id.setText(snap["client_id"])
         self.client_secret.setText(snap["client_secret"])
+        # Restore the deferred toggles WITHOUT re-triggering their handlers
+        # (they'd re-mark the tab dirty, or re-commit in auto mode).
+        boxes = ((self.cb_auto_backup, "auto_backup"),
+                 (self.cb_clear_before, "clear_before"),
+                 (self.cb_check_updates, "check_updates"),
+                 (self.cb_auto_refresh, "auto_refresh"),
+                 (self.cb_lazer_enabled, "lazer_enabled"),
+                 (self.cb_stable_enabled, "stable_enabled"))
+        for cb, key in boxes:
+            cb.blockSignals(True)
+            cb.setChecked(bool(snap[key]))
+            cb.blockSignals(False)
+        self.zip.blockSignals(True)
+        idx = self.zip.findData(snap["zip"])
+        if idx >= 0:
+            self.zip.setCurrentIndex(idx)
+        self.zip.blockSignals(False)
 
     def confirm_leave(self) -> bool:
         """Called before leaving Settings / on quit. Returns True when it's OK to
@@ -395,7 +424,9 @@ class SettingsTab(QWidget):
     def _reload_zip_options(self) -> None:
         """Rebuild the Processed-.zip-action combo. The 'Upload to Drive & remove'
         option is offered only while Drive is connected; rebuilt on retranslate and
-        whenever the Drive connection changes."""
+        whenever the Drive connection changes. If the current pick is dropped
+        (Drive disconnected while 'drive' was selected), don't lose it silently:
+        commit the fallback in Auto mode, mark the tab dirty in manual mode."""
         t = self.ctx.t
         cur = self.zip.currentData() or self.ctx.cfg.zip_disposal
         try:
@@ -403,6 +434,7 @@ class SettingsTab(QWidget):
         except Exception:
             connected = False
         order = ["recycle", "move", "delete"] + (["drive"] if connected else [])
+        dropped = cur not in order
         self.zip.blockSignals(True)
         self.zip.clear()
         for v in order:
@@ -410,6 +442,8 @@ class SettingsTab(QWidget):
         idx = self.zip.findData(cur if cur in order else "recycle")
         self.zip.setCurrentIndex(idx if idx >= 0 else 0)
         self.zip.blockSignals(False)
+        if dropped and getattr(self, "_ui_ready", False):
+            self._on_setting_changed()   # commit (auto) or flag unsaved (manual)
 
     def _refresh_drive_status(self) -> None:
         t = self.ctx.t
@@ -502,13 +536,27 @@ class SettingsTab(QWidget):
         self.ctx.save_config()
         self.mw.apply_theme(theme)
 
+    def _commit_api_creds(self) -> bool:
+        """Persist the API credential fields (used by the reference/lost-map
+        buttons). Empty fields are NOT written — a stray click must never wipe
+        stored credentials — and the dirty baseline is synced so a later
+        Discard can't roll the fields back to a stale snapshot. Returns True
+        when both credentials are present."""
+        cfg = self.ctx.cfg
+        cid = self.client_id.text().strip()
+        cs = self.client_secret.text().strip()
+        if cid and cs:
+            cfg.osu_client_id = cid
+            cfg.osu_client_secret = cs
+            self.ctx.save_config()
+            self._baseline["client_id"] = cid
+            self._baseline["client_secret"] = cs
+            return True
+        return False
+
     # -- reference sync ------------------------------------------------------
     def _update_reference(self) -> None:
-        cfg = self.ctx.cfg
-        cfg.osu_client_id = self.client_id.text().strip()
-        cfg.osu_client_secret = self.client_secret.text().strip()
-        self.ctx.save_config()
-        if not cfg.osu_client_id or not cfg.osu_client_secret:
+        if not self._commit_api_creds():
             QMessageBox.information(self, self.ctx.t("app_title"),
                                     self.ctx.t("reference_help"))
             return
@@ -539,11 +587,7 @@ class SettingsTab(QWidget):
         self.lbl_lost_status.setText(self.ctx.t("lost_maps_count", n=n) if n else "")
 
     def _scan_lost_maps(self) -> None:
-        cfg = self.ctx.cfg
-        cfg.osu_client_id = self.client_id.text().strip()
-        cfg.osu_client_secret = self.client_secret.text().strip()
-        self.ctx.save_config()
-        if not (cfg.osu_client_id and cfg.osu_client_secret):
+        if not self._commit_api_creds():
             QMessageBox.information(self, self.ctx.t("app_title"),
                                     self.ctx.t("lost_maps_needs_api"))
             return
@@ -629,12 +673,18 @@ class SettingsTab(QWidget):
         QMessageBox.critical(self, self.ctx.t("app_title"), msg)
 
     # -- physical-copy toggle (guarded delete) -------------------------------
+    def _set_saved_text(self, text: str) -> None:
+        """Show a status on the shared saved-label WITHOUT hiding a live
+        "unsaved changes" hint — the dirty warning wins while edits are pending."""
+        self.saved_label.setText(
+            self.ctx.t("settings_dirty") if self._is_dirty() else text)
+
     def _on_physical_toggled(self, checked: bool) -> None:
         cfg = self.ctx.cfg
         if checked:  # turning ON just keeps future copies — nothing to delete
             cfg.library_physical_copy = True
             self.ctx.save_config()
-            self.saved_label.setText(self.ctx.t("saved"))
+            self._set_saved_text(self.ctx.t("saved"))
             return
         t = self.ctx.t
         dlg = CountdownConfirmDialog(
@@ -650,13 +700,45 @@ class SettingsTab(QWidget):
         self.saved_label.setText(t("working"))
         w = Worker(self.ctx.services.purge_library_files)
         self._threads.append(w)
-        w.succeeded.connect(lambda res: self.saved_label.setText(
+        w.succeeded.connect(lambda res: self._set_saved_text(
             self.ctx.t("physical_off_done", n=res["deleted"])))
         w.failed.connect(lambda m: QMessageBox.critical(self, t("app_title"), m))
         w.finished.connect(lambda: self._threads.remove(w) if w in self._threads else None)
         w.start()
 
-    # -- live toggle apply ---------------------------------------------------
+    # -- toggle commit model (v1.4.1) ----------------------------------------
+    _TOGGLE_KEYS = ("auto_backup", "clear_before", "check_updates",
+                    "auto_refresh", "lazer_enabled", "stable_enabled", "zip")
+
+    def _mark_dirty(self) -> None:
+        self.saved_label.setText(self.ctx.t("settings_dirty"))
+
+    def _sync_toggle_baseline(self) -> None:
+        """Mark ONLY the toggle keys as saved in the dirty baseline. Never
+        blanket-sync the whole snapshot here: a pending (not yet committed)
+        path/API text edit must stay dirty or it would be silently blessed
+        without ever reaching the config."""
+        snap = self._snapshot()
+        for k in self._TOGGLE_KEYS:
+            self._baseline[k] = snap[k]
+
+    def _on_setting_changed(self, *_) -> None:
+        """A deferred toggle/combo changed: commit right away in Auto-Save mode,
+        otherwise just mark the tab dirty and wait for Save."""
+        if self.ctx.cfg.settings_autosave:
+            self._apply_toggles()
+            self._sync_toggle_baseline()
+        else:
+            self._mark_dirty()
+
+    def _on_client_toggle_changed(self, *_) -> None:
+        if self.ctx.cfg.settings_autosave:
+            self._apply_client_toggles()
+            self._sync_toggle_baseline()
+        else:
+            self._mark_dirty()   # visibility re-syncs when Save commits it
+
+    # -- toggle apply (called on commit) -------------------------------------
     def _apply_toggles(self, *_) -> None:
         cfg = self.ctx.cfg
         cfg.library_physical_copy = self.cb_physical.isChecked()
@@ -704,7 +786,11 @@ class SettingsTab(QWidget):
 
     # -- Save / Auto-Save commit mode (v1.4) ---------------------------------
     def _on_autosave_toggled(self, *_) -> None:
-        self._apply_toggles()      # persist settings_autosave (+ the other toggles)
+        # Entering OR leaving Auto commits the current TOGGLE state, then the
+        # commit wiring is switched; _apply_save_mode commits any pending
+        # path/API text edits (they stay dirty until actually saved).
+        self._apply_client_toggles()   # persist toggles + re-sync visibility
+        self._sync_toggle_baseline()
         self._apply_save_mode()
 
     def _apply_save_mode(self) -> None:
@@ -739,9 +825,14 @@ class SettingsTab(QWidget):
         packs = self.packs.text().strip()
         output = self.output.text().strip()
         library = self.library.text().strip()
-        # Validate the user-editable folders BEFORE mutating cfg, so a bad path
-        # (Auto-save commits on focus-out) can never corrupt the live config —
-        # nothing is assigned unless the paths are actually creatable.
+        # Commit the TOGGLE unit first: it has no validity constraint, so a bad
+        # folder path must never hold unrelated toggle/zip edits hostage (or a
+        # later Discard-to-escape would throw them away with the bad path).
+        self._apply_client_toggles()
+        self._sync_toggle_baseline()
+        # Validate the user-editable folders BEFORE mutating the path fields of
+        # cfg, so a bad path (Auto-save commits on focus-out) can never corrupt
+        # the live config — nothing is assigned unless the paths are creatable.
         try:
             for d in (packs, output, library):
                 Path(d).mkdir(parents=True, exist_ok=True)
@@ -761,7 +852,7 @@ class SettingsTab(QWidget):
         cfg.osu_client_id = self.client_id.text().strip()
         cfg.osu_client_secret = self.client_secret.text().strip()
         cfg.ensure_dirs()   # create the derived data/logs dirs (user dirs already made)
-        self._apply_toggles()   # persists cfg (now-validated paths + toggles + API)
+        self.ctx.save_config()   # persist the path/API unit (toggles saved above)
         self.ctx.log.info("SETTINGS_SAVE", changed="paths,toggles,api")
         self.saved_label.setText(self.ctx.t("saved"))
         self._baseline = self._snapshot()   # edits are now saved — clear dirty (item 11)

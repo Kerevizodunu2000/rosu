@@ -194,6 +194,14 @@ def load_config() -> Config:
 
 
 def save_config(cfg: Config) -> None:
+    # ⚠ Always writes to the app root's config.json — NOT to cfg.root — because
+    # the on-disk location must match where load_config() looks (cfg.root can
+    # legitimately differ, e.g. a declined folder self-heal). Consequence for
+    # tests/tools: any harness that builds a Config(root=tmp) and triggers a
+    # save MUST monkeypatch _config_file (as tests/test_config.py does), or it
+    # will clobber the developer's real config.json. This actually happened: an
+    # offscreen UI harness overwrote the real config and wiped the stored osu!
+    # API credentials.
     path = _config_file()
     payload = asdict(cfg)
     payload.pop("_extra", None)

@@ -40,6 +40,7 @@ STRINGS: dict[str, dict[str, str]] = {
     "state_new": {"en": "new", "tr": "yeni"},
     "state_known": {"en": "already added", "tr": "zaten eklenmiş"},
     "missing_banner": {"en": "Possibly missing: {items}", "tr": "Eksik olabilir: {items}"},
+    "missing_banner_sure": {"en": "Missing: {items}", "tr": "Eksik: {items}"},
     "missing_show_link": {"en": "show these →", "tr": "bunları göster →"},
     "only_missing": {"en": "Only missing", "tr": "Sadece eksik"},
     "only_extra": {"en": "With extra files", "tr": "Ek dosyalı"},
@@ -789,15 +790,25 @@ STRINGS: dict[str, dict[str, str]] = {
         "tr": "{clients} Ayarlar'da kapalı olduğu için buradaki kısayolları "
               "gizlendi. Geri getirmek için Ayarlar'dan tekrar aç."},
     "refreshing": {"en": "Refreshing…", "tr": "Yenileniyor…"},
+    "settings_dirty": {"en": "Unsaved changes — press Save.",
+                       "tr": "Kaydedilmemiş değişiklikler — Kaydet'e bas."},
     "packs_download_hint": {
         "en": "Missing a pack? Every official beatmap pack can be downloaded "
               "from <a href='https://osu.ppy.sh/beatmaps/packs'>"
               "osu.ppy.sh/beatmaps/packs</a> — drop the downloads into Packs/ "
-              "and unpack.",
+              "and unpack. <b>Double-click a red (missing) row to open that "
+              "pack's page; a single click copies its link (Ctrl-select "
+              "several to collect all their links). Right-click any pack for "
+              "its osu! page.</b>",
         "tr": "Eksik paket mi var? Tüm resmî beatmap paketleri "
               "<a href='https://osu.ppy.sh/beatmaps/packs'>"
               "osu.ppy.sh/beatmaps/packs</a> adresinden indirilebilir — "
-              "indirdiklerini Packs/ klasörüne at ve aç."},
+              "indirdiklerini Packs/ klasörüne at ve aç. <b>Kırmızı (eksik) "
+              "satıra çift tıklayınca o paketin sayfası açılır; tek tık "
+              "linkini kopyalar (Ctrl ile çoklu seçersen tüm linkler "
+              "toplanır). Herhangi bir pakete sağ tıklayıp osu! sayfasını "
+              "açabilirsin.</b>"},
+    "menu_open_osu_page": {"en": "Open osu! page", "tr": "osu! sayfasını aç"},
     "sc_jobqueue_title": {"en": "Job queue", "tr": "İş kuyruğu"},
     "job_added": {"en": "Added to the queue.", "tr": "Kuyruğa eklendi."},
     "job_cancelled_rest": {"en": "Cancelled — the rest keep going.",
@@ -900,7 +911,20 @@ STRINGS: dict[str, dict[str, str]] = {
         "tr": "Açıklama — ne oldu ve nasıl tekrarlanır"},
     "report_contact": {"en": "Your e-mail (optional, so we can reply)",
                        "tr": "E-postan (isteğe bağlı, yanıt verebilmemiz için)"},
-    "report_attach": {"en": "Attach screenshot…", "tr": "Ekran görüntüsü ekle…"},
+    "report_attach": {"en": "Attach screenshot (max 3 MB)…",
+                      "tr": "Ekran görüntüsü ekle (en fazla 3 MB)…"},
+    "report_bad_email": {
+        "en": "That e-mail address doesn't look valid (e.g. you@example.com). "
+              "Fix it or leave the field empty.",
+        "tr": "Bu e-posta adresi geçerli görünmüyor (ör. sen@ornek.com). "
+              "Düzelt ya da alanı boş bırak."},
+    "report_web_alt": {
+        "en": "You can also send this report from the website: "
+              "<a href='https://rosu-web.vercel.app/report'>"
+              "rosu-web.vercel.app/report</a>.",
+        "tr": "Bu bildirimi web sitesinden de gönderebilirsin: "
+              "<a href='https://rosu-web.vercel.app/report'>"
+              "rosu-web.vercel.app/report</a>."},
     "report_disclosure": {
         "en": "Sent to the Rosu team: your text, the app version, your OS and UI "
               "language, and any screenshot you attach (plus, on the server, a "

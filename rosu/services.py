@@ -1377,6 +1377,11 @@ class Services:
             self._reference_cache = osu_api.load_reference(self.cfg.reference_path)
         return self._reference_cache
 
+    def reference_synced(self) -> bool:
+        """Whether the authoritative osu! pack reference has been fetched — the
+        UI upgrades "possibly missing" wording to a definite "missing" then."""
+        return bool(self._reference())
+
     def update_reference(self, progress=None) -> dict:
         ref = osu_api.fetch_reference(
             self.cfg.osu_client_id, self.cfg.osu_client_secret,

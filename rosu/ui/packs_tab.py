@@ -2,6 +2,8 @@
 """Packs tab: every pack grouped by category, with confirmed red gaps, search."""
 from __future__ import annotations
 
+import re
+
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QBrush, QColor
 from PySide6.QtWidgets import (
@@ -15,6 +17,12 @@ from .copy_table import CopyTable, SortItem
 _RED_BG = QColor("#FFC7CE")
 _RED_FG = QColor("#9C0006")
 _COLS = ["Category", "Series", "Number / Season", "Code", "Title", "Mode", "Tracks", "Extracted At"]
+
+# osu!'s official pack pages live at /beatmaps/packs/<code> for letter+number
+# codes (S1809, SM363, T12, L5, …). Only offer the link for codes that match —
+# a seasonal/odd code would just 404.
+_PACK_URL = "https://osu.ppy.sh/beatmaps/packs/{code}"
+_CODE_RE = re.compile(r"^[A-Za-z]{1,3}\d+$")
 
 
 class PacksTab(QWidget):
@@ -71,6 +79,7 @@ class PacksTab(QWidget):
         self.cb_extra.setText(self.ctx.t("only_extra"))
         self.hint.setText(self.ctx.t("copy_hint"))
         self.download_hint.setText(self.ctx.t("packs_download_hint"))
+        self.table._menu_open_url = self.ctx.t("menu_open_osu_page")
         self.table.set_menu_labels(self.ctx.t("copy_names_action"),
                                    self.ctx.t("copy_table_action"))
         self.search.setToolTip(self.ctx.t("tip_packs_search"))
@@ -169,6 +178,13 @@ class PacksTab(QWidget):
                         item.setForeground(QBrush(_RED_FG))
                     self.table.setItem(r, c, item)
                 self.table.set_clean_name(r, full if (gr.present and full) else (gr.code or ""))
+                # Every valid-coded pack gets an "Open osu! page" context entry;
+                # for a MISSING (red) row the link becomes the click action too:
+                # single-click copies it (multi-select collects one per line),
+                # double-click opens the download page (v1.4.1).
+                if gr.code and _CODE_RE.match(gr.code):
+                    self.table.set_row_url(r, _PACK_URL.format(code=gr.code),
+                                           primary=not gr.present)
         finally:
             self.table.setSortingEnabled(True)
             self.table.setUpdatesEnabled(True)

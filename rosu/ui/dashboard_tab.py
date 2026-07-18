@@ -257,7 +257,15 @@ class DashboardTab(QWidget):
             if len(items) > 14:
                 shown += f"  (+{len(items) - 14})"
             link = self.ctx.t("missing_show_link")
-            self.banner.setText(self.ctx.t("missing_banner", items=shown)
+            # With the osu! reference synced the gap list is authoritative —
+            # say "Missing"; without it, Standard-series inference only →
+            # keep the honest "Possibly missing". (Deliberately a coarse flag:
+            # after a sync every listed item is either reference-validated or a
+            # Standard-series gap — Standard numbering is gapless by design —
+            # so both wordings stay truthful for everything actually shown.)
+            key = ("missing_banner_sure" if self.services.reference_synced()
+                   else "missing_banner")
+            self.banner.setText(self.ctx.t(key, items=shown)
                                 + f"  <a href='#missing'>{link}</a>")
             self.banner.setVisible(True)
         else:

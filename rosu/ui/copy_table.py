@@ -26,6 +26,8 @@ from PySide6.QtWidgets import (
 _CLEAN_ROLE = Qt.UserRole + 11  # per-row clean copy name (single-click copy)
 _COPY_ROLE = Qt.UserRole + 12   # per-cell TSV copy override (Ctrl+C / double-click)
 _PATH_ROLE = Qt.UserRole + 13   # per-row file path for "Open file location" (v1.3)
+_URL_ROLE = Qt.UserRole + 14    # per-row web URL ("Open osu! page", v1.4.1)
+_URL_PRIMARY_ROLE = Qt.UserRole + 15  # True → clicks act on the URL (missing rows)
 
 
 class SortItem(QTableWidgetItem):
@@ -61,6 +63,7 @@ class CopyTable(QTableWidget):
         self._menu_names = "Copy names"          # overridable via set_menu_labels
         self._menu_table = "Copy as table (Ctrl+C)"
         self._menu_open_location = ""            # set via retranslate; empty = hidden
+        self._menu_open_url = ""                 # set via retranslate; empty = hidden
         self._widths_seeded = False
         self.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.setSelectionBehavior(QAbstractItemView.SelectRows)
@@ -128,6 +131,34 @@ class CopyTable(QTableWidget):
         val = item.data(_PATH_ROLE)
         return val if val else ""
 
+    def set_row_url(self, row: int, url: str, primary: bool = False) -> None:
+        """Attach a web URL to this row (v1.4.1 — the Packs tab's osu! pack
+        pages). Every URL row gains an "Open osu! page" context-menu entry.
+        With ``primary=True`` (missing packs) the URL also becomes what clicks
+        act on: single-click copies the link (multi-select collects one per
+        line) and double-click opens the page in the browser."""
+        item = self.item(row, self._name_column)
+        if item is not None:
+            item.setData(_URL_ROLE, url)
+            item.setData(_URL_PRIMARY_ROLE, bool(primary))
+
+    def _row_url(self, row: int) -> str:
+        item = self.item(row, self._name_column)
+        if item is None:
+            return ""
+        return item.data(_URL_ROLE) or ""
+
+    def _row_url_primary(self, row: int) -> bool:
+        item = self.item(row, self._name_column)
+        return bool(item is not None and item.data(_URL_PRIMARY_ROLE))
+
+    @staticmethod
+    def _open_url(url: str) -> None:
+        if url.startswith("https://"):
+            from PySide6.QtCore import QUrl
+            from PySide6.QtGui import QDesktopServices
+            QDesktopServices.openUrl(QUrl(url))
+
     def _clean_name(self, row: int) -> str:
         item = self.item(row, self._name_column)
         if item is None:
@@ -143,8 +174,12 @@ class CopyTable(QTableWidget):
         self._copy_names(rows)
 
     def _on_cell_double_clicked(self, row: int, col: int) -> None:
-        """Copy just this one cell's value — its Ctrl+C override if set (e.g. the
-        full source names), else the shown text (item 3)."""
+        """A primary-URL row (missing pack) opens its osu! page in the browser;
+        otherwise copy just this one cell's value — its Ctrl+C override if set
+        (e.g. the full source names), else the shown text (item 3)."""
+        if self._row_url_primary(row):
+            self._open_url(self._row_url(row))
+            return
         item = self.item(row, col)
         if item is None:
             return
@@ -153,9 +188,17 @@ class CopyTable(QTableWidget):
             QApplication.clipboard().setText(str(value))
 
     def _copy_names(self, rows: list[int]) -> None:
-        names = [self._clean_name(r) for r in rows if self._clean_name(r)]
-        if names:
-            QApplication.clipboard().setText("\n".join(names))
+        """Single-click copy: one line per selected row — the download URL for a
+        primary-URL (missing) row, the clean name for everything else. A Ctrl
+        multi-select over missing rows therefore collects all their links."""
+        out = []
+        for r in rows:
+            if self._row_url_primary(r) and self._row_url(r):
+                out.append(self._row_url(r))
+            elif self._clean_name(r):
+                out.append(self._clean_name(r))
+        if out:
+            QApplication.clipboard().setText("\n".join(out))
 
     def _show_menu(self, pos) -> None:
         rows = self._selected_rows()
@@ -180,6 +223,13 @@ class CopyTable(QTableWidget):
                 act_open.triggered.connect(
                     lambda: self.openLocationRequested.emit(path))
                 menu.addAction(act_open)
+        if len(rows) == 1 and self._menu_open_url:
+            url = self._row_url(rows[0])
+            if url:
+                menu.addSeparator()
+                act_url = QAction(self._menu_open_url, self)
+                act_url.triggered.connect(lambda: self._open_url(url))
+                menu.addAction(act_url)
         menu.exec(self.viewport().mapToGlobal(pos))
 
     def keyPressEvent(self, event) -> None:

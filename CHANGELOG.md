@@ -10,6 +10,41 @@ the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-07-18
+
+**Bug-fix + polish release** for issues found live-testing v1.4.0.
+
+### Fixed
+- **"Auto-Save off" now genuinely means manual.** Checkboxes and the
+  processed-zip combo used to apply immediately in BOTH modes; with Auto-Save
+  off they now only mark the tab as having unsaved changes ("Unsaved changes —
+  press Save."), commit on Save, restore on Discard, and trigger the leave
+  guard. In Auto-Save mode everything still applies instantly. (Language/Theme
+  stay live in both modes — they're visual pickers; the physical-copy switch
+  keeps its own guarded confirm because turning it off deletes files.)
+- **Stored osu! API credentials can no longer be wiped.** "Update reference"
+  and "Scan for lost maps" used to write the credential fields into the config
+  before validating them — a click with empty fields erased saved credentials.
+  They now refuse to overwrite stored credentials with empty fields. (If your
+  Client ID/Secret vanished, this was the cause — re-enter them once; sorry.)
+
+### Added
+- **Packs tab → osu! pack pages**: double-click a red (missing) row to open
+  that pack's page at `osu.ppy.sh/beatmaps/packs/<code>`; a single click copies
+  the link (Ctrl-select several missing rows to collect all their links, e.g.
+  to queue downloads); right-click any pack for an "Open osu! page" action.
+- **Report form input checks**: the optional reply e-mail must look like a real
+  address (obvious typos are caught before sending); the title is capped at 200
+  and the description at 5 000 characters with a live counter (the server's own
+  limits, so nothing is silently cut); the attach button states the 3 MB image
+  cap; and the dialog now always shows that the same report can be sent from
+  <https://rosu-web.vercel.app/report>.
+
+### Changed
+- The Dashboard banner says **"Missing:"** when the osu! reference has been
+  synced (the gap list is then authoritative) and keeps the cautious
+  **"Possibly missing:"** wording otherwise.
+
 ## [1.4.0] - 2026-07-18
 
 **Settings overhaul** — per-client on/off, Auto-Save, and an in-app bug-report

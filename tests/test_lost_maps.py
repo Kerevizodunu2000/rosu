@@ -102,6 +102,14 @@ def _svc(tmp_path):
     return cfg, db, Services(cfg, db, DummyLog())
 
 
+def test_reference_synced_flag(tmp_path):
+    cfg, db, svc = _svc(tmp_path)
+    assert svc.reference_synced() is False      # no reference fetched yet
+    svc._reference_cache = {"count": 4130}      # as if update_reference ran
+    assert svc.reference_synced() is True
+    db.close()
+
+
 def test_scan_lost_maps_gated_without_api(tmp_path):
     cfg, db, svc = _svc(tmp_path)
     assert svc.scan_lost_maps() == {"error": "no_api"}

@@ -5,6 +5,8 @@ endpoint (see :mod:`rosu.report` and ``rosu-web/``). On any failure it shows the
 contact e-mail so the user can still reach us."""
 from __future__ import annotations
 
+import re
+
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QDialog, QDialogButtonBox, QFileDialog, QHBoxLayout, QLabel, QLineEdit,
@@ -13,6 +15,15 @@ from PySide6.QtWidgets import (
 
 from .. import report
 from ..workers import Worker
+
+# Mirror the rosu-web endpoint's LIMITS so the user hits a clear local message,
+# never a silent server-side truncation.
+_MAX_TITLE = 200
+_MAX_DESC = 5000
+_MAX_CONTACT = 200
+# Deliberately loose: just "something@something.tld" — enough to catch obvious
+# typos (a missing @ or TLD) without rejecting unusual-but-valid addresses.
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]{2,}$")
 
 
 class ReportDialog(QDialog):
@@ -28,16 +39,24 @@ class ReportDialog(QDialog):
 
         root.addWidget(QLabel(t("report_field_title")))
         self.title = QLineEdit()
+        self.title.setMaxLength(_MAX_TITLE)
         root.addWidget(self.title)
 
         root.addWidget(QLabel(t("report_field_desc")))
         self.desc = QPlainTextEdit()
         self.desc.setMinimumHeight(120)
         root.addWidget(self.desc)
+        # Live n/5000 counter; over-long text is trimmed to the server's cap so
+        # nothing is ever silently cut on the other end.
+        self.desc_count = QLabel(f"0/{_MAX_DESC}", objectName="status")
+        self.desc_count.setAlignment(Qt.AlignRight)
+        root.addWidget(self.desc_count)
+        self.desc.textChanged.connect(self._on_desc_changed)
 
         root.addWidget(QLabel(t("report_contact")))
         self.contact = QLineEdit()
         self.contact.setPlaceholderText("you@example.com")
+        self.contact.setMaxLength(_MAX_CONTACT)
         root.addWidget(self.contact)
 
         arow = QHBoxLayout()
@@ -71,6 +90,14 @@ class ReportDialog(QDialog):
         self.agree.setOpenExternalLinks(True)
         root.addWidget(self.agree)
 
+        # Always-visible pointer to the equivalent web form — not only on
+        # failure — so users know they can report from the site too.
+        self.web_alt = QLabel(t("report_web_alt"), objectName="status")
+        self.web_alt.setWordWrap(True)
+        self.web_alt.setTextFormat(Qt.RichText)
+        self.web_alt.setOpenExternalLinks(True)
+        root.addWidget(self.web_alt)
+
         self.status = QLabel("", objectName="status")
         self.status.setWordWrap(True)
         # RichText with MANUAL link handling (openExternalLinks stays False):
@@ -103,6 +130,20 @@ class ReportDialog(QDialog):
             from PySide6.QtGui import QDesktopServices
             QDesktopServices.openUrl(QUrl(href))
 
+    # -- field limits --------------------------------------------------------
+    def _on_desc_changed(self) -> None:
+        text = self.desc.toPlainText()
+        if len(text) > _MAX_DESC:
+            cursor = self.desc.textCursor()
+            pos = min(cursor.position(), _MAX_DESC)
+            self.desc.blockSignals(True)
+            self.desc.setPlainText(text[:_MAX_DESC])
+            cursor.setPosition(pos)
+            self.desc.setTextCursor(cursor)
+            self.desc.blockSignals(False)
+            text = text[:_MAX_DESC]
+        self.desc_count.setText(f"{len(text)}/{_MAX_DESC}")
+
     # -- attachment ----------------------------------------------------------
     def _pick_image(self) -> None:
         t = self.ctx.t
@@ -134,6 +175,13 @@ class ReportDialog(QDialog):
         desc = self.desc.toPlainText().strip()
         if not title or not desc:
             QMessageBox.information(self, t("app_title"), t("report_need_fields"))
+            return
+        contact_text = self.contact.text().strip()
+        if contact_text and not _EMAIL_RE.match(contact_text):
+            # Optional field, but if given it must LOOK like an address —
+            # otherwise a typo silently kills our only way to reply.
+            QMessageBox.warning(self, t("app_title"), t("report_bad_email"))
+            self.contact.setFocus()
             return
         if self.hp.text().strip():        # honeypot tripped — look successful, send nothing
             self.accept()
