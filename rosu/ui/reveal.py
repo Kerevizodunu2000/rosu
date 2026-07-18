@@ -4,6 +4,7 @@ in Explorer; elsewhere it opens the containing folder. Missing files are
 reported, not silently ignored."""
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -33,8 +34,12 @@ def reveal_in_explorer(parent, ctx, path) -> None:
             # spaces ("/select,C:\...\a b.osz"), so Explorer treats it as a path,
             # fails, and just opens Documents. A raw command string goes straight
             # to CreateProcess (no shell); Windows file names can't contain '"',
-            # so there is no injection surface.
-            subprocess.Popen(f'explorer /select,"{p}"')
+            # so there is no injection surface. Use the fully-qualified path to
+            # explorer.exe so a planted "explorer.exe" on the search path/CWD
+            # can't be picked up instead.
+            explorer = os.path.join(
+                os.environ.get("WINDIR", r"C:\Windows"), "explorer.exe")
+            subprocess.Popen(f'"{explorer}" /select,"{p}"')
             return
         except OSError:
             pass   # fall through to opening the containing folder

@@ -331,6 +331,19 @@ STRINGS: dict[str, dict[str, str]] = {
     "lost_maps_result": {
         "en": "Checked {checked}, {gone} no longer on osu!.",
         "tr": "{checked} kontrol edildi, {gone} tanesi artık osu!'da yok."},
+    "lost_maps_result_more": {
+        "en": "Checked {checked} sets this run — {gone} no longer on osu!. "
+              "{remaining} sets not checked yet: run the scan again to continue "
+              "(it works in batches of 500 to respect osu!'s API limits).",
+        "tr": "Bu turda {checked} set kontrol edildi — {gone} tanesi artık "
+              "osu!'da yok. {remaining} set henüz kontrol edilmedi: devam etmek "
+              "için taramayı tekrar çalıştır (osu! API limitlerine uymak için "
+              "500'erlik gruplar hâlinde çalışır)."},
+    "lost_maps_result_all": {
+        "en": "All {total} sets in the Library have been checked — {gone} in "
+              "this run no longer on osu!.",
+        "tr": "Kütüphanedeki {total} setin tümü kontrol edildi — bu turda "
+              "{gone} tanesi artık osu!'da yok."},
     "lost_maps_count": {"en": "{n} beatmap(s) no longer on osu!.",
                         "tr": "{n} müzik artık osu!'da yok."},
     "reference_help": {
@@ -395,12 +408,26 @@ STRINGS: dict[str, dict[str, str]] = {
               "sonrası</a> ile lisanslanmıştır. HİÇBİR GARANTİSİ YOKTUR.<br>"
               "© 2026 Halil Şafak Şimşek — gayriresmî, hayran yapımı bir araçtır; "
               "ppy Pty Ltd veya osu! ile bağlantılı ya da onaylı değildir."},
+    "about_legal": {
+        "en": "<a href='https://rosu-web.vercel.app/privacy'>Privacy Policy</a> · "
+              "<a href='https://rosu-web.vercel.app/terms'>Terms</a>",
+        "tr": "<a href='https://rosu-web.vercel.app/privacy'>Gizlilik Politikası</a> · "
+              "<a href='https://rosu-web.vercel.app/terms'>Şartlar</a>"},
     "about_contact": {
-        "en": "Found a bug or have a suggestion for improving Rosu? Email "
-              "<a href='mailto:rosu.app@gmail.com'>rosu.app@gmail.com</a>.",
-        "tr": "Bir hatayla mı karşılaştınız ya da Rosu için bir geliştirme öneriniz "
-              "mi var? <a href='mailto:rosu.app@gmail.com'>rosu.app"
-              "@gmail.com</a> adresine yazabilirsiniz."},
+        "en": "Prefer e-mail? Reach us at rosu.app@gmail.com (select and copy it).",
+        "tr": "E-postayı mı tercih edersin? rosu.app@gmail.com adresinden "
+              "ulaşabilirsin (seçip kopyalayabilirsin)."},
+    "about_social": {
+        "en": "Follow Rosu: "
+              "<a href='https://www.instagram.com/rosu.app/'>Instagram</a> · "
+              "<a href='https://www.youtube.com/@RosuApp'>YouTube</a> · "
+              "<a href='https://www.reddit.com/user/RosuApp/'>Reddit</a> · "
+              "<a href='https://x.com/RosuApp'>X</a>",
+        "tr": "Rosu'yu takip et: "
+              "<a href='https://www.instagram.com/rosu.app/'>Instagram</a> · "
+              "<a href='https://www.youtube.com/@RosuApp'>YouTube</a> · "
+              "<a href='https://www.reddit.com/user/RosuApp/'>Reddit</a> · "
+              "<a href='https://x.com/RosuApp'>X</a>"},
     "about_third_party": {"en": "Bundled third-party components:",
                           "tr": "Paketlenmiş üçüncü taraf bileşenleri:"},
     "about_third_party_missing": {
@@ -564,10 +591,15 @@ STRINGS: dict[str, dict[str, str]] = {
         "tr": "Gerçekten eksik paketleri tespit etmek için osu! API'sinden güncel "
               "resmi paket listesini çeker."},
     "tip_scan_lost": {
-        "en": "Check which beatmaps in your Library no longer exist on osu! "
-              "(deleted/taken down). Needs osu! API credentials.",
-        "tr": "Kütüphanendeki hangi müziklerin artık osu!'da olmadığını (silinmiş/"
-              "kaldırılmış) kontrol eder. osu! API bilgileri gerekir."},
+        "en": "Asks the osu! API about each beatmapset in your Library: still "
+              "there = fine, 404 = deleted/taken down (lost). Works in batches "
+              "of 500 per run (API rate limits) — never-checked sets first, so "
+              "run it again to keep going. Needs osu! API credentials.",
+        "tr": "Kütüphanendeki her beatmapset'i osu! API'sine sorar: duruyorsa "
+              "sorun yok, 404 ise silinmiş/kaldırılmış (kayıp). API limitleri "
+              "nedeniyle her çalıştırmada 500'erlik gruplar hâlinde ilerler — "
+              "önce hiç kontrol edilmemişler; devam etmek için tekrar çalıştır. "
+              "osu! API bilgileri gerekir."},
     "tip_import_stable": {"en": "Import beatmaps already installed in your osu!(stable) client.",
                          "tr": "osu!(stable) istemcinizde zaten yüklü olan müzikleri içe aktarır."},
     "tip_import_lazer": {"en": "Import beatmaps already installed in your osu!lazer client.",
@@ -620,13 +652,16 @@ STRINGS: dict[str, dict[str, str]] = {
     "sc_library": {"en": "Library", "tr": "Kütüphane"},
     "sc_drive": {"en": "Drive backup", "tr": "Drive yedeği"},
     "sc_count_fmt": {"en": "{n} sets", "tr": "{n} set"},
+    "sc_count_recorded": {"en": "{n} recorded", "tr": "{n} kayıtlı"},
     "sc_installed": {"en": "installed", "tr": "kurulu"},
     "sc_not_installed": {"en": "not installed", "tr": "yüklü değil"},
     "sc_lazer_from_library": {
-        "en": "osu!lazer's own list can't be read directly, so this is the number "
-              "of your Library sets recorded as installed in osu!lazer.",
-        "tr": "osu!lazer'in kendi listesi doğrudan okunamadığından bu sayı, "
-              "Library'nde osu!lazer'da kayıtlı görünen setlerden oluşturulmuştur."},
+        "en": "osu!lazer's library can't be read directly, so this shows how many "
+              "sets Rosu has recorded from osu!lazer (imported or transferred) — "
+              "your actual osu!lazer library is usually larger.",
+        "tr": "osu!lazer'in kütüphanesi doğrudan okunamadığından bu, Rosu'nun "
+              "osu!lazer'dan kaydettiği (içe aktarılan/aktarılan) set sayısını "
+              "gösterir — gerçek osu!lazer kütüphanen genellikle daha büyüktür."},
 
     "sc_transfer_title": {"en": "Transfer between clients",
                           "tr": "İstemciler arası aktarım"},
@@ -669,7 +704,16 @@ STRINGS: dict[str, dict[str, str]] = {
     "sc_split_1g": {"en": "Split 1 GB", "tr": "1 GB'a böl"},
     "sc_split_500m": {"en": "Split 500 MB", "tr": "500 MB'a böl"},
     "sc_export_drive": {"en": "Upload to Drive", "tr": "Drive'a yükle"},
-    "sc_export_share": {"en": "Share link", "tr": "Paylaşım linki"},
+    "sc_export_share": {"en": "Public link (anyone)", "tr": "Herkese açık link"},
+    "sc_share_public_warn": {
+        "en": "This makes the exported archive(s) accessible to ANYONE with the "
+              "link — a public Google Drive share. Beatmap archives contain "
+              "third-party copyrighted audio and artwork, so you are responsible "
+              "for what you share. Continue?",
+        "tr": "Bu, dışa aktarılan arşiv(ler)i linke sahip HERKESE açık hale getirir "
+              "— herkese açık bir Google Drive paylaşımı. Beatmap arşivleri üçüncü "
+              "taraf telifli ses ve görsel içerir; paylaştığından sen sorumlusun. "
+              "Devam edilsin mi?"},
     "btn_export": {"en": "Export…", "tr": "Dışa aktar…"},
     "sc_export_choose": {"en": "Save export as", "tr": "Dışa aktarımı kaydet"},
     "sc_export_done": {
@@ -739,6 +783,21 @@ STRINGS: dict[str, dict[str, str]] = {
 
     # -- İş Kuyruğu / Job queue (v1.3) ---------------------------------------
     "sc_refresh": {"en": "Refresh counts", "tr": "Sayıları yenile"},
+    "sc_client_hidden": {
+        "en": "{clients} is turned off in Settings, so its shortcuts are hidden "
+              "here. Re-enable it in Settings to bring them back.",
+        "tr": "{clients} Ayarlar'da kapalı olduğu için buradaki kısayolları "
+              "gizlendi. Geri getirmek için Ayarlar'dan tekrar aç."},
+    "refreshing": {"en": "Refreshing…", "tr": "Yenileniyor…"},
+    "packs_download_hint": {
+        "en": "Missing a pack? Every official beatmap pack can be downloaded "
+              "from <a href='https://osu.ppy.sh/beatmaps/packs'>"
+              "osu.ppy.sh/beatmaps/packs</a> — drop the downloads into Packs/ "
+              "and unpack.",
+        "tr": "Eksik paket mi var? Tüm resmî beatmap paketleri "
+              "<a href='https://osu.ppy.sh/beatmaps/packs'>"
+              "osu.ppy.sh/beatmaps/packs</a> adresinden indirilebilir — "
+              "indirdiklerini Packs/ klasörüne at ve aç."},
     "sc_jobqueue_title": {"en": "Job queue", "tr": "İş kuyruğu"},
     "job_added": {"en": "Added to the queue.", "tr": "Kuyruğa eklendi."},
     "job_cancelled_rest": {"en": "Cancelled — the rest keep going.",
@@ -799,6 +858,93 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "Export a random sample of this many sets instead of all of them.",
         "tr": "Hepsi yerine bu kadar seti rastgele seçip dışa aktarır."},
     "menu_open_location": {"en": "Open file location", "tr": "Dosya konumunu aç"},
+
+    # -- Settings overhaul (v1.4) --------------------------------------------
+    "set_lazer_enabled": {"en": "Enable osu!lazer", "tr": "osu!lazer'i etkinleştir"},
+    "tip_lazer_enabled": {
+        "en": "Show osu!lazer import/transfer/export controls. Turn off if you "
+              "don't use osu!lazer — its buttons are then hidden everywhere.",
+        "tr": "osu!lazer içe aktar/aktar/dışa aktar denetimlerini gösterir. "
+              "Kullanmıyorsan kapat — düğmeleri her yerde gizlenir."},
+    "set_stable_enabled": {"en": "Enable osu!(stable)", "tr": "osu!(stable)'ı etkinleştir"},
+    "tip_stable_enabled": {
+        "en": "Show osu!(stable) import/transfer/export controls. Off by default; "
+              "turn it on if you use osu!(stable).",
+        "tr": "osu!(stable) içe aktar/aktar/dışa aktar denetimlerini gösterir. "
+              "Varsayılan kapalı; osu!(stable) kullanıyorsan aç."},
+    "set_autosave": {"en": "Auto-save settings (apply immediately)",
+                     "tr": "Ayarları otomatik kaydet (anında uygula)"},
+    "tip_autosave": {
+        "en": "On: every setting (including folders and API keys) is saved the "
+              "moment you change it — the Save button is hidden. Off: paths and "
+              "API keys wait for the Save button.",
+        "tr": "Açık: her ayar (klasörler ve API anahtarları dahil) değiştirdiğin "
+              "an kaydedilir — Kaydet düğmesi gizlenir. Kapalı: yollar ve API "
+              "anahtarları Kaydet düğmesini bekler."},
+    "sc_client_disabled": {
+        "en": "That osu! client is turned off in Settings. Enable it there first.",
+        "tr": "Bu osu! istemcisi Ayarlar'dan kapalı. Önce oradan etkinleştir."},
+
+    # -- bug-report / contact form (v1.4) ------------------------------------
+    "btn_report": {"en": "Report a problem", "tr": "Sorun bildir"},
+    "tip_report": {
+        "en": "Send a bug report or feedback (with an optional screenshot) to the "
+              "Rosu team.",
+        "tr": "Rosu ekibine hata bildirimi veya geri bildirim gönder (isteğe bağlı "
+              "ekran görüntüsüyle)."},
+    "report_title": {"en": "Report a problem / Send feedback",
+                     "tr": "Sorun bildir / Geri bildirim gönder"},
+    "report_field_title": {"en": "Title", "tr": "Başlık"},
+    "report_field_desc": {
+        "en": "Description — what happened, and the steps to reproduce it",
+        "tr": "Açıklama — ne oldu ve nasıl tekrarlanır"},
+    "report_contact": {"en": "Your e-mail (optional, so we can reply)",
+                       "tr": "E-postan (isteğe bağlı, yanıt verebilmemiz için)"},
+    "report_attach": {"en": "Attach screenshot…", "tr": "Ekran görüntüsü ekle…"},
+    "report_disclosure": {
+        "en": "Sent to the Rosu team: your text, the app version, your OS and UI "
+              "language, and any screenshot you attach (plus, on the server, a "
+              "hashed form of your IP address to limit spam). Nothing is sent "
+              "until you press Send.",
+        "tr": "Rosu ekibine gönderilir: yazdıkların, uygulama sürümü, işletim "
+              "sistemin ve arayüz dilin, ve eklediğin ekran görüntüsü (ayrıca "
+              "sunucuda, spam'i sınırlamak için IP adresinin hash'lenmiş bir "
+              "hâli). Gönder'e basana kadar hiçbir şey gönderilmez."},
+    "report_agree": {
+        "en": "By sending, you agree to our "
+              "<a href='https://rosu-web.vercel.app/privacy'>Privacy Policy</a> and "
+              "<a href='https://rosu-web.vercel.app/terms'>Terms</a>.",
+        "tr": "Göndererek "
+              "<a href='https://rosu-web.vercel.app/privacy'>Gizlilik Politikası</a> ve "
+              "<a href='https://rosu-web.vercel.app/terms'>Şartlar</a>'ı kabul etmiş olursun."},
+    "report_submit": {"en": "Send", "tr": "Gönder"},
+    "report_sending": {"en": "Sending…", "tr": "Gönderiliyor…"},
+    "report_sent": {"en": "Thanks! Your report was sent.",
+                    "tr": "Teşekkürler! Bildirimin gönderildi."},
+    "report_need_fields": {"en": "Please fill in both the title and the description.",
+                           "tr": "Lütfen hem başlığı hem açıklamayı doldur."},
+    "report_image_too_big": {
+        "en": "That image is too large (max 3 MB). Please attach a smaller one.",
+        "tr": "Bu görsel çok büyük (en fazla 3 MB). Lütfen daha küçük bir tane ekle."},
+    "report_image_bad": {"en": "That file isn't a supported image.",
+                         "tr": "Bu dosya desteklenen bir görsel değil."},
+    "report_failed_fallback": {
+        "en": "Couldn't send right now. Click <a href='copy-mail'>"
+              "rosu.app@gmail.com</a> to copy the address, or "
+              "<a href='https://rosu-web.vercel.app/report'>use the web form</a>.",
+        "tr": "Şu an gönderilemedi. Adresi kopyalamak için <a href='copy-mail'>"
+              "rosu.app@gmail.com</a>'a tıkla veya "
+              "<a href='https://rosu-web.vercel.app/report'>web formunu kullan</a>."},
+    "report_email_copied": {
+        "en": "rosu.app@gmail.com copied to the clipboard. Or "
+              "<a href='https://rosu-web.vercel.app/report'>use the web form</a>.",
+        "tr": "rosu.app@gmail.com panoya kopyalandı. İstersen "
+              "<a href='https://rosu-web.vercel.app/report'>web formunu kullan</a>."},
+    "report_rate_limited": {
+        "en": "You've sent a few reports in a short time. Please wait a bit and "
+              "try again.",
+        "tr": "Kısa sürede birkaç rapor gönderdin. Lütfen biraz bekleyip tekrar "
+              "dene."},
 }
 
 

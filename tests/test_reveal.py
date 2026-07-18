@@ -27,9 +27,14 @@ def test_reveal_windows_selects_with_switch_outside_quotes(tmp_path, monkeypatch
     monkeypatch.setattr(reveal.subprocess, "Popen",
                         lambda args, **k: launched.append(args))
     reveal.reveal_in_explorer(None, FakeCtx(), f)
+    assert len(launched) == 1
+    cmd = launched[0]
     # The switch must sit OUTSIDE the quotes and the path INSIDE, as a raw string,
     # or Explorer ignores /select and opens Documents for a path with spaces.
-    assert launched == [f'explorer /select,"{f}"']
+    assert cmd.endswith(f'/select,"{f}"')
+    # ...and explorer.exe is invoked by its fully-qualified path (quoted), so a
+    # planted "explorer.exe" on the search path/CWD can't be picked up instead.
+    assert cmd.startswith('"') and 'explorer.exe" /select,' in cmd
 
 
 def test_reveal_non_windows_opens_containing_folder(tmp_path, monkeypatch):

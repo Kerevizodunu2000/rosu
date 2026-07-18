@@ -50,9 +50,25 @@ class AboutDialog(QDialog):
 
         contact = QLabel(t("about_contact"))
         contact.setWordWrap(True)
-        contact.setTextFormat(Qt.RichText)
-        contact.setOpenExternalLinks(True)
+        # Plain, selectable text — NOT a mailto: link. Launching mailto: crashes
+        # with "no mail program installed" on machines without a mail client.
+        contact.setTextInteractionFlags(Qt.TextSelectableByMouse)
         root.addWidget(contact)
+
+        # Social + legal are https:// — safe as clickable RichText (they open in
+        # the browser via QDesktopServices; only mailto: crashes, which is why the
+        # e-mail line above stays plain selectable text).
+        social = QLabel(t("about_social"))
+        social.setWordWrap(True)
+        social.setTextFormat(Qt.RichText)
+        social.setOpenExternalLinks(True)
+        root.addWidget(social)
+
+        legal = QLabel(t("about_legal"))
+        legal.setWordWrap(True)
+        legal.setTextFormat(Qt.RichText)
+        legal.setOpenExternalLinks(True)
+        root.addWidget(legal)
 
         root.addWidget(QLabel(t("about_third_party")))
         view = QPlainTextEdit()

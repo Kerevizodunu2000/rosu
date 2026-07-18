@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Unit tests for rosu.gaps (confidence-aware)."""
 from rosu.gaps import (
-    missing_numbers, build_numbered_rows, build_spotlight_rows, build_rows,
+    missing_numbers, build_numbered_rows, build_rows,
     build_reference_rows,
 )
 

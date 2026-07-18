@@ -120,6 +120,37 @@ def test_scan_lost_maps_records_gone(tmp_path, monkeypatch):
     monkeypatch.setattr(osu_api, "beatmapset_availability",
                         lambda *a, **k: {201: "available", 202: "gone"})
     res = svc.scan_lost_maps()
-    assert res == {"checked": 2, "gone": 1}
+    assert res == {"checked": 2, "gone": 1, "total": 2, "remaining": 0}
     assert db.lost_map_count() == 1
+    db.close()
+
+
+def test_scan_lost_maps_unchecked_first_and_remaining(tmp_path, monkeypatch):
+    """Repeated runs must walk the whole library: never-checked sets are asked
+    about FIRST (before re-verifying already-checked ones), and the result says
+    how many unchecked sets are still left after the capped batch (v1.4)."""
+    cfg, db, svc = _svc(tmp_path)
+    cfg.osu_client_id = "id"
+    cfg.osu_client_secret = "secret"
+    for bid in (301, 302, 303):
+        t = ParsedTrack(beatmapset_id=bid, filename=f"{bid} A - B.osz",
+                        artist="A", title="T", display_name="A - T", size_bytes=1)
+        tid, _ = db.upsert_track(t, "when")
+        db.set_library_state(tid, True, "backed", "when")
+    db.set_availability(301, "available")   # 301 was checked in an earlier run
+
+    seen = {}
+
+    def fake_avail(ids, *a, max_calls=500, **k):
+        seen["ids"] = list(ids)
+        checked = list(ids)[:max_calls]
+        return {b: "available" for b in checked}
+
+    monkeypatch.setattr(osu_api, "beatmapset_availability", fake_avail)
+    res = svc.scan_lost_maps(max_calls=1)
+    assert seen["ids"][-1] == 301          # previously-checked id comes LAST
+    assert set(seen["ids"][:2]) == {302, 303}   # never-checked ones first
+    assert res["checked"] == 1
+    assert res["total"] == 3
+    assert res["remaining"] == 1           # one never-checked set still left
     db.close()

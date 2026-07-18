@@ -22,6 +22,7 @@ _JOB_TERMINAL = (State.DONE, State.FAILED, State.CANCELLED)
 class JobQueueController(QObject):
     changed = Signal()            # the model changed → the tab re-renders the list
     job_finished = Signal(object)  # a job reached DONE → route its result to a presenter
+    job_failed = Signal(object)    # a step raised → job FAILED (not a cancel)
     gate_needed = Signal(object)   # a job is waiting for a UI confirmation (dedup)
 
     def __init__(self, tab):
@@ -34,6 +35,9 @@ class JobQueueController(QObject):
     # -- public API ------------------------------------------------------------
     def enqueue(self, job) -> None:
         self.jobs.append(job)
+        if not job.steps:                 # nothing to run (e.g. every source disabled)
+            self._finalize_done(job)      # → DONE now, never a stuck PENDING ghost row
+            return
         self.changed.emit()
         self._pump()
 
@@ -219,7 +223,11 @@ class JobQueueController(QObject):
         self._mark_pending_cancelled(job)   # no later step left runnable on a dead job
         job.cleanup()
         self.changed.emit()
+        # Put freed lanes back to work BEFORE the (possibly modal) failure
+        # presenter, mirroring _on_done's ordering.
         self._pump()
+        if job.state == State.FAILED:
+            self.job_failed.emit(job)
 
     def _finalize_done(self, job) -> None:
         if job.state in _JOB_TERMINAL:       # already cancelled/failed — never resurrect
@@ -235,3 +243,5 @@ class JobQueueController(QObject):
         self.changed.emit()
         if job.state == State.DONE:
             self.job_finished.emit(job)
+        elif job.state == State.FAILED:      # a raising finalize()
+            self.job_failed.emit(job)

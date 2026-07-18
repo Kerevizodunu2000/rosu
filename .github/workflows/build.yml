@@ -33,6 +33,17 @@ jobs:
           else
             echo "No ROSU_OAUTH_CLIENT_JSON secret — building without an embedded Drive client."
           fi
+      - name: Embed report token (from secret, if present)
+        shell: bash
+        env:
+          ROSU_REPORT_TOKEN: ${{ secrets.ROSU_REPORT_TOKEN }}
+        run: |
+          if [ -n "$ROSU_REPORT_TOKEN" ]; then
+            printf '%s' "$ROSU_REPORT_TOKEN" > rosu/report_token.txt
+            echo "Embedded report token ($(wc -c < rosu/report_token.txt) bytes)."
+          else
+            echo "No ROSU_REPORT_TOKEN secret — building without an embedded report token."
+          fi
       - name: Build single .exe
         run: pyinstaller rosu.spec
       - name: Smoke-test the frozen build

@@ -10,6 +10,62 @@ the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-07-18
+
+**Settings overhaul** — per-client on/off, Auto-Save, and an in-app bug-report
+form — plus a batch of fixes from live-testing.
+
+### Added
+- **Per-client enable/disable toggles** (Settings): osu!lazer and osu!(stable) can
+  each be turned off (defaults: lazer **on**, stable **off**). A disabled client
+  disappears from the whole app — its exe path row in Settings, its Dashboard
+  import button, and its Shortcuts controls (summary column, save/unpack buttons,
+  both transfer directions and its export source) — and is never launched or
+  written to. The Shortcuts tab shows a hint naming what's hidden and why, so
+  nothing looks silently broken.
+- **Save ⇄ Auto-Save** (Settings): in Auto-Save mode (default) every setting —
+  including paths and API credentials — applies immediately and the Save button
+  disappears; switch to manual Save to get the explicit button and the
+  unsaved-changes guard back.
+- **Report a problem / send feedback** (Settings): a form (title + description +
+  optional screenshot + optional reply e-mail) that submits to Rosu's hosted
+  endpoint (<https://rosu-web.vercel.app>). Includes a clear privacy disclosure;
+  nothing is sent until you press Send. If sending fails, the dialog offers
+  **click-to-copy** of rosu.app@gmail.com and a link that opens the same form
+  **on the web** instead.
+- **Packs tab: download link** — a hint pointing at the official
+  <https://osu.ppy.sh/beatmaps/packs> listing, so missing (red) packs are one
+  click from their source.
+- **GitHub community files**: issue templates (bug/feature + links to the web
+  report form), a pull-request checklist, `SECURITY.md` (private disclosure
+  policy) and a Contributor Covenant `CODE_OF_CONDUCT.md`.
+
+### Changed
+- **"Scan for lost maps" now walks your whole library across runs.** Sets that
+  were never checked are asked about first (previously each run could re-check
+  the same first 500), and the result says exactly where the scan stands —
+  e.g. "Checked 500 this run … 1 200 not checked yet: run again to continue" —
+  with a tooltip explaining the 500-per-run API-friendly batching.
+- **Refreshing is now visible.** The Shortcuts ⟳ blanks the counts to "…" while
+  re-counting; the Search/Packs/Artists reload buttons clear their table for a
+  beat and re-fill it, so a refresh never looks like a dead button.
+- **osu! API requests identify themselves** with a proper User-Agent and are
+  paced (~2–3 requests/s) per osu!'s API guidance.
+
+### Fixed
+- **A failed Drive upload no longer shows a ✓ tick in the job queue.** The upload
+  step (and the job) is now marked failed with the error kept as the row tooltip,
+  and a dialog tells you the export archives are still safely on disk — only the
+  upload failed.
+- **Bogus "unsaved settings" warning.** A path picked via Browse under Auto-Save
+  was never committed (and later triggered an unsaved-changes prompt); Browse
+  picks now commit immediately, and switching Auto-Save off first commits
+  anything pending instead of retroactively flagging it unsaved.
+- **"Open file location" hardened** — the reveal command now invokes
+  `explorer.exe` by its full Windows path.
+- A queued job with no runnable steps (e.g. every source disabled) completes
+  immediately instead of sitting as a stuck pending row.
+
 ## [1.3.3] - 2026-07-16
 
 ### Changed

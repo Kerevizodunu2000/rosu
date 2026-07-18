@@ -18,6 +18,7 @@ class DummyLog:
 def _svc(tmp_path):
     cfg = config.Config(root=str(tmp_path))
     cfg = config._fill_defaults(cfg)
+    cfg.stable_enabled = True   # tests here exercise both clients (v1.4: stable off by default)
     cfg.ensure_dirs()
     db = Database(cfg.db_path)
     return cfg, db, Services(cfg, db, DummyLog())
@@ -52,7 +53,7 @@ def test_installed_summary_counts(tmp_path, monkeypatch):
     monkeypatch.setattr(client_import, "lazer_data_dir", lambda: lazer)
 
     summ = svc.installed_summary()
-    assert summ["stable"] == {"installed": True, "count": 3}    # only the folders
+    assert summ["stable"] == {"installed": True, "count": 3, "enabled": True}  # only the folders
     assert summ["lazer"]["installed"] is True
     # lazer's Realm is opaque → the number comes from Library sets flagged in lazer
     assert summ["lazer"]["count"] == 2
@@ -67,8 +68,9 @@ def test_installed_summary_none_installed(tmp_path, monkeypatch):
     monkeypatch.setattr(client_import, "stable_songs_dir", lambda: None)
     monkeypatch.setattr(client_import, "lazer_data_dir", lambda: None)
     summ = svc.installed_summary()
-    assert summ["stable"] == {"installed": False, "count": 0}
-    assert summ["lazer"] == {"installed": False, "count": None, "from_library": True}
+    assert summ["stable"] == {"installed": False, "count": 0, "enabled": True}
+    assert summ["lazer"] == {"installed": False, "count": None, "from_library": True,
+                             "enabled": True}
     assert summ["library"]["count"] == 0
     assert summ["drive"]["count"] == 0
     db.close()

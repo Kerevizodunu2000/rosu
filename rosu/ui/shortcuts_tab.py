@@ -133,6 +133,7 @@ class ShortcutsTab(QWidget):
         self.queue = JobQueueController(self)
         self.queue.changed.connect(self._refresh_queue)
         self.queue.job_finished.connect(self._on_job_finished)
+        self.queue.job_failed.connect(self._on_job_failed)
         self.queue.gate_needed.connect(self._on_gate_needed)
 
         root = QVBoxLayout(self)
@@ -161,6 +162,14 @@ class ShortcutsTab(QWidget):
             sgrid.addWidget(head, 0, col)
             sgrid.addWidget(val, 1, col)
         root.addWidget(self.summary_box)
+
+        # Why-is-something-missing hint (v1.4): when a client is turned off in
+        # Settings its buttons vanish — this line says so, so the user is never
+        # left staring at a tab that silently lost half its controls.
+        self.disabled_hint = QLabel(objectName="status")
+        self.disabled_hint.setWordWrap(True)
+        self.disabled_hint.setVisible(False)
+        root.addWidget(self.disabled_hint)
 
         # -- transfer between clients (① ②) ------------------------------------
         self.transfer_box = QGroupBox()
@@ -258,6 +267,9 @@ class ShortcutsTab(QWidget):
 
         bottom = QHBoxLayout()
         self.status = QLabel(objectName="status")
+        # Always literal text: error strings can carry angle brackets (e.g. an
+        # HTML-ish upstream error) and must never be auto-detected as rich text.
+        self.status.setTextFormat(Qt.PlainText)
         bottom.addWidget(self.status, 1)
         root.addLayout(bottom)
 
@@ -296,6 +308,7 @@ class ShortcutsTab(QWidget):
         self.btn_clear_finished.setText(t("job_clear_finished"))
         self.queue_empty.setText(t("queue_empty"))
         self._render_summary()
+        self.refresh_client_visibility()
         self._sync_drive_controls()
         self._refresh_queue()
         if self._status_key:                      # re-render the last status in the
@@ -311,10 +324,15 @@ class ShortcutsTab(QWidget):
         for combo in (self.export_source, self.export_format, self.export_split):
             combo.blockSignals(True)
             combo.clear()
+        cfg = self.ctx.cfg
         for data, key in (("library", "sc_source_library"),
                           ("drive", "sc_source_drive"), ("lazer", "sc_source_lazer"),
                           ("stable", "sc_source_stable"),
                           ("merged", "sc_source_merged")):
+            if data == "lazer" and not cfg.lazer_enabled:
+                continue   # a disabled client isn't offered as an export source (v1.4)
+            if data == "stable" and not cfg.stable_enabled:
+                continue
             self.export_source.addItem(t(key), data)
         self.export_format.addItem("zip", "zip")
         self.export_format.addItem("7z", "7z")
@@ -322,7 +340,7 @@ class ShortcutsTab(QWidget):
         self.export_split.addItem(t("sc_split_1g"), _GIB)
         self.export_split.addItem(t("sc_split_500m"), 500 * _MIB)
         for combo, data in zip((self.export_source, self.export_format,
-                                self.export_split), keep):
+                                self.export_split), keep, strict=True):
             i = combo.findData(data)
             if i >= 0:
                 combo.setCurrentIndex(i)
@@ -330,9 +348,50 @@ class ShortcutsTab(QWidget):
 
     # -- summary ---------------------------------------------------------------
     def on_shown(self) -> None:
+        self.refresh_client_visibility()
         self._sync_drive_controls()
+        # Make the refresh VISIBLE: blank the counts to a loading marker and
+        # disable ⟳ until the fresh numbers land, so pressing it clearly does
+        # something even when the re-count is near-instant.
+        self.btn_refresh.setEnabled(False)
+        for key in ("lazer", "stable", "library", "drive"):
+            self.sum_labels[key][1].setText("…")
         self._start_worker(self.services.installed_summary,
-                           on_success=self._on_summary)
+                           on_success=self._on_summary,
+                           on_failure=self._summary_failed)
+
+    def _summary_failed(self, msg: str) -> None:
+        self.btn_refresh.setEnabled(True)
+        self._render_summary()          # restore the last known numbers
+        self._on_failed(msg)
+
+    def refresh_client_visibility(self) -> None:
+        """A disabled client's controls VANISH (v1.4 per-client on/off) — its
+        summary column, its save/unpack buttons, both transfer directions
+        (transfer needs both clients) and its export-source entry — and a hint
+        line explains what's hidden and why, so nothing looks silently broken."""
+        t = self.ctx.t
+        cfg = self.ctx.cfg
+        lz, st = cfg.lazer_enabled, cfg.stable_enabled
+        both = lz and st
+        for key, on in (("lazer", lz), ("stable", st)):
+            head, val = self.sum_labels[key]
+            head.setVisible(on)
+            val.setVisible(on)
+        for b, on in ((self.btn_save_lazer, lz), (self.btn_save_stable, st),
+                      (self.btn_unpack_lazer, lz), (self.btn_unpack_stable, st),
+                      (self.btn_unpack_both, both),
+                      (self.btn_l2s, both), (self.btn_s2l, both)):
+            b.setVisible(bool(on))
+        self.transfer_box.setVisible(both)     # transfer needs BOTH clients
+        self.save_box.setVisible(lz or st)
+        self.unpack_box.setVisible(lz or st)
+        disabled = [n for n, on in (("osu!lazer", lz), ("osu!(stable)", st)) if not on]
+        self.disabled_hint.setVisible(bool(disabled))
+        if disabled:
+            self.disabled_hint.setText(
+                t("sc_client_hidden", clients=" + ".join(disabled)))
+        self._fill_export_combos()             # drop a disabled client as a source
 
     def _sync_drive_controls(self) -> None:
         """Keep the Drive controls consistent with the connection state. The boxes
@@ -362,12 +421,24 @@ class ShortcutsTab(QWidget):
         self._sync_drive_controls()
 
     def _on_share_toggled(self, checked: bool) -> None:
-        if checked and not self.export_drive.isChecked():
+        if not checked:
+            return
+        if not self.export_drive.isChecked():
             QMessageBox.information(self, self.ctx.t("app_title"),
                                     self.ctx.t("sc_share_needs_upload"))
             self.export_share.setChecked(False)   # a link needs the upload
+            return
+        # "Anyone with the link" is a PUBLIC share of copyrighted beatmap content —
+        # require an informed opt-in every time it's enabled.
+        if QMessageBox.question(
+                self, self.ctx.t("app_title"), self.ctx.t("sc_share_public_warn"),
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.No) != QMessageBox.Yes:
+            self.export_share.blockSignals(True)
+            self.export_share.setChecked(False)
+            self.export_share.blockSignals(False)
 
     def _on_summary(self, summary) -> None:
+        self.btn_refresh.setEnabled(True)
         self._summary = summary
         self._render_summary()
 
@@ -387,10 +458,13 @@ class ShortcutsTab(QWidget):
                 val.setText(t("sc_not_installed"))
             elif info.get("count") is None:
                 val.setText(t("sc_installed"))
+            elif key == "lazer" and info.get("from_library"):
+                # Show it as "N recorded" (not a plain total) + explain in the tooltip,
+                # since Rosu can't read osu!lazer's real library size.
+                val.setText(t("sc_count_recorded", n=info["count"]))
+                tip = t("sc_lazer_from_library")
             else:
                 val.setText(t("sc_count_fmt", n=info["count"]))
-                if key == "lazer" and info.get("from_library"):
-                    tip = t("sc_lazer_from_library")   # explain where the number came from
             head.setToolTip(tip)
             val.setToolTip(tip)
 
@@ -398,6 +472,10 @@ class ShortcutsTab(QWidget):
     def on_transfer(self, source: str, target: str) -> None:
         t = self.ctx.t
         if source == target:
+            return
+        if not (self.services.client_enabled(source)
+                and self.services.client_enabled(target)):
+            QMessageBox.warning(self, t("app_title"), t("sc_client_disabled"))
             return
         # Validate up front (as services.transfer_between_clients did) so an
         # invalid pick is reported immediately instead of failing in the queue.
@@ -560,6 +638,34 @@ class ShortcutsTab(QWidget):
             # user must know so they can review/revoke the share in Drive.
             QMessageBox.warning(self, t("app_title"), t("sc_export_shared_no_link"))
 
+    def _on_job_failed(self, job) -> None:
+        """A job FAILED (a step raised). For an export whose archives were already
+        written, tell the user the export itself is safe on disk and only the
+        Drive upload failed — otherwise surface the error in the status line
+        (the queue row shows the × and carries the detail as a tooltip)."""
+        t = self.ctx.t
+        err = job.error or ""
+        if job.kind == "export" and job.ctx.get("written"):
+            archives = [str(a) for a in job.ctx["written"]]
+            location = str(Path(archives[0]).parent)
+            body = [t("sc_export_done", count=len(job.ctx.get("files", [])),
+                      archives=len(archives)),
+                    "", t("sc_export_saved_to", path=location)]
+            body += [f"• {Path(a).name}" for a in archives]
+            body += ["", t("sc_export_upload_failed")]
+            if err:
+                body.append(err)
+            self._set_status("sc_export_upload_failed")
+            # PlainText: the error detail comes from an exception string and must
+            # not be auto-detected as rich text by QMessageBox's AutoText default.
+            box = QMessageBox(QMessageBox.Warning, t("app_title"),
+                              "\n".join(body), QMessageBox.Ok, self)
+            box.setTextFormat(Qt.PlainText)
+            box.exec()
+        elif err:
+            self._set_status_lit(err)
+        self.on_shown()   # refresh the counts even after a failure
+
     def _present_dedup(self, res) -> None:
         if res.get("removed", 0) == 0:
             self._set_status("sc_dedup_none")
@@ -579,12 +685,12 @@ class ShortcutsTab(QWidget):
         self._status_key, self._status_kwargs = None, {}
         self.status.setText(text)
 
-    def _start_worker(self, fn, *args, on_success=None) -> None:
+    def _start_worker(self, fn, *args, on_success=None, on_failure=None) -> None:
         w = Worker(fn, *args)
         self._threads.append(w)
         if on_success:
             w.succeeded.connect(on_success)
-        w.failed.connect(self._on_failed)
+        w.failed.connect(on_failure or self._on_failed)
         w.finished.connect(
             lambda: self._threads.remove(w) if w in self._threads else None)
         w.start()

@@ -1,7 +1,9 @@
 # Contributing to Rosu
 
 Thanks for your interest in Rosu! Contributions, bug reports, and feature ideas
-are welcome.
+are welcome. By taking part you agree to follow our
+[Code of Conduct](CODE_OF_CONDUCT.md). For security issues, please see
+[SECURITY.md](SECURITY.md) instead of opening a public issue.
 
 ## Reporting bugs / requesting features
 

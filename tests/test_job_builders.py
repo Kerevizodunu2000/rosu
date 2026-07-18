@@ -21,6 +21,7 @@ class DummyLog:
 def _svc(tmp_path):
     cfg = config.Config(root=str(tmp_path))
     cfg = config._fill_defaults(cfg)
+    cfg.stable_enabled = True   # tests here exercise both clients (v1.4: stable off by default)
     cfg.ensure_dirs()
     db = Database(cfg.db_path)
     return cfg, db, Services(cfg, db, DummyLog())
@@ -44,6 +45,7 @@ def _lanes(job):
 # -- unpack ------------------------------------------------------------------
 def test_build_unpack_job_steps_and_result(tmp_path, monkeypatch):
     cfg, db, svc = _svc(tmp_path)
+    cfg.stable_enabled = True   # exercise both send steps (v1.4: stable off by default)
     monkeypatch.setattr(svc, "prescan_all", lambda progress=None: [
         _Plan("new", "a.zip"), _Plan("all_present", "b.zip"), _Plan("new", "c.zip")])
     got = {}
@@ -164,6 +166,25 @@ def test_build_export_job_upload_step_on_drive_lane(tmp_path):
     db.close()
 
 
+def test_build_export_job_upload_failure_fails_the_step(tmp_path, monkeypatch):
+    """A failed Drive upload must FAIL the upload step (and the job) — it used
+    to swallow the error dict and render a ✓ tick while the upload had failed."""
+    import pytest
+    cfg, db, svc = _svc(tmp_path)
+    (cfg.library_path / "1 A - B.osz").write_bytes(b"a" * 10)
+    monkeypatch.setattr(svc, "_upload_export_to_drive",
+                        lambda *a, **k: {"error": "drive", "detail": "boom"})
+    job = svc.build_export_job("library", tmp_path / "out" / "E", fmt="zip",
+                               upload=True)
+    with pytest.raises(RuntimeError, match="boom"):
+        run_job_sync(job)
+    assert job.state == State.FAILED
+    assert job.steps[-1].state == State.FAILED          # the upload step
+    assert job.ctx["drive"]["error"] == "drive"         # detail kept for the UI
+    assert job.ctx["written"]                            # archives are on disk
+    db.close()
+
+
 def test_build_export_job_count_zero_when_nothing_written(tmp_path):
     """Parity with export_sets: count reflects sets actually archived, so a job
     cancelled between gather and archive reports count 0 (not the gathered count)."""
@@ -213,4 +234,42 @@ def test_build_dedup_job_gated_then_removes(tmp_path, monkeypatch):
     assert job.ctx["plan"]["count"] == 1
     assert res["removed"] == 1 and res["freed_bytes"] == 40
     assert not (cfg.library_path / "123 A - B (1).osz").exists()
+    db.close()
+
+
+# -- per-client enable/disable (v1.4) ----------------------------------------
+def test_dispatch_disabled_client_returns_disabled(tmp_path):
+    cfg, db, svc = _svc(tmp_path)
+    cfg.stable_enabled = False
+    res = svc._dispatch_to_client("stable", [Path("1 A - B.osz")])
+    assert res.get("disabled") is True and res["sent"] == 0
+    db.close()
+
+
+def test_build_unpack_job_skips_disabled_target(tmp_path):
+    cfg, db, svc = _svc(tmp_path)
+    cfg.stable_enabled = False        # lazer on (default), stable off
+    job = svc.build_unpack_job(["lazer", "stable"])
+    assert _step_keys(job) == ["job_step_prescan", "job_step_extract",
+                               "job_step_send_lazer"]   # no stable send step
+    db.close()
+
+
+def test_build_save_job_skips_disabled_source(tmp_path):
+    cfg, db, svc = _svc(tmp_path)
+    cfg.stable_enabled = False
+    job = svc.build_save_job(["lazer", "stable"])
+    assert _step_keys(job) == ["job_step_save_lazer"]
+    db.close()
+
+
+def test_installed_summary_reports_enabled(tmp_path, monkeypatch):
+    cfg, db, svc = _svc(tmp_path)
+    cfg.lazer_enabled = True
+    cfg.stable_enabled = False
+    monkeypatch.setattr(client_import, "stable_songs_dir", lambda: None)
+    monkeypatch.setattr(client_import, "lazer_data_dir", lambda: None)
+    s = svc.installed_summary()
+    assert s["lazer"]["enabled"] is True
+    assert s["stable"]["enabled"] is False
     db.close()

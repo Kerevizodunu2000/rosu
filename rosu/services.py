@@ -60,6 +60,7 @@ class Services:
         self._lostmap_cancel = threading.Event()  # separate cancel for lost-map scan
         self._verify_cancel = threading.Event()  # separate cancel for SHA-256 verify
         self._rebuild_lock = threading.Lock()  # serialize tracking.xlsx writes
+        self._reference_cache = None           # lazy osu! reference (invalidated on sync)
 
     def request_cancel(self) -> None:
         # Set all so the shared Dashboard/close-window cancel reaches whichever
@@ -341,6 +342,8 @@ class Services:
     def import_from_stable(self, progress=None, cancel=None) -> dict:
         """Zip osu!(stable) Songs/ folders we don't already have into Output, then
         dedup them into the Library."""
+        if not self.client_enabled("stable"):   # disabled in Settings — never read it
+            return {"source": "stable", "found": False, "disabled": True}
         from . import client_import
         _eff = cancel if cancel is not None else self._cancel.is_set
         if cancel is None:
@@ -375,6 +378,8 @@ class Services:
         """Run the bundled .NET helper to re-export osu!lazer beatmapsets from its
         Realm + files store, then dedup the exported .osz into the Library. The
         (long) export is cancellable."""
+        if not self.client_enabled("lazer"):   # disabled in Settings — never read it
+            return {"source": "lazer", "found": False, "disabled": True}
         import shutil
         import tempfile
         from . import client_import
@@ -590,6 +595,16 @@ class Services:
         files = osu_import.output_osz_files(self.cfg.output_path)
         return self._dispatch_to_client(target, files, progress)
 
+    def client_enabled(self, client: str) -> bool:
+        """Per-client on/off (v1.4). A disabled client's controls are hidden in
+        the UI and it is never launched/written to. osu!lazer defaults on;
+        osu!(stable) defaults off (enable in Settings)."""
+        if client == "stable":
+            return bool(self.cfg.stable_enabled)
+        if client == "lazer":
+            return bool(self.cfg.lazer_enabled)
+        return True   # non-client sources (library/drive/merged) aren't gated here
+
     def _dispatch_to_client(self, target: str, files, progress=None,
                             cancel=None) -> dict:
         """Launch osu! (``target`` = ``"lazer"``/``"stable"``) to import an explicit
@@ -602,6 +617,10 @@ class Services:
         during an earlier phase of the same operation (e.g. a transfer's export
         step) still stops the dispatch. ``cancel`` (a queued job's own token)
         overrides the shared ``_cancel`` when given."""
+        if not self.client_enabled(target):
+            # Disabled in Settings — never launch/write to this client (the UI
+            # already hides its controls; this is the belt-and-suspenders guard).
+            return {"disabled": True, "sent": 0, "files": 0, "batches": 0}
         _eff = cancel if cancel is not None else self._cancel.is_set
         if target == "stable":
             exe = self.cfg.osu_stable_exe or config.detect_stable_exe()
@@ -704,8 +723,8 @@ class Services:
         in an unreadable Realm database (only the bundled .NET helper can
         enumerate it), so we report presence without a number here and fill the
         number in after a transfer/import. ``stable`` counts ``Songs/`` subfolders
-        (≈ one per set), which is cheap. ``installed`` reflects on-disk detection
-        only — the per-client enable/disable toggle arrives in v1.3.
+        (≈ one per set), which is cheap. ``installed`` reflects on-disk detection;
+        ``enabled`` reflects the per-client Settings toggle (v1.4).
         """
         from . import client_import
         songs = client_import.stable_songs_dir()
@@ -718,8 +737,9 @@ class Services:
         lazer_count = len(self.db.osu_client_ids("lazer")) if lazer_installed else None
         return {
             "lazer": {"installed": lazer_installed, "count": lazer_count,
-                      "from_library": True},
-            "stable": {"installed": songs is not None, "count": stable_count},
+                      "from_library": True, "enabled": bool(self.cfg.lazer_enabled)},
+            "stable": {"installed": songs is not None, "count": stable_count,
+                       "enabled": bool(self.cfg.stable_enabled)},
             "library": {"count": self.db.counts().get("in_library", 0)},
             "drive": {"connected": bool(self.cfg.drive_connected),
                       "count": self.db.drive_count()},
@@ -843,6 +863,8 @@ class Services:
         stage.mkdir(parents=True, exist_ok=True)
         out: list = []
         skipped = 0
+        if source in ("lazer", "stable") and not self.client_enabled(source):
+            return out, skipped   # disabled client contributes nothing (v1.4)
         if source == "stable":
             songs = client_import.stable_songs_dir()
             if songs is None:
@@ -1176,6 +1198,8 @@ class Services:
         job.steps = [jobs.Step("job_step_prescan", jobs.Lane.DISK, s_prescan),
                      jobs.Step("job_step_extract", jobs.Lane.DISK, s_extract)]
         for target in targets:
+            if not self.client_enabled(target):
+                continue   # disabled client: never import into it (v1.4)
             key = ("job_step_send_lazer" if target == "lazer"
                    else "job_step_send_stable")
             job.steps.append(jobs.Step(key, jobs.Lane.DISK, s_send(target)))
@@ -1247,6 +1271,8 @@ class Services:
             return _run
 
         for s in sources:
+            if not self.client_enabled(s):
+                continue   # disabled client: don't read it into the Library (v1.4)
             key = ("job_step_save_stable" if s == "stable"
                    else "job_step_save_lazer")
             job.steps.append(jobs.Step(key, jobs.Lane.DISK, s_source(s)))
@@ -1287,8 +1313,15 @@ class Services:
         def s_upload(ctx, progress, cancel):
             if cancel() or not ctx.get("written"):
                 return
-            ctx["drive"] = self._upload_export_to_drive(
+            res = self._upload_export_to_drive(
                 ctx["written"], share, progress, cancel=cancel)
+            ctx["drive"] = res
+            if res.get("error"):
+                # Raise so the queue marks THIS step (and the job) FAILED — a
+                # failed upload must never render as a ✓ tick. The archives are
+                # already on disk; the UI's failure presenter says where.
+                raise RuntimeError(
+                    f"Drive upload failed: {res.get('detail') or res['error']}")
 
         job.steps = [
             jobs.Step("job_step_gather", jobs.Lane.DISK, s_gather,
@@ -1337,13 +1370,19 @@ class Services:
 
     # -- reference (osu! API) ------------------------------------------------
     def _reference(self):
-        return osu_api.load_reference(self.cfg.reference_path)
+        # Cached: the Packs tab / missing-gap banner ask for this once per series
+        # in a loop; without the cache each call re-reads and re-parses
+        # reference.json from disk on the UI thread (O(series) I/O).
+        if self._reference_cache is None:
+            self._reference_cache = osu_api.load_reference(self.cfg.reference_path)
+        return self._reference_cache
 
     def update_reference(self, progress=None) -> dict:
         ref = osu_api.fetch_reference(
             self.cfg.osu_client_id, self.cfg.osu_client_secret,
             progress=(lambda s: progress(s)) if progress else None)
         osu_api.save_reference(ref, self.cfg.reference_path)
+        self._reference_cache = None   # force a reload of the freshly-written reference
         self.log.info("REFERENCE_SYNC", packs=ref.get("count", 0))
         return ref
 
@@ -1351,16 +1390,27 @@ class Services:
         """Flag owned beatmapsets that no longer exist on osu! (item F, v1.0).
 
         Needs osu! API credentials (returns ``{"error": "no_api"}`` otherwise).
-        Checks up to ``max_calls`` library beatmapsets, stores each result, and
-        returns ``{"checked", "gone"}``.
+        Asks the osu! API about each Library beatmapset id (HTTP 200 = still
+        live, 404 = deleted/taken down), capped at ``max_calls`` per run so a
+        huge library never hammers the API in one go. **Never-checked sets go
+        first**, then previously-checked ones (oldest knowledge re-verified), so
+        repeated runs walk the whole library instead of re-checking the same
+        first batch (v1.4). Stores each result and returns ``{"checked",
+        "gone", "total", "remaining"}`` — ``remaining`` = never-checked sets
+        still left after this run (run again to continue).
         """
         if not (self.cfg.osu_client_id and self.cfg.osu_client_secret):
             return {"error": "no_api"}
         self._lostmap_cancel.clear()   # own token: never collides with import/Drive
-        ids = [r["beatmapset_id"] for r in self.db.library_tracks()
-               if r.get("beatmapset_id")]
+        rows = self.db.library_tracks()
+        unchecked = list(dict.fromkeys(
+            r["beatmapset_id"] for r in rows
+            if r.get("beatmapset_id") and not r.get("availability")))
+        known = list(dict.fromkeys(
+            r["beatmapset_id"] for r in rows
+            if r.get("beatmapset_id") and r.get("availability")))
         result = osu_api.beatmapset_availability(
-            ids, self.cfg.osu_client_id, self.cfg.osu_client_secret,
+            unchecked + known, self.cfg.osu_client_id, self.cfg.osu_client_secret,
             progress=progress, max_calls=max_calls,
             cancel=self._lostmap_cancel.is_set)
         gone = 0
@@ -1368,8 +1418,12 @@ class Services:
             self.db.set_availability(bid, status)
             if status == "gone":
                 gone += 1
-        self.log.info("LOST_MAP_SCAN", checked=len(result), gone=gone)
-        return {"checked": len(result), "gone": gone}
+        total = len(unchecked) + len(known)
+        remaining = max(0, len(unchecked) - len(result))
+        self.log.info("LOST_MAP_SCAN", checked=len(result), gone=gone,
+                      total=total, remaining=remaining)
+        return {"checked": len(result), "gone": gone,
+                "total": total, "remaining": remaining}
 
     def lost_map_count(self) -> int:
         return self.db.lost_map_count()
@@ -1381,6 +1435,31 @@ class Services:
         category = present[0]["category"] if present else "Other"
         ref = osu_api.reference_by_series(self._reference()).get(series)
         return gaps.build_rows(series, category, present, ref)
+
+    def pack_known(self, code: str) -> bool:
+        """Whether a pack with this code is already recorded (the UI 'known'
+        badge / purge-known list). Keeps the UI off the DB handle."""
+        return self.db.get_pack_by_code(code) is not None
+
+    def category_list(self) -> list[str]:
+        """Distinct pack categories, for the Packs-tab filter combo."""
+        return self.db.category_list()
+
+    def packs_overview(self):
+        """Every Packs-tab row: each series' confidence-aware gap rows plus the
+        uncategorised 'Other' packs. Returns ``(category, GapRow, full_name|None)``
+        tuples so the UI needs neither the DB handle nor gaps internals."""
+        rows = []
+        for s in self.db.series_list():
+            present = self.db.packs_for_series(s)
+            category = present[0]["category"] if present else "Other"
+            code_full = {p["code"]: p["full_name"] for p in present}
+            for gr in self.series_rows(s):
+                rows.append((category, gr, code_full.get(gr.code)))
+        for p in self.db.packs_for_category("Other"):
+            if p.get("series") is None:
+                rows.append(("Other", gaps._present_row(None, p), p["full_name"]))
+        return rows
 
     def compute_missing(self) -> dict[str, list[int]]:
         """Confirmed-missing numbers per series (banner/log). Read-only.

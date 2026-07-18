@@ -1,0 +1,20 @@
+Realm .NET
+https://github.com/realm/realm-dotnet
+
+Realm .NET — Copyright Realm Inc. and contributors.
+Licensed under the Apache License, Version 2.0.
+
+You may obtain a copy of the License at:
+    http://www.apache.org/licenses/LICENSE-2.0
+
+See ./Apache-2.0.txt in this folder for the full license text.
+
+Note: the upstream realm-dotnet repository does not publish a separate NOTICE
+file (checked https://github.com/realm/realm-dotnet — repo root and
+https://raw.githubusercontent.com/realm/realm-dotnet/main/NOTICE, both as of
+2026-07-18). Its LICENSE file at
+https://raw.githubusercontent.com/realm/realm-dotnet/main/LICENSE contains
+only the plain Apache-2.0 license text with no additional attribution notices
+to reproduce. This file therefore records the minimal attribution required by
+Apache-2.0 §4(d) for Rosu's bundled `RosuLazerExport.exe`, which links Realm
+.NET to read osu!lazer's `client.realm` database.

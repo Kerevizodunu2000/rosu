@@ -54,7 +54,7 @@ def _token_strength(token: str, fields: list[str],
                     words_by_field: list[list[str]]) -> int:
     """Best match strength of one token across the given normalized fields."""
     best = _S_NONE
-    for fn, words in zip(fields, words_by_field):
+    for fn, words in zip(fields, words_by_field, strict=True):
         if not fn:
             continue
         if fn == token:

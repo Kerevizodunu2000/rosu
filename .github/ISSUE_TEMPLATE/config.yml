@@ -1,0 +1,10 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Report a bug from the app or web form
+    url: https://rosu-web.vercel.app/report
+    about: >-
+      Prefer not to use GitHub? Send a title, description and an optional
+      screenshot here — or use Settings → Report a problem inside the app.
+  - name: Report a security vulnerability (private)
+    url: https://github.com/Kerevizodunu2000/rosu/security/policy
+    about: Please report security issues privately — do not open a public issue.

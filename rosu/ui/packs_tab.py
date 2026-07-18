@@ -2,13 +2,13 @@
 """Packs tab: every pack grouped by category, with confirmed red gaps, search."""
 from __future__ import annotations
 
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QBrush, QColor
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QHBoxLayout, QLabel, QLineEdit, QPushButton, QVBoxLayout,
     QWidget,
 )
 
-from ..gaps import _present_row
 from . import wheel_guard
 from .copy_table import CopyTable, SortItem
 
@@ -42,13 +42,21 @@ class PacksTab(QWidget):
         top.addWidget(self.cb_extra)
         top.addWidget(self.filter)
         self.btn_reload = QPushButton(objectName="secondary")
-        self.btn_reload.clicked.connect(self.reload)
+        self.btn_reload.clicked.connect(self.refresh_now)
         top.addWidget(self.btn_reload)
         root.addLayout(top)
         wheel_guard.guard(self.filter)   # no accidental change on scroll (item 16)
 
         self.hint = QLabel(objectName="status")
         root.addWidget(self.hint)
+
+        # Where the packs themselves come from: link to osu!'s official pack
+        # listing so users know missing (red) rows are downloadable there.
+        self.download_hint = QLabel(objectName="status")
+        self.download_hint.setWordWrap(True)
+        self.download_hint.setTextFormat(Qt.RichText)
+        self.download_hint.setOpenExternalLinks(True)
+        root.addWidget(self.download_hint)
 
         self.table = CopyTable(name_column=3)  # Code column
         self.table.setColumnCount(len(_COLS))
@@ -62,6 +70,7 @@ class PacksTab(QWidget):
         self.cb_missing.setText(self.ctx.t("only_missing"))
         self.cb_extra.setText(self.ctx.t("only_extra"))
         self.hint.setText(self.ctx.t("copy_hint"))
+        self.download_hint.setText(self.ctx.t("packs_download_hint"))
         self.table.set_menu_labels(self.ctx.t("copy_names_action"),
                                    self.ctx.t("copy_table_action"))
         self.search.setToolTip(self.ctx.t("tip_packs_search"))
@@ -87,30 +96,32 @@ class PacksTab(QWidget):
         current = self.filter.currentText()
         self.filter.blockSignals(True)
         self.filter.clear()
-        self.filter.addItems(["All"] + self.ctx.db.category_list())
+        self.filter.addItems(["All"] + self.ctx.services.category_list())
         idx = self.filter.findText(current)
         if idx >= 0:
             self.filter.setCurrentIndex(idx)
         self.filter.blockSignals(False)
 
-    def _collect(self) -> list:
-        db = self.ctx.db
-        rows = []  # (category, GapRow, full_name)
-        for s in db.series_list():
-            present = db.packs_for_series(s)
-            category = present[0]["category"] if present else "Other"
-            code_full = {p["code"]: p["full_name"] for p in present}
-            for gr in self.ctx.services.series_rows(s):
-                rows.append((category, gr, code_full.get(gr.code)))
-        for p in db.packs_for_category("Other"):
-            if p.get("series") is None:
-                rows.append(("Other", _present_row(None, p), p["full_name"]))
-        return rows
-
     def reload(self) -> None:
         self._reload_filter_options()
-        self._rows = self._collect()
+        self._rows = self.ctx.services.packs_overview()   # (category, GapRow, full_name)
         self._apply_filter()
+
+    def refresh_now(self) -> None:
+        """Explicit ⟳: empty the table for a beat before re-filling, so the
+        refresh is visible instead of an apparent no-op (the reload itself is
+        synchronous and would otherwise finish before the eye catches it)."""
+        self.btn_reload.setEnabled(False)
+        self.table.setRowCount(0)
+        self.hint.setText(self.ctx.t("refreshing"))
+        QTimer.singleShot(150, self._finish_refresh)
+
+    def _finish_refresh(self) -> None:
+        try:
+            self.reload()
+        finally:
+            self.hint.setText(self.ctx.t("copy_hint"))
+            self.btn_reload.setEnabled(True)
 
     def _apply_filter(self) -> None:
         text = self.search.text().strip().casefold()

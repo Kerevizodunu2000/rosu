@@ -13,6 +13,9 @@ config.*.json
 # (The refresh token is NOT a file — it lives in the OS keyring.)
 rosu/drive/oauth_client.json
 oauth_client.json
+# Report endpoint's shared token — CI writes this from the ROSU_REPORT_TOKEN
+# secret at build time; never commit it.
+rosu/report_token.txt
 client_secret*.json
 # Generic secret/credential files
 .env
@@ -107,3 +110,6 @@ desktop.ini
 HANDOFF.md
 CLAUDE.md
 docs/
+
+# --- graphify knowledge-graph output (local index, never commit) ---------------
+graphify-out/

@@ -152,12 +152,15 @@ class DashboardTab(QWidget):
         self.btn_copy.setVisible(not self.ctx.cfg.auto_backup_after_extract)
 
     def _sync_import_buttons(self) -> None:
-        """Show an import button only for an osu! client that's actually installed
-        or configured — a user may have only one of lazer / stable."""
+        """Show an import button only for a client that is installed/configured
+        AND turned on in Settings (v1.4) — a disabled client's button vanishes
+        entirely, consistent with its Settings path row and Shortcuts controls."""
         for btn, target in ((self.btn_import_lazer, "lazer"),
                             (self.btn_import_stable, "stable")):
             exe = self._import_exe(target)
-            btn.setVisible(bool(exe and Path(exe).exists()))
+            enabled = (self.ctx.cfg.lazer_enabled if target == "lazer"
+                       else self.ctx.cfg.stable_enabled)
+            btn.setVisible(bool(exe and Path(exe).exists()) and bool(enabled))
 
     def on_shown(self) -> None:
         self.refresh_scan()
@@ -167,7 +170,7 @@ class DashboardTab(QWidget):
     def refresh_scan(self) -> None:
         self._scan = self.services.scan()
         self._known_paths = [str(p) for p, parsed in self._scan
-                             if self.ctx.db.get_pack_by_code(parsed.code) is not None]
+                             if self.services.pack_known(parsed.code)]
         self.btn_purge_known.setVisible(bool(self._known_paths))
         if self._scan:
             self._view = "packs"
@@ -196,7 +199,7 @@ class DashboardTab(QWidget):
             t("col_code"), t("col_series"), t("col_title"), t("col_size"), t("col_state")])
         self.table.setRowCount(len(self._scan))
         for r, (path, parsed) in enumerate(self._scan):
-            known = self.ctx.db.get_pack_by_code(parsed.code) is not None
+            known = self.services.pack_known(parsed.code)
             state = t("state_known") if known else t("state_new")
             try:
                 size = _fmt_size(path.stat().st_size)
@@ -276,6 +279,7 @@ class DashboardTab(QWidget):
 
     def _idle(self) -> None:
         self._lock(False)
+        self._sync_import_buttons()   # re-apply the v1.4 grey-out that _lock() cleared
         self.busy_bar.setVisible(False)
         self.progress_panel.finish()
         self.btn_cancel.setVisible(False)
@@ -537,6 +541,9 @@ class DashboardTab(QWidget):
 
     def _after_import(self, res) -> None:
         self._idle()
+        if res.get("disabled"):   # client turned off mid-flight (v1.4) — no dispatch
+            self.status.setText(self.ctx.t("sc_client_disabled"))
+            return
         if res.get("cancelled"):
             self.status.setText(self.ctx.t("import_cancelled",
                                            sent=res.get("sent", 0), total=res["files"]))

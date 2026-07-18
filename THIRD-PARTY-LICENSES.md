@@ -31,6 +31,20 @@ LGPLv3 are both incompatible with GPLv2-only.) Note that `shiboken6` — PySide6
 under a choice of `LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only`; the LGPL-3.0-only (or GPL-3.0-only)
 option is fully compatible with Rosu's GPL-3.0-or-later.
 
-Full license texts are available at each linked project page. When a bundled native binary is added
-in the future (e.g. `UnRAR.exe` for RAR support — freeware, redistributable unmodified but not
-open-source), its license text will be added here and shown in the app's **About → Licenses** screen.
+Full license texts are bundled in [`./licenses/`](licenses/) (LGPL-3.0, LGPL-2.1, Apache-2.0, and the
+Realm .NET attribution notice — see [`licenses/README.txt`](licenses/README.txt) for the component→file
+map) and shown in-app via **About → Licenses**.
+
+**LGPL relink note (good faith):** Rosu links PySide6/Qt dynamically — Qt ships as separate DLLs inside
+the frozen exe rather than being statically linked into `rosu.exe` — and the whole app is pip-buildable
+from [`requirements.txt`](requirements.txt), so you can rebuild Rosu against your own modified
+PySide6/Qt per LGPL-3.0 §4. The same applies to the LGPL-2.1-or-later `py7zr` codec stack (`pyppmd`,
+`pybcj`, `inflate64`, `multivolumefile`): they are ordinary pip dependencies, not statically embedded,
+so a relinked/modified build of any of them can be substituted by editing `requirements.txt` and
+rebuilding.
+
+**RAR support (decision 2026-07-18):** if RAR (`.rar`) support is added, it will use **libarchive or
+7-Zip's LGPL-licensed RAR codec**. **UnRAR is not bundled or linked** — its license (free to redistribute
+unmodified, but not open-source and not GPL-compatible for the kind of integration Rosu would need) makes
+it unsuitable for a GPL-3.0 project. This row is not present in the table above and none of the previously
+shipped or planned Rosu builds bundle `UnRAR.exe`.

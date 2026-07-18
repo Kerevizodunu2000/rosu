@@ -47,6 +47,7 @@ def _make_services(tmp_path):
     cfg.ensure_dirs()
     cfg.osu_lazer_exe = "C:/lazer/osu!.exe"
     cfg.osu_stable_exe = "C:/stable/osu!.exe"
+    cfg.stable_enabled = True   # these tests exercise both import targets (v1.4)
     db = Database(cfg.db_path)
     return cfg, db, Services(cfg, db, DummyLog())
 

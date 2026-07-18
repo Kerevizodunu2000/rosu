@@ -19,6 +19,7 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
+from . import __version__
 from .models import MODE_NAMES
 from .parsing import parse_pack_name
 
@@ -26,6 +27,12 @@ TOKEN_URL = "https://osu.ppy.sh/oauth/token"
 API_BASE = "https://osu.ppy.sh/api/v2"
 PACK_TYPES = ("standard", "featured", "tournament", "loved", "spotlight",
               "theme", "artist", "chart")
+
+# osu!'s ToU asks callers to identify themselves and stay under ~60 req/min. We
+# send a descriptive User-Agent and pace requests to ~2-3/s (well under the cap,
+# without making a large scan painfully slow).
+USER_AGENT = f"Rosu/{__version__} (+https://github.com/Kerevizodunu2000/rosu)"
+_MIN_INTERVAL = 0.35
 
 
 class OsuApiError(RuntimeError):
@@ -42,7 +49,7 @@ def _token(client_id: str, client_secret: str) -> str:
     req = urllib.request.Request(
         TOKEN_URL, data=data,
         headers={"Content-Type": "application/x-www-form-urlencoded",
-                 "Accept": "application/json"})
+                 "Accept": "application/json", "User-Agent": USER_AGENT})
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
             return json.loads(resp.read())["access_token"]
@@ -53,7 +60,7 @@ def _token(client_id: str, client_secret: str) -> str:
 def _get(url: str, token: str) -> dict:
     req = urllib.request.Request(
         url, headers={"Authorization": f"Bearer {token}",
-                      "Accept": "application/json"})
+                      "Accept": "application/json", "User-Agent": USER_AGENT})
     with urllib.request.urlopen(req, timeout=60) as resp:
         return json.loads(resp.read())
 
@@ -64,7 +71,8 @@ def _status_code(url: str, token: str) -> tuple[int, int | None]:
     reset, timeout, TLS) is returned as ``0`` so a single blip degrades one id to
     'unknown' instead of aborting a whole scan."""
     req = urllib.request.Request(
-        url, headers={"Authorization": f"Bearer {token}", "Accept": "application/json"})
+        url, headers={"Authorization": f"Bearer {token}", "Accept": "application/json",
+                      "User-Agent": USER_AGENT})
     try:
         with urllib.request.urlopen(req, timeout=60) as resp:
             return resp.status, None
@@ -123,7 +131,7 @@ def beatmapset_availability(ids, client_id: str, client_secret: str,
                     else "gone" if code == 404 else "unknown")
         if progress:
             progress({"kind": "lostmap", "done": len(out), "total": total})
-        _interruptible_sleep(0.1, cancel)  # be a good API citizen
+        _interruptible_sleep(_MIN_INTERVAL, cancel)  # ~2-3/s, a good API citizen
     return out
 
 
@@ -164,6 +172,7 @@ def fetch_reference(client_id: str, client_secret: str, progress=None) -> dict:
             cursor = data.get("cursor_string")
             if not cursor:
                 break
+            time.sleep(_MIN_INTERVAL)   # pace pagination under the API rate guidance
     return {
         "fetched_at": _dt.datetime.now().replace(microsecond=0).isoformat(),
         "count": len(packs),

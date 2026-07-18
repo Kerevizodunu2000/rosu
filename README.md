@@ -179,6 +179,17 @@ Extra numbered pack series (ST/SC/T/L/P/A and beyond) are already auto-supported
 
 See [`CHANGELOG.md`](CHANGELOG.md) for the full, version-by-version history.
 
+## Community & support
+
+- **Website** — **<https://rosu-web.vercel.app>**
+- **Report a bug or request a feature** — from inside the app (**Settings → Report a problem**), or fill in the form at **<https://rosu-web.vercel.app/report>** (title + description + an optional screenshot). Prefer e-mail? **rosu.app@gmail.com**. GitHub users can also [open an issue](https://github.com/Kerevizodunu2000/rosu/issues).
+- **Security issues** — please report privately; see [SECURITY.md](SECURITY.md).
+- **Follow Rosu:**
+  - Instagram — <https://www.instagram.com/rosu.app/>
+  - YouTube — <https://www.youtube.com/@RosuApp>
+  - Reddit — <https://www.reddit.com/user/RosuApp/>
+  - X (Twitter) — <https://x.com/RosuApp>
+
 ## License
 
 Rosu is free software, licensed under the **[GNU General Public License v3.0 or later](LICENSE)**.

@@ -37,3 +37,22 @@ def test_auto_refresh_on_tab_defaults_on_and_round_trips(tmp_path, monkeypatch):
     cfg.auto_refresh_on_tab = False
     config.save_config(cfg)
     assert config.load_config().auto_refresh_on_tab is False
+
+
+def test_v14_client_and_autosave_defaults_round_trip(tmp_path, monkeypatch):
+    # v1.4: lazer on, stable off, settings auto-save on — defaults + persistence.
+    monkeypatch.setattr(config, "_config_file", lambda: tmp_path / "config.json")
+    c = config.Config(root="x")
+    assert c.lazer_enabled is True
+    assert c.stable_enabled is False
+    assert c.settings_autosave is True
+    cfg = config.load_config()                         # no file yet → defaults
+    assert (cfg.lazer_enabled, cfg.stable_enabled, cfg.settings_autosave) == \
+        (True, False, True)
+    cfg.lazer_enabled = False
+    cfg.stable_enabled = True
+    cfg.settings_autosave = False
+    config.save_config(cfg)
+    r = config.load_config()
+    assert (r.lazer_enabled, r.stable_enabled, r.settings_autosave) == \
+        (False, True, False)

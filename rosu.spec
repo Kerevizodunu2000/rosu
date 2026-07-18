@@ -24,6 +24,12 @@ _drive_hidden = (
 # without the secret simply omits it (Drive login is then unavailable) rather
 # than failing the build.
 _oauth_client = os.path.join('rosu', 'drive', 'oauth_client.json')
+# Same pattern for the report endpoint's shared token: CI writes
+# rosu/report_token.txt from a secret before building (gitignored). A build
+# without the secret ships no token — the server then rejects the app's direct
+# send ("unauthorized") and the dialog falls back to copy-the-e-mail / open the
+# web form, so nothing breaks, but in-app sending only works in token builds.
+_report_token = os.path.join('rosu', 'report_token.txt')
 _datas = [
     ('rosu/assets/icon.png', 'rosu/assets'),
     ('rosu/assets/icon.ico', 'rosu/assets'),
@@ -33,9 +39,12 @@ _datas = [
     # legal notices shown in the in-app About / Licenses screen
     ('LICENSE', '.'),
     ('THIRD-PARTY-LICENSES.md', '.'),
+    ('licenses', 'licenses'),
 ]
 if os.path.exists(_oauth_client):
     _datas.append((_oauth_client, 'rosu/drive'))
+if os.path.exists(_report_token):
+    _datas.append((_report_token, 'rosu'))
 
 a = Analysis(
     ['run.py'],

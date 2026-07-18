@@ -38,7 +38,7 @@ class ArtistsTab(QWidget):
         self.filter.textChanged.connect(lambda _=None: self._filter_debounce.start())
         top.addWidget(self.filter, 1)
         self.btn_reload = QPushButton(objectName="secondary")
-        self.btn_reload.clicked.connect(self.reload)
+        self.btn_reload.clicked.connect(self.refresh_now)
         top.addWidget(self.btn_reload)
         root.addLayout(top)
 
@@ -105,6 +105,21 @@ class ArtistsTab(QWidget):
         key = (self.ctx.services.data_generation(), metric, descending)
         if key != self._built_key:
             self.reload()
+
+    def refresh_now(self) -> None:
+        """Explicit ⟳: empty both tables for a beat before re-filling, so the
+        refresh visibly happens (reload is synchronous and near-instant)."""
+        self.btn_reload.setEnabled(False)
+        self.artists.setRowCount(0)
+        self.songs.setRowCount(0)
+        self.selected.setText(self.ctx.t("refreshing"))
+        QTimer.singleShot(150, self._finish_refresh)
+
+    def _finish_refresh(self) -> None:
+        try:
+            self.reload()
+        finally:
+            self.btn_reload.setEnabled(True)
 
     def reload(self) -> None:
         metric, descending = self.sort.currentData() or ("count", True)

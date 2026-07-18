@@ -41,7 +41,7 @@ class SearchTab(QWidget):
         self.btn = QPushButton()
         self.btn.clicked.connect(self.do_search)
         self.btn_reload = QPushButton(objectName="secondary")
-        self.btn_reload.clicked.connect(self.do_search)         # re-pull the list live
+        self.btn_reload.clicked.connect(self.refresh_now)       # visible re-pull
         row.addWidget(self.box, 1)
         row.addWidget(self.btn)
         row.addWidget(self.btn_reload)
@@ -95,6 +95,14 @@ class SearchTab(QWidget):
         """Re-run the current query after the library changed elsewhere (item 7)."""
         if self._loaded_once:
             self.do_search()
+
+    def refresh_now(self) -> None:
+        """Explicit ⟳: clear the table first so the list visibly re-loads from
+        scratch — a refresh the eye can register even when the re-query is
+        near-instant (the fill itself is the 'animation')."""
+        self.table.setRowCount(0)
+        self.result.setText(self.ctx.t("refreshing"))
+        self.do_search()
 
     def do_search(self) -> None:
         self._debounce.stop()

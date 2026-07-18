@@ -71,6 +71,14 @@ class Config:
     zip_disposal: str = "recycle"
     check_updates: bool = True   # check GitHub for a newer release on startup
     auto_refresh_on_tab: bool = True   # re-run a tab's on_shown() when switched to
+    # Per-client enable/disable (v1.4): a disabled client's import/transfer/export
+    # controls are hidden everywhere and it is never written to. osu!lazer is on by
+    # default; osu!(stable) is off (enable it in Settings).
+    lazer_enabled: bool = True
+    stable_enabled: bool = False
+    # Settings-commit mode (v1.4): True = every setting applies immediately (the
+    # Save button is hidden); False = paths + API creds wait for an explicit Save.
+    settings_autosave: bool = True
 
     # Google Drive backup (v0.8) — the OAuth refresh token is NOT stored here
     # (it lives in the OS keyring); config.json is plaintext beside the exe.

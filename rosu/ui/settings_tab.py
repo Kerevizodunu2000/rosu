@@ -2,6 +2,8 @@
 """Settings tab: language, theme, folders, osu! path, toggles and API reference."""
 from __future__ import annotations
 
+from pathlib import Path
+
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
@@ -25,6 +27,7 @@ class SettingsTab(QWidget):
         self.ctx = main_window.ctx
         cfg = self.ctx.cfg
         self._threads: list[Worker] = []
+        self._live_connected = False   # are path/API live-commit signals wired? (v1.4)
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -41,6 +44,7 @@ class SettingsTab(QWidget):
         # Fields fill the column so combos and path pickers share the same width (item 22).
         form.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
         root.addLayout(form)
+        self._form = form   # kept: per-client rows are shown/hidden live (v1.4)
 
         self.lang = QComboBox()
         self.lang.addItem("English", "en")
@@ -61,16 +65,28 @@ class SettingsTab(QWidget):
         self.packs = self._path_row(form, cfg.packs_dir, is_dir=True)
         self.output = self._path_row(form, cfg.output_dir, is_dir=True)
         self.library = self._path_row(form, cfg.library_dir, is_dir=True)
+        # osu! client executables, each with its per-client enable toggle right
+        # beneath its path (v1.4): a disabled client's path row VANISHES entirely
+        # (it comes back when the toggle is re-enabled) and it is never written to.
         self.osu = self._path_row(form, cfg.osu_lazer_exe, is_dir=False)
+        self.cb_lazer_enabled = QCheckBox(); self.cb_lazer_enabled.setChecked(cfg.lazer_enabled)
+        form.addRow("", self.cb_lazer_enabled)
         self.osu_stable = self._path_row(form, cfg.osu_stable_exe, is_dir=False)
+        self.cb_stable_enabled = QCheckBox(); self.cb_stable_enabled.setChecked(cfg.stable_enabled)
+        form.addRow("", self.cb_stable_enabled)
+        self._sync_client_rows()
 
         self.cb_physical = QCheckBox(); self.cb_physical.setChecked(cfg.library_physical_copy)
         self.cb_clear_before = QCheckBox(); self.cb_clear_before.setChecked(cfg.clear_output_before_extract)
         self.cb_auto_backup = QCheckBox(); self.cb_auto_backup.setChecked(cfg.auto_backup_after_extract)
         self.cb_check_updates = QCheckBox(); self.cb_check_updates.setChecked(cfg.check_updates)
         self.cb_auto_refresh = QCheckBox(); self.cb_auto_refresh.setChecked(cfg.auto_refresh_on_tab)
-        for cb in (self.cb_physical, self.cb_auto_backup, self.cb_clear_before,
-                   self.cb_check_updates, self.cb_auto_refresh):
+        # Settings-commit mode (v1.4): Auto hides the Save button (everything
+        # applies immediately); Manual keeps the explicit Save + dirty-guard.
+        self.cb_autosave = QCheckBox(); self.cb_autosave.setChecked(cfg.settings_autosave)
+        for cb in (self.cb_physical,
+                   self.cb_auto_backup, self.cb_clear_before,
+                   self.cb_check_updates, self.cb_auto_refresh, self.cb_autosave):
             root.addWidget(cb)
 
         zip_row = QHBoxLayout()
@@ -90,6 +106,11 @@ class SettingsTab(QWidget):
         # (item 17) instead of the plain live-apply.
         self.cb_physical.toggled.connect(self._on_physical_toggled)
         self.zip.currentIndexChanged.connect(self._apply_toggles)
+        # Per-client toggles persist + reactively hide that client's controls
+        # everywhere; the save-mode toggle rewires the commit model (v1.4).
+        self.cb_lazer_enabled.toggled.connect(self._apply_client_toggles)
+        self.cb_stable_enabled.toggled.connect(self._apply_client_toggles)
+        self.cb_autosave.toggled.connect(self._on_autosave_toggled)
         # Combos must not change on an accidental wheel scroll (item 16).
         wheel_guard.guard(self.lang, self.theme, self.zip)
 
@@ -168,6 +189,9 @@ class SettingsTab(QWidget):
         self.btn_about = QPushButton(objectName="secondary")
         self.btn_about.clicked.connect(self._show_about)
         about_row.addWidget(self.btn_about)
+        self.btn_report = QPushButton(objectName="secondary")
+        self.btn_report.clicked.connect(self._show_report)
+        about_row.addWidget(self.btn_report)
         about_row.addStretch(1)
         root.addLayout(about_row)
 
@@ -186,6 +210,8 @@ class SettingsTab(QWidget):
         save_sc = QShortcut(QKeySequence.Save, self, activated=self._save)
         save_sc.setContext(Qt.WidgetWithChildrenShortcut)  # only when Settings is focused
         self._baseline = self._snapshot()
+        self._sync_client_import_buttons()   # hide a disabled client's import button
+        self._apply_save_mode()              # set Save-button visibility + live commits
 
     def _select_theme(self, theme: str) -> None:
         idx = self.theme.findData(theme)
@@ -203,6 +229,11 @@ class SettingsTab(QWidget):
                 chosen, _ = QFileDialog.getOpenFileName(self, "", field.text())
             if chosen:
                 field.setText(chosen)
+                # Programmatic setText never fires editingFinished, so an
+                # Auto-Save commit would silently miss a Browse-picked path (and
+                # later surface as a bogus "unsaved changes" warning). Emit it
+                # ourselves; in manual mode nothing is connected, so it's a no-op.
+                field.editingFinished.emit()
 
         browse.clicked.connect(pick)
         field._browse = browse
@@ -212,6 +243,7 @@ class SettingsTab(QWidget):
         holder.addWidget(browse)
         container = QWidget()
         container.setLayout(holder)
+        field._container = container
         form.addRow(label, container)
         return field
 
@@ -249,7 +281,16 @@ class SettingsTab(QWidget):
     def confirm_leave(self) -> bool:
         """Called before leaving Settings / on quit. Returns True when it's OK to
         proceed (saved, discarded, or nothing unsaved); False vetoes the switch."""
-        if not self._is_dirty():
+        if self.ctx.cfg.settings_autosave:
+            if not self._is_dirty():
+                return True
+            if self._save(silent=True):   # Auto mode keeps everything saved
+                return True
+            # The auto-commit FAILED (e.g. an invalid/unreachable folder path).
+            # Silently allowing the leave would drop the edit with no visible
+            # warning — fall through to the explicit Save/Discard/Cancel dialog
+            # so the user gets the same real veto Manual mode has.
+        elif not self._is_dirty():
             return True
         t = self.ctx.t
         box = QMessageBox(self)
@@ -295,6 +336,12 @@ class SettingsTab(QWidget):
         self.cb_check_updates.setToolTip(t("tip_check_updates"))
         self.cb_auto_refresh.setText(t("set_auto_refresh"))
         self.cb_auto_refresh.setToolTip(t("tip_auto_refresh"))
+        self.cb_lazer_enabled.setText(t("set_lazer_enabled"))
+        self.cb_lazer_enabled.setToolTip(t("tip_lazer_enabled"))
+        self.cb_stable_enabled.setText(t("set_stable_enabled"))
+        self.cb_stable_enabled.setToolTip(t("tip_stable_enabled"))
+        self.cb_autosave.setText(t("set_autosave"))
+        self.cb_autosave.setToolTip(t("tip_autosave"))
         self.lbl_zip.setText(t("set_zip_disposal"))
         self._reload_zip_options()
         self.lbl_api.setText(t("set_osu_api"))
@@ -311,6 +358,7 @@ class SettingsTab(QWidget):
         self.lbl_drive.setText(t("set_drive"))
         self.lbl_drive_help.setText(t("set_drive_help"))
         self.btn_about.setText(t("btn_about"))
+        self.btn_report.setText(t("btn_report"))
         self.btn_save.setText(t("btn_save"))
         self.lang.setToolTip(t("tip_language"))
         self.theme.setToolTip(t("tip_theme"))
@@ -327,7 +375,9 @@ class SettingsTab(QWidget):
         self.btn_import_lazer.setToolTip(t("tip_import_lazer"))
         self.btn_drive.setToolTip(t("tip_drive"))
         self.btn_about.setToolTip(t("tip_about"))
+        self.btn_report.setToolTip(t("tip_report"))
         self.btn_save.setToolTip(t("tip_save"))
+        self._sync_client_import_buttons()
         self._refresh_reference_status()
         self._refresh_lost_status()
         self._refresh_drive_status()
@@ -433,6 +483,10 @@ class SettingsTab(QWidget):
         from .about_dialog import AboutDialog
         AboutDialog(self.ctx, self).exec()
 
+    def _show_report(self) -> None:
+        from .report_dialog import ReportDialog
+        ReportDialog(self.ctx, self).exec()
+
     # -- live apply ----------------------------------------------------------
     def _apply_language(self) -> None:
         lang = self.lang.currentData()
@@ -512,8 +566,17 @@ class SettingsTab(QWidget):
         if res.get("error") == "no_api":
             self.lbl_lost_status.setText(self.ctx.t("lost_maps_needs_api"))
             return
-        self.lbl_lost_status.setText(self.ctx.t(
-            "lost_maps_result", checked=res["checked"], gone=res["gone"]))
+        # Say exactly where the scan stands: how many of the library's sets were
+        # checked this run, and how many have never been checked yet (the scan
+        # goes in batches — run again to continue).
+        if res.get("remaining"):
+            self.lbl_lost_status.setText(self.ctx.t(
+                "lost_maps_result_more", checked=res["checked"], gone=res["gone"],
+                remaining=res["remaining"]))
+        else:
+            self.lbl_lost_status.setText(self.ctx.t(
+                "lost_maps_result_all", checked=res["checked"], gone=res["gone"],
+                total=res.get("total", res["checked"])))
         self.mw.search.reload()
 
     def _lost_failed(self, msg) -> None:
@@ -544,9 +607,8 @@ class SettingsTab(QWidget):
             self.lbl_import_status.setText(msg)
 
     def _on_import_done(self, res) -> None:
-        self.btn_import_stable.setEnabled(True)
-        self.btn_import_lazer.setEnabled(True)
         self.import_bar.setVisible(False)
+        self._sync_client_import_buttons()   # re-show per-toggle, re-enable
         t = self.ctx.t
         client = "osu!lazer" if res.get("source") == "lazer" else "osu!(stable)"
         if not res.get("found"):
@@ -562,9 +624,8 @@ class SettingsTab(QWidget):
         self.mw.search.reload()          # reflect the new library rows live (item 7)
 
     def _on_import_failed(self, msg) -> None:
-        self.btn_import_stable.setEnabled(True)
-        self.btn_import_lazer.setEnabled(True)
         self.import_bar.setVisible(False)
+        self._sync_client_import_buttons()   # re-show per-toggle, re-enable
         QMessageBox.critical(self, self.ctx.t("app_title"), msg)
 
     # -- physical-copy toggle (guarded delete) -------------------------------
@@ -603,29 +664,103 @@ class SettingsTab(QWidget):
         cfg.clear_output_before_extract = self.cb_clear_before.isChecked()
         cfg.check_updates = self.cb_check_updates.isChecked()
         cfg.auto_refresh_on_tab = self.cb_auto_refresh.isChecked()
+        cfg.lazer_enabled = self.cb_lazer_enabled.isChecked()
+        cfg.stable_enabled = self.cb_stable_enabled.isChecked()
+        cfg.settings_autosave = self.cb_autosave.isChecked()
         cfg.zip_disposal = self.zip.currentData()
         self.ctx.save_config()
         self.saved_label.setText(self.ctx.t("saved"))
         # auto-copy toggle changes whether the Dashboard shows its Copy button
         self.mw.dashboard._sync_auto_copy()
 
-    # -- save (paths + API) --------------------------------------------------
-    def _save(self) -> bool:
+    # -- per-client enable/disable (v1.4) ------------------------------------
+    def _apply_client_toggles(self, *_) -> None:
+        """Persist the client on/off flags, then reactively hide/show that
+        client's controls on this tab and the Dashboard + Shortcuts tabs."""
+        self._apply_toggles()
+        self._sync_client_rows()
+        self._sync_client_import_buttons()
+        if hasattr(self.mw, "dashboard"):
+            self.mw.dashboard._sync_import_buttons()
+        if hasattr(self.mw, "shortcuts"):
+            self.mw.shortcuts.refresh_client_visibility()
+
+    def _sync_client_rows(self) -> None:
+        """A disabled client's exe path row (label + field + Browse) disappears
+        entirely until the client is re-enabled — only the enable toggle stays."""
         cfg = self.ctx.cfg
-        cfg.packs_dir = self.packs.text().strip()
-        cfg.output_dir = self.output.text().strip()
-        cfg.library_dir = self.library.text().strip()
+        self._form.setRowVisible(self.osu._container, bool(cfg.lazer_enabled))
+        self._form.setRowVisible(self.osu_stable._container, bool(cfg.stable_enabled))
+
+    def _sync_client_import_buttons(self) -> None:
+        """Hide a disabled client's 'import installed songs' button (v1.4) —
+        consistent with its path row vanishing above. While an import runs the
+        visible buttons stay disabled (the busy bar is showing)."""
+        running = self.import_bar.isVisible()
+        for btn, on in ((self.btn_import_lazer, self.ctx.cfg.lazer_enabled),
+                        (self.btn_import_stable, self.ctx.cfg.stable_enabled)):
+            btn.setVisible(bool(on))
+            btn.setEnabled(not running)
+
+    # -- Save / Auto-Save commit mode (v1.4) ---------------------------------
+    def _on_autosave_toggled(self, *_) -> None:
+        self._apply_toggles()      # persist settings_autosave (+ the other toggles)
+        self._apply_save_mode()
+
+    def _apply_save_mode(self) -> None:
+        """Reflect the Save/Auto-Save setting. Auto: hide the Save button and
+        commit path/API edits on focus-out. Manual: show Save + keep the
+        dirty-guard (the historical behaviour)."""
+        auto = bool(self.ctx.cfg.settings_autosave)
+        self.btn_save.setVisible(not auto)
+        fields = (self.packs, self.output, self.library, self.osu,
+                  self.osu_stable, self.client_id, self.client_secret)
+        if self._live_connected:                    # only disconnect what we connected
+            for f in fields:
+                f.editingFinished.disconnect(self._commit_live)
+            self._live_connected = False
+        if auto:
+            for f in fields:
+                f.editingFinished.connect(self._commit_live)
+            self._live_connected = True
+        # Commit anything pending on EITHER mode switch: edits made while Auto
+        # was on were meant to be applied live, so flipping to Manual must not
+        # retroactively turn them into "unsaved changes" (bogus leave warning).
+        if self._is_dirty():
+            self._save(silent=True)
+
+    def _commit_live(self) -> None:
+        if self.ctx.cfg.settings_autosave:
+            self._save(silent=True)
+
+    # -- save (paths + API) --------------------------------------------------
+    def _save(self, silent: bool = False) -> bool:
+        cfg = self.ctx.cfg
+        packs = self.packs.text().strip()
+        output = self.output.text().strip()
+        library = self.library.text().strip()
+        # Validate the user-editable folders BEFORE mutating cfg, so a bad path
+        # (Auto-save commits on focus-out) can never corrupt the live config —
+        # nothing is assigned unless the paths are actually creatable.
+        try:
+            for d in (packs, output, library):
+                Path(d).mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            msg = self.ctx.t("settings_save_failed", err=str(exc))
+            if silent:   # Auto-save on focus-out — inline notice, keep editing
+                self.saved_label.setText(msg)
+            else:
+                QMessageBox.critical(self, self.ctx.t("app_title"), msg)
+            return False
+        cfg.packs_dir = packs
+        cfg.output_dir = output
+        cfg.library_dir = library
         cfg.osu_lazer_exe = self.osu.text().strip()
         cfg.osu_stable_exe = self.osu_stable.text().strip()
         cfg.osu_exe = cfg.osu_lazer_exe   # keep the legacy field mirrored
         cfg.osu_client_id = self.client_id.text().strip()
         cfg.osu_client_secret = self.client_secret.text().strip()
-        try:
-            cfg.ensure_dirs()   # can raise on an invalid/unreachable path the user typed
-        except OSError as exc:
-            QMessageBox.critical(self, self.ctx.t("app_title"),
-                                 self.ctx.t("settings_save_failed", err=str(exc)))
-            return False
+        cfg.ensure_dirs()   # create the derived data/logs dirs (user dirs already made)
         self._apply_toggles()   # persists cfg (now-validated paths + toggles + API)
         self.ctx.log.info("SETTINGS_SAVE", changed="paths,toggles,api")
         self.saved_label.setText(self.ctx.t("saved"))
