@@ -23,6 +23,11 @@ from .reveal import reveal_in_explorer
 
 _DATA_ROW_ROLE = Qt.UserRole + 40   # maps a (sortable) view row back to _last_rows
 
+# The query fields the visual Filters panel OWNS (see filters_panel.filter_tokens).
+# When the panel changes we replace only these tokens in the box and preserve every
+# other token — free text AND hand-typed filters like status=/mapper=/cs= .
+_PANEL_FILTER_FIELDS = {"mode", "star", "key", "keys", "bpm", "length", "ar", "od"}
+
 
 def _star_cell(diffs: list[dict]) -> tuple[str, float, str]:
     """(text, sort, tooltip) for the Star column from a set's per-diff rows.
@@ -193,10 +198,16 @@ class SearchTab(QWidget):
             pass   # a mode-count hiccup must never block search
 
     def _apply_filters_from_panel(self) -> None:
-        """A filters-panel change → rewrite only the box's filter tokens (keeping any
-        free text the user typed) and re-run the search."""
-        free = query.parse(self.box.text()).free_text
-        new = " ".join(([free] if free else []) + self.filters.filter_tokens()).strip()
+        """A filters-panel change → replace only the filter tokens the panel OWNS
+        (mode/star/key/bpm/length/ar/od), preserving free text AND any other filter
+        the user typed by hand (status=, mapper=, cs=, …), then re-run the search."""
+        kept = []
+        for tok in self.box.text().split():
+            m = query._FILTER_RE.fullmatch(tok)
+            if m and m.group("key").lower() in _PANEL_FILTER_FIELDS:
+                continue   # panel owns this field — it will re-emit it below
+            kept.append(tok)
+        new = " ".join(kept + self.filters.filter_tokens()).strip()
         self.box.blockSignals(True)     # avoid a second (debounced) search
         self.box.setText(new)
         self.box.blockSignals(False)

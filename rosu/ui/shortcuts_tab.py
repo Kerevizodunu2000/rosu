@@ -539,7 +539,10 @@ class ShortcutsTab(QWidget):
         limit = self.export_random_n.value() if self.export_random.isChecked() else None
         lo = self.export_star_lo.value()
         hi = self.export_star_hi.value()
-        star_range = (lo, hi if hi > 0 else _STAR_CAP) if (lo > 0 or hi < _STAR_CAP) else None
+        # ★≤ left at the cap (or 0 = its "off" special value) means NO upper bound —
+        # use +inf, not the literal 12★ cap, so maps above 12★ aren't silently dropped.
+        upper = hi if 0 < hi < _STAR_CAP else float("inf")
+        star_range = None if (lo <= 0 and upper == float("inf")) else (lo, upper)
         if upload and not self.services.drive_status().get("connected"):
             QMessageBox.information(self, t("app_title"), t("drive_connect_first"))
             return

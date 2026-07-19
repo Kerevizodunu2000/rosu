@@ -510,6 +510,10 @@ def test_gather_export_star_range_filters_library(tmp_path):
     # no range → everything
     allf = svc._gather_export_sources("library", stage, star_range=None)
     assert {p.name for p in allf} == {"low.osz", "mid.osz", "hi.osz"}
+    # unbounded upper (★≥ set, ★≤ left at cap) must include maps above the 12★ cap
+    upper_open = svc._gather_export_sources("library", stage,
+                                            star_range=(4.0, float("inf")))
+    assert {p.name for p in upper_open} == {"mid.osz", "hi.osz"}
     db.close()
 
 

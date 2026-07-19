@@ -31,6 +31,13 @@ from .models import MODE_NAMES, DiffMeta, TrackMeta
 # skipped, degrading that one difficulty rather than the whole scan.
 _MAX_OSU_BYTES = 16 * 1024 * 1024
 
+# Sanity bound on a hit-object timestamp. The 16 MB read cap bounds how MANY notes
+# a crafted .osz can carry, but not the timestamp VALUE — and a single note with an
+# absurd time (e.g. 1e15 ms) makes the mania skillset window loop (rosu/msd.py) run
+# for effectively forever (span / 250 ms iterations) → CPU pin + OOM at ingest. Real
+# osu! maps are minutes long; anything past 2 hours is hostile/broken, so drop it.
+_MAX_NOTE_TIME_MS = 2 * 60 * 60 * 1000
+
 # [Metadata] keys that map onto TrackMeta (the shared, set-level fields).
 _META_KEYS = {
     "Artist": "artist",
@@ -207,6 +214,8 @@ def read_mania_notes(raw: bytes, keycount: int) -> list[tuple[int, int, int | No
             otype = int(parts[3])
         except ValueError:
             continue
+        if time < 0 or time > _MAX_NOTE_TIME_MS:
+            continue   # hostile/broken timestamp (DoS guard) — see _MAX_NOTE_TIME_MS
         col = int(x * keycount / 512)
         col = 0 if col < 0 else (keycount - 1 if col >= keycount else col)
         end: int | None = None
@@ -214,6 +223,8 @@ def read_mania_notes(raw: bytes, keycount: int) -> list[tuple[int, int, int | No
             try:
                 end = int(float(parts[5].split(":", 1)[0]))
             except ValueError:
+                end = None
+            if end is not None and (end < 0 or end > _MAX_NOTE_TIME_MS):
                 end = None
         notes.append((time, col, end))
     notes.sort(key=lambda n: n[0])

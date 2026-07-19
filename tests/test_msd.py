@@ -127,3 +127,24 @@ def test_read_mania_notes_column_mapping_and_hold():
 
 def test_read_mania_notes_non_mania_or_zero_keys_empty():
     assert beatmap.read_mania_notes(b"[HitObjects]\n64,192,1,1,0", 0) == []
+
+
+def test_read_mania_notes_drops_hostile_timestamps():
+    """A crafted note with an absurd timestamp is dropped (DoS guard): otherwise the
+    msd window loop would iterate ~span/250 ms times → CPU pin + OOM at ingest."""
+    osu = ("osu file format v14\n\n[General]\nMode: 3\n\n[HitObjects]\n"
+           "64,192,1000,1,0,0:0:0:0:\n"
+           "64,192,1000000000000000,1,0,0:0:0:0:\n"   # ~1e15 ms → dropped
+           "64,192,-5,1,0,0:0:0:0:\n")                # negative → dropped
+    assert beatmap.read_mania_notes(osu.encode("utf-8"), 4) == [(1000, 0, None)]
+
+
+def test_skillset_bounds_pathological_span():
+    """skillset must not spin on a huge time span even if handed raw notes that
+    bypass read_mania_notes' timestamp guard — it declines quickly, never hangs."""
+    import time as _t
+    notes = _single_stream() + [(10 ** 15, 0, None)]   # 8 normal rows + 1e15 ms note
+    t0 = _t.perf_counter()
+    res = msd.skillset(notes, 7)
+    assert _t.perf_counter() - t0 < 1.0    # returns fast — no runaway loop
+    assert res is None                     # span too large → refuse to rate

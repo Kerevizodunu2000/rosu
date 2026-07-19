@@ -10,6 +10,25 @@ the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.6.2] - 2026-07-19
+
+**Security & correctness patch** — no new features.
+
+### Security
+- **Fixed a denial-of-service in the mania skillset (MSD) scan.** A crafted `.osu`
+  with an absurd hit-object timestamp could make the skillset window loop run for
+  effectively forever (CPU pinned + out-of-memory) — triggered automatically when
+  importing an untrusted pack. Hit-object times are now sanity-bounded when parsed,
+  and the window loop is independently hard-capped, so no map can hang the scan.
+
+### Fixed
+- **Star-range export no longer drops maps above 12★.** Leaving the `★≤` bound at
+  the slider cap now means "no upper bound"; it previously imposed a silent 12★
+  ceiling (the histogram's "Export this range" inherited the same limit).
+- **The visual Filters panel no longer wipes hand-typed filters.** Adjusting a panel
+  control used to keep only free text; it now preserves other typed filters too
+  (`status=`, `mapper=`, `cs=`, …), replacing only the fields the panel owns.
+
 ## [1.6.1] - 2026-07-19
 
 Documentation patch — no functional changes.

@@ -41,6 +41,12 @@ _MIN_DT_MS = 20.0         # floor on row spacing (caps ~50 rows/s so a 0 ms glit
                           # can never explode a score)
 _PCTL = 0.93              # "sustained peak": high percentile of window intensities
 _MIN_ROWS = 8             # too few rows → not enough signal, return None
+# Hard ceiling on the number of sliding windows, independent of the note parser. The
+# window loop runs (span / _STEP_MS) times, so a hostile note timestamp (see
+# beatmap._MAX_NOTE_TIME_MS) could otherwise spin it ~forever. 200k windows = ~14h of
+# span at 250 ms steps — orders of magnitude beyond any real map — so a chart implying
+# more than this is broken/hostile and we decline to rate it rather than hang/OOM.
+_MAX_WINDOWS = 200_000
 
 # Per-skill scale factors turning a rows/sec intensity into a star-like number.
 # Jacks/chords are harder per row than streams, so they carry more weight.
@@ -141,6 +147,8 @@ def skillset(notes: list[tuple[int, int, int | None]],
     duration_s = (last - first) / 1000.0
     if duration_s <= 0:
         return None
+    if (last - first) / _STEP_MS > _MAX_WINDOWS:
+        return None   # implausibly long span → refuse (DoS guard; real maps are minutes)
 
     cols = [[] for _ in range(7)]      # stream, js, hs, jack, cj, tech, nps
     n = len(rows)
