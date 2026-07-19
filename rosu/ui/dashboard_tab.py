@@ -37,7 +37,7 @@ class DashboardTab(QWidget):
 
         root = QVBoxLayout(self)
         root.setContentsMargins(18, 18, 18, 18)
-        root.setSpacing(12)
+        root.setSpacing(10)   # match every other tab's root spacing
 
         self.title = QLabel(objectName="h1")
         root.addWidget(self.title)

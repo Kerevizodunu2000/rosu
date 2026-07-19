@@ -108,6 +108,28 @@ def test_star_range_export_prefill(qapp, tmp_path, monkeypatch):
     ctx.db.close()
 
 
+def test_share_toggle_requires_informed_consent(qapp, tmp_path, monkeypatch):
+    """v1.6.3 regression: enabling the public Drive share link must show the
+    copyright warning; declining snaps the checkbox back off, accepting keeps it."""
+    from PySide6.QtWidgets import QMessageBox
+    from rosu.ui.main_window import MainWindow
+    ctx = _ctx(tmp_path, monkeypatch)
+    ctx.cfg.drive_connected = True
+    win = MainWindow(ctx, qapp)
+    tab = win.shortcuts
+    tab.export_drive.setChecked(True)              # a link needs the upload
+    monkeypatch.setattr(QMessageBox, "question",
+                        lambda *a, **k: QMessageBox.No)
+    tab.export_share.setChecked(True)
+    assert not tab.export_share.isChecked()        # declined → snapped back off
+    monkeypatch.setattr(QMessageBox, "question",
+                        lambda *a, **k: QMessageBox.Yes)
+    tab.export_share.setChecked(True)
+    assert tab.export_share.isChecked()            # informed consent → stays on
+    win.close()
+    ctx.db.close()
+
+
 def test_health_dialog_builds_and_renders_report(qapp, tmp_path, monkeypatch):
     """The v1.1 Library Health dialog constructs and populates from a report."""
     from rosu.ui.health_dialog import HealthDialog

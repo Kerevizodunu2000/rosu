@@ -62,6 +62,11 @@ class AppContext:
         config.save_config(self.cfg)
 
 
+def _error_line(exc: BaseException) -> str:
+    """One readable line describing a startup failure (pure — unit-tested)."""
+    return f"{type(exc).__name__}: {exc}"
+
+
 def _heal_paths(cfg: config.Config, headless: bool) -> pathheal.Diagnosis | None:
     """Self-heal working-folder paths if the app folder moved (item 20).
 
@@ -101,7 +106,20 @@ def run() -> int:
 
     cfg = config.load_config()
     healed = _heal_paths(cfg, headless="--selftest" in argv)
-    ctx = AppContext(cfg)
+    try:
+        ctx = AppContext(cfg)
+    except Exception as exc:
+        # A failed DB open/migration must not die as a bare traceback (invisible
+        # in the windowed exe): tell the user what broke and where, fail fast.
+        if "--selftest" in argv:
+            print(f"selftest FAIL ({_error_line(exc)})")
+            return 1
+        i18n = I18N(cfg.language)
+        QMessageBox.critical(
+            None, i18n.t("err_db_init_title"),
+            i18n.t("err_db_init_body", path=str(cfg.db_path),
+                   error=_error_line(exc)))
+        return 1
     qss = load_stylesheet(ctx.cfg.theme)
 
     if "--selftest" in argv:

@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Tests for osu! API metadata enrichment (osu_api.beatmapset_details /
 _normalize_beatmapset_details + services.enrich_metadata). No real network."""
+import pytest
+
 from rosu import config, osu_api
 from rosu.db import Database
 from rosu.models import ParsedTrack
@@ -34,6 +36,27 @@ _SAMPLE = {
          "drain": 6.0, "bpm": 180.0, "total_length": 100},
     ],
 }
+
+
+def test_get_malformed_body_raises_osu_api_error(monkeypatch):
+    # A 200 whose body isn't JSON (Cloudflare interstitial, truncated reply) must
+    # surface as OsuApiError with a readable message, not a raw JSONDecodeError.
+    class FakeResp:
+        status = 200
+
+        def read(self):
+            return b"<html>interstitial</html>"
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    monkeypatch.setattr(osu_api.urllib.request, "urlopen",
+                        lambda req, timeout=60: FakeResp())
+    with pytest.raises(osu_api.OsuApiError, match="malformed"):
+        osu_api._get("https://osu.ppy.sh/api/v2/x", "tok")
 
 
 def test_normalize_extracts_fields_and_nested_names():

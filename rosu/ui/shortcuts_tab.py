@@ -140,7 +140,7 @@ class ShortcutsTab(QWidget):
 
         root = QVBoxLayout(self)
         root.setContentsMargins(18, 18, 18, 18)
-        root.setSpacing(12)
+        root.setSpacing(10)   # match every other tab's root spacing
 
         header = QHBoxLayout()
         self.title = QLabel(objectName="h1")

@@ -128,7 +128,7 @@ def _post_form(url: str, fields: dict) -> dict:
                  "Accept": "application/json"})
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
-            return json.loads(resp.read().decode("utf-8"))
+            raw = resp.read()
     except urllib.error.HTTPError as exc:
         # Google returns a JSON error body (e.g. invalid_grant) — surface it.
         try:
@@ -137,6 +137,10 @@ def _post_form(url: str, fields: dict) -> dict:
             raise DriveAuthError(f"token endpoint HTTP {exc.code}") from exc
     except urllib.error.URLError as exc:
         raise DriveAuthError(f"network error: {exc.reason}") from exc
+    try:
+        return json.loads(raw.decode("utf-8"))
+    except ValueError as exc:
+        raise DriveAuthError("token endpoint returned malformed JSON") from exc
 
 
 def _keyring():

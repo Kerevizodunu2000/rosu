@@ -10,6 +10,40 @@ the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.6.3] - 2026-07-19
+
+**Hardening patch** — robustness, safety nets and test depth ahead of v1.7; no new
+features. Driven by four independent code-analysis reports, every finding verified
+against the code first.
+
+### Fixed
+- **Clean errors instead of raw tracebacks on malformed server replies.** A non-JSON
+  body from the Google Drive API, the Google OAuth token endpoint, or the osu! API
+  (proxy interstitials, truncated replies) now surfaces as a readable, typed error
+  message in the UI instead of a bare `JSONDecodeError` from a worker thread.
+- **A database that fails to open no longer kills the app silently.** Startup now
+  shows an error dialog naming the database file and the error (with guidance to
+  back the file up and report), instead of dying with an invisible traceback in the
+  windowed exe; `--selftest` prints the failure reason and exits non-zero.
+- **Archive safety scan fails closed.** If an archive's compressed size cannot be
+  read, the scan now refuses the archive; previously the decompression-ratio check
+  was silently skipped in that case (the 30 GiB total-size cap still applied).
+
+### Changed
+- The bug-report dialog's data disclosure now also mentions the optional contact
+  e-mail among the things sent.
+- Dashboard and Shortcuts root layout spacing aligned with the other tabs (10 px).
+
+### Tests
+- New global test isolation (`tests/conftest.py`): every test's config file is
+  auto-redirected to a temp path, making the v1.4.1 creds-wipe class of accidents
+  structurally impossible; Qt defaults to offscreen.
+- 16 new tests: malformed-reply guards (Drive client/auth, osu! API), archive
+  fail-closed, `msd_for_diffs` filtering, the 16 MB `.osu` bomb guard and parser
+  fallback, `ON DELETE CASCADE`, small db methods (`mode_set_counts`,
+  `set_pack_extra`, `mark_library_memory`), the Drive share-link consent dialog,
+  i18n en/tr completeness, and the startup error helper. 375 tests total.
+
 ## [1.6.2] - 2026-07-19
 
 **Security & correctness patch** — no new features.

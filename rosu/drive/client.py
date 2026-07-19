@@ -45,6 +45,19 @@ def _q_escape(value: str) -> str:
     return value.replace("\\", "\\\\").replace("'", "\\'")
 
 
+def _json(data: bytes, context: str) -> dict:
+    """Parse a Drive API response body, turning garbage (an HTML error page, a
+    truncated body) into a clean :class:`DriveError` instead of a raw
+    ``JSONDecodeError`` bubbling out of a worker."""
+    try:
+        payload = json.loads(data or b"{}")
+    except ValueError as exc:
+        raise DriveError(f"malformed Drive response ({context})") from exc
+    if not isinstance(payload, dict):
+        raise DriveError(f"malformed Drive response ({context})")
+    return payload
+
+
 class DriveClient:
     def __init__(self, auth: DriveAuth, transport: Callable | None = None):
         self._auth = auth
@@ -73,8 +86,8 @@ class DriveClient:
             {"q": " and ".join(parts), "fields": "files(id,name,size)",
              "pageSize": 10, "spaces": "drive"})
         _st, _h, data = self._api("GET", "/files?" + params)
-        files = json.loads(data).get("files", [])
-        return files[0]["id"] if files else None
+        files = _json(data, "file search").get("files", [])
+        return files[0].get("id") if files else None
 
     # -- operations ----------------------------------------------------------
     def ensure_folder(self, name: str = "Rosu",
@@ -90,7 +103,10 @@ class DriveClient:
             "POST", "/files?fields=id",
             body=json.dumps(meta).encode("utf-8"),
             content_type="application/json; charset=UTF-8")
-        return json.loads(data)["id"]
+        fid = _json(data, "folder create").get("id")
+        if not fid:
+            raise DriveError("malformed Drive response (folder create: no id)")
+        return fid
 
     def find_file(self, name: str, parent: str | None) -> str | None:
         return self._find(name, parent, folder=False)
@@ -108,7 +124,7 @@ class DriveClient:
             if page_token:
                 q["pageToken"] = page_token
             _st, _h, data = self._api("GET", "/files?" + urllib.parse.urlencode(q))
-            payload = json.loads(data)
+            payload = _json(data, "folder listing")
             files.extend(payload.get("files", []))
             page_token = payload.get("nextPageToken")
             if not page_token:
@@ -129,7 +145,7 @@ class DriveClient:
         """The shareable ``webViewLink`` for a file (None if Drive omits it)."""
         _st, _h, data = self._api(
             "GET", f"/files/{urllib.parse.quote(file_id)}?fields=webViewLink")
-        return json.loads(data).get("webViewLink")
+        return _json(data, "share link").get("webViewLink")
 
     def upload_file(self, path: Path, name: str, parent: str,
                     progress: Callable[[int, int], None] | None = None,
@@ -179,7 +195,7 @@ class DriveClient:
                 if 200 <= st < 300:
                     if progress:
                         progress(size, size)
-                    return json.loads(bd or b"{}").get("id", "")
+                    return _json(bd, "upload finalize").get("id", "")
                 if st == 308:                      # resume incomplete: continue
                     sent = end + 1
                     if progress:

@@ -62,7 +62,11 @@ def _get(url: str, token: str) -> dict:
         url, headers={"Authorization": f"Bearer {token}",
                       "Accept": "application/json", "User-Agent": USER_AGENT})
     with urllib.request.urlopen(req, timeout=60) as resp:
-        return json.loads(resp.read())
+        raw = resp.read()
+    try:
+        return json.loads(raw)
+    except ValueError as exc:
+        raise OsuApiError(f"malformed API response from {url}") from exc
 
 
 def _get_json(url: str, token: str) -> tuple[dict | None, int, int | None]:

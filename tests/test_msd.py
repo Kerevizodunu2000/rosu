@@ -113,6 +113,32 @@ def test_zero_duration_returns_none():
     assert msd.skillset([(0, i % 4, None) for i in range(12)], 4) is None
 
 
+def _mania_osu_bytes(n=64, key=4):
+    """A minimal mania .osu with n notes cycling columns at _DT intervals."""
+    lines = ["osu file format v14", "", "[General]", "Mode: 3", "", "[HitObjects]"]
+    for i in range(n):
+        x = int((i % key) * 512 / key) + 1
+        lines.append(f"{x},192,{1000 + i * _DT},1,0,0:0:0:0:")
+    return "\n".join(lines).encode("utf-8")
+
+
+def test_msd_for_diffs_filters_and_skips():
+    from rosu.models import DiffMeta
+    diffs = [
+        DiffMeta(filename="mania.osu", mode_int=3, keycount=4),
+        DiffMeta(filename="std.osu", mode_int=0),                  # non-mania
+        DiffMeta(filename="nokeys.osu", mode_int=3, keycount=None),  # no keycount
+        DiffMeta(filename="missing.osu", mode_int=3, keycount=4),  # no raw bytes
+        DiffMeta(filename="short.osu", mode_int=3, keycount=4),    # skillset → None
+    ]
+    raw = {"mania.osu": _mania_osu_bytes(), "std.osu": _mania_osu_bytes(),
+           "nokeys.osu": _mania_osu_bytes(), "short.osu": _mania_osu_bytes(n=2)}
+    out = msd.msd_for_diffs(diffs, raw)
+    # only the real, ratable mania diff lands in the result — and never as None
+    assert set(out) == {"mania.osu"}
+    assert out["mania.osu"].overall > 0
+
+
 def test_read_mania_notes_column_mapping_and_hold():
     osu = (
         "osu file format v14\n\n[General]\nMode: 3\n\n"

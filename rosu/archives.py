@@ -278,8 +278,13 @@ def security_scan(reader, *, members: list[Member] | None = None,
             f"uncompressed total {total} > {max_total}", reason="total")
     try:
         compressed = reader.compressed_size()
-    except OSError:
-        compressed = 0
+    except OSError as exc:
+        # Fail closed: silently treating the size as 0 would skip the ratio
+        # check entirely, letting a bomb through on the one path where the
+        # denominator couldn't be read.
+        raise UnsafeArchive(
+            f"could not determine compressed size for ratio check: {exc}",
+            reason="ratio") from exc
     ratio = (total / compressed) if compressed > 0 else 0.0
     if compressed > 0 and ratio > max_ratio:
         raise ArchiveTooLarge(

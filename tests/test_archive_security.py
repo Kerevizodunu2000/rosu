@@ -98,6 +98,19 @@ def test_scan_ignores_ratio_when_no_compressed_info():
     assert result.ratio == 0.0
 
 
+def test_scan_fails_closed_when_compressed_size_unreadable():
+    # An OSError from compressed_size() used to silently degrade to 0, skipping
+    # the ratio check entirely — the scan must refuse the archive instead.
+    class _BrokenStat(_StubReader):
+        def compressed_size(self):
+            raise OSError("stat failed")
+
+    r = _BrokenStat([Member("a.osz", 1_000_000)])
+    with pytest.raises(archives.UnsafeArchive) as exc:
+        archives.security_scan(r)
+    assert exc.value.reason == "ratio"
+
+
 # -- real (harmless) archives ---------------------------------------------------
 def _make_clean_zip(path):
     with zipfile.ZipFile(path, "w") as z:

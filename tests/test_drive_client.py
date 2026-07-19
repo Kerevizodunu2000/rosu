@@ -109,6 +109,32 @@ def test_list_folder_follows_pagination():
     assert "TOK2" in urls[1] and "TOK2" not in urls[0]  # 2nd request carried token
 
 
+def test_malformed_json_raises_clean_drive_error():
+    # A 200 whose body is an HTML error page (proxy, captive portal) must surface
+    # as a DriveError, not a raw JSONDecodeError bubbling out of a worker thread.
+    def transport(method, url, headers=None, body=None):
+        return 200, {}, b"<html>gateway timeout</html>"
+
+    c = client.DriveClient(FakeAuth(), transport=transport)
+    with pytest.raises(DriveError, match="malformed Drive response"):
+        c.ensure_folder("Rosu")
+    with pytest.raises(DriveError, match="malformed Drive response"):
+        c.list_folder("FOLDER1")
+    with pytest.raises(DriveError, match="malformed Drive response"):
+        c.get_link("FID")
+
+
+def test_folder_create_reply_without_id_raises():
+    def transport(method, url, headers=None, body=None):
+        if method == "GET":
+            return 200, {}, b'{"files":[]}'
+        return 200, {}, b"{}"          # create reply missing the id field
+
+    c = client.DriveClient(FakeAuth(), transport=transport)
+    with pytest.raises(DriveError, match="no id"):
+        c.ensure_folder("Rosu")
+
+
 def test_upload_file_cancelled_aborts_before_put(tmp_path):
     f = tmp_path / "chunk-0000.zip"
     f.write_bytes(b"X" * 100)

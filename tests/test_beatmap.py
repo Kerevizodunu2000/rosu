@@ -80,6 +80,33 @@ def test_read_osu_diff_missing_difficulty_section_never_raises():
     assert d.cs is None and d.keycount is None and d.od is None
 
 
+def test_read_osu_diff_parser_explosion_falls_back_to_basic_meta(monkeypatch):
+    # The "never raises" contract survives even a parser bug: filename + checksum
+    # are still recorded so the diff row exists and can be re-parsed later.
+    def boom(text):
+        raise RuntimeError("parser exploded")
+
+    monkeypatch.setattr(beatmap, "parse_osu_sections", boom)
+    d = beatmap.read_osu_diff(b"whatever", "x.osu")
+    assert d.filename == "x.osu"
+    assert d.checksum == __import__("hashlib").md5(b"whatever").hexdigest()
+    assert d.mode_int is None and d.cs is None
+
+
+def test_read_osz_full_skips_oversized_osu(tmp_path, monkeypatch):
+    # Decompression-bomb guard: a member whose reported size exceeds the cap is
+    # skipped (no read), while normal siblings still parse.
+    monkeypatch.setattr(beatmap, "_MAX_OSU_BYTES", 500)
+    p = tmp_path / "1 A - B.osz"
+    with zipfile.ZipFile(p, "w") as z:
+        z.writestr("small [Easy].osu", _STD)          # ~230 bytes — under the cap
+        z.writestr("big [Hard].osu", "x" * 1000)      # over the cap — skipped
+    meta, diffs, raw = beatmap.read_osz_full(p)
+    assert set(raw) == {"small [Easy].osu"}
+    assert [d.filename for d in diffs] == ["small [Easy].osu"]
+    assert meta.diff_count == 2     # counted from names even when one is skipped
+
+
 def test_read_osu_diff_garbage_never_raises():
     d = beatmap.read_osu_diff(b"\x00\x01 not a beatmap \xff", "bad.osu")
     assert d.checksum  # always computed from the raw bytes

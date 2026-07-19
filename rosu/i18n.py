@@ -442,6 +442,18 @@ STRINGS: dict[str, dict[str, str]] = {
         "tr": "Ayarlarda kayıtlı klasörler eski konumlarında bulunamadı. Uygulama "
               "şu an şuradan çalışıyor:\n\n{base}\n\nAşağıdaki klasörler burada "
               "bulundu. Bunları yeni konum olarak ayarlayayım mı?\n\n{changes}"},
+    "err_db_init_title": {"en": "Rosu couldn't start",
+                          "tr": "Rosu başlatılamadı"},
+    "err_db_init_body": {
+        "en": "Rosu couldn't open its database:\n{path}\n\n{error}\n\nYour beatmap "
+              "files are untouched. This can happen after a failed update or a "
+              "corrupted file — back up the file above, then use \"Report a "
+              "problem\" in a previous version or e-mail rosu.app@gmail.com.",
+        "tr": "Rosu veritabanını açamadı:\n{path}\n\n{error}\n\nBeatmap "
+              "dosyalarınıza dokunulmadı. Bu, başarısız bir güncelleme veya "
+              "bozulmuş bir dosya sonrasında olabilir — önce yukarıdaki dosyayı "
+              "yedekleyin, sonra önceki bir sürümdeki \"Sorun bildir\" formunu "
+              "kullanın veya rosu.app@gmail.com adresine yazın."},
     "path_heal_apply": {"en": "Use these locations", "tr": "Bu konumları kullan"},
     "path_heal_keep": {"en": "Keep old settings", "tr": "Eski ayarları koru"},
     "path_heal_applied": {"en": "Folder locations updated to this folder.",
@@ -1126,14 +1138,15 @@ STRINGS: dict[str, dict[str, str]] = {
               "<a href='https://rosu-web.vercel.app/report'>"
               "rosu-web.vercel.app/report</a>."},
     "report_disclosure": {
-        "en": "Sent to the Rosu team: your text, the app version, your OS and UI "
-              "language, and any screenshot you attach (plus, on the server, a "
-              "hashed form of your IP address to limit spam). Nothing is sent "
-              "until you press Send.",
-        "tr": "Rosu ekibine gönderilir: yazdıkların, uygulama sürümü, işletim "
-              "sistemin ve arayüz dilin, ve eklediğin ekran görüntüsü (ayrıca "
-              "sunucuda, spam'i sınırlamak için IP adresinin hash'lenmiş bir "
-              "hâli). Gönder'e basana kadar hiçbir şey gönderilmez."},
+        "en": "Sent to the Rosu team: your text, your contact e-mail if you "
+              "provide one, the app version, your OS and UI language, and any "
+              "screenshot you attach (plus, on the server, a hashed form of your "
+              "IP address to limit spam). Nothing is sent until you press Send.",
+        "tr": "Rosu ekibine gönderilir: yazdıkların, verirsen iletişim e-postan, "
+              "uygulama sürümü, işletim sistemin ve arayüz dilin, ve eklediğin "
+              "ekran görüntüsü (ayrıca sunucuda, spam'i sınırlamak için IP "
+              "adresinin hash'lenmiş bir hâli). Gönder'e basana kadar hiçbir şey "
+              "gönderilmez."},
     "report_agree": {
         "en": "By sending, you agree to our "
               "<a href='https://rosu-web.vercel.app/privacy'>Privacy Policy</a> and "

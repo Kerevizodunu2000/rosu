@@ -49,6 +49,67 @@ def test_relax_is_idempotent_on_a_fresh_db(tmp_path):
     db2.close()
 
 
+def _track(db, bsid, name="A - B"):
+    t = ParsedTrack(beatmapset_id=bsid, filename=f"{bsid} {name}.osz", artist="A",
+                    title="B", display_name=name, size_bytes=1)
+    tid, _new = db.upsert_track(t, "when")
+    return tid
+
+
+def test_set_pack_extra_records_count(tmp_path):
+    db = Database(tmp_path / "m.db")
+    db.get_or_create_local_pack("local_osu_lazer")
+    db.set_pack_extra("local_osu_lazer", 7)
+    assert db.get_pack_by_code("local_osu_lazer")["extra_count"] == 7
+    db.close()
+
+
+def test_mark_library_memory_flags_all_rows(tmp_path):
+    db = Database(tmp_path / "m.db")
+    for bsid in (1, 2):
+        db.set_library_state(_track(db, bsid), True, "present", "t0")
+    changed = db.mark_library_memory("t1")
+    assert changed == 2
+    assert db.library_tracks() == []           # nothing physically present anymore
+    rows = db.library_records()                # ...but the memory survives
+    assert {r["library_status"] for r in rows} == {"memory"}
+    db.close()
+
+
+def test_mode_set_counts_only_counts_library_sets(tmp_path):
+    from rosu.models import DiffMeta
+    db = Database(tmp_path / "m.db")
+    in_lib = _track(db, 10)
+    db.set_library_state(in_lib, True, "present", "t0")
+    db.upsert_difficulties(in_lib, [
+        DiffMeta(filename="a.osu", mode_int=3, mode="osu!mania", keycount=4),
+        DiffMeta(filename="b.osu", mode_int=3, mode="osu!mania", keycount=7),
+        DiffMeta(filename="c.osu", mode_int=0, mode="osu!"),
+    ], {}, "t0")
+    outside = _track(db, 20)                  # not in library — must not count
+    db.upsert_difficulties(outside, [
+        DiffMeta(filename="d.osu", mode_int=1, mode="osu!taiko"),
+    ], {}, "t0")
+    counts = db.mode_set_counts()
+    assert counts == {"osu!mania": 1, "osu!": 1}   # one SET per mode, no taiko
+    db.close()
+
+
+def test_deleting_a_track_cascades_to_difficulties(tmp_path):
+    from rosu.models import DiffMeta
+    db = Database(tmp_path / "m.db")
+    tid = _track(db, 30)
+    db.upsert_difficulties(tid, [
+        DiffMeta(filename="a.osu", mode_int=0, mode="osu!"),
+    ], {}, "t0")
+    assert db.difficulties_for_track(tid) != []
+    with db._lock:                             # raw delete: exercise ON DELETE CASCADE
+        db._conn.execute("DELETE FROM tracks WHERE id=?", (tid,))
+        db._conn.commit()
+    assert db.difficulties_for_track(tid) == []
+    db.close()
+
+
 def test_set_in_osu_flag(tmp_path):
     db = Database(tmp_path / "m.db")
     t = ParsedTrack(beatmapset_id=999, filename="999 A - B.osz", artist="A",

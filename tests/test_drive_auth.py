@@ -54,6 +54,25 @@ def test_load_client_config_from_env(monkeypatch):
     assert auth.load_client_config() == ClientConfig("x", "y")
 
 
+def test_post_form_malformed_200_body_raises_auth_error(monkeypatch):
+    # Google answering 200 with a non-JSON body (proxy page, truncated reply)
+    # must become a clean DriveAuthError, not a JSONDecodeError.
+    class FakeResp:
+        def read(self):
+            return b"<html>not json</html>"
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    monkeypatch.setattr(auth.urllib.request, "urlopen",
+                        lambda req, timeout=30: FakeResp())
+    with pytest.raises(DriveAuthError, match="malformed"):
+        auth._post_form("https://token.example/", {"grant_type": "x"})
+
+
 def test_get_access_token_refreshes_and_caches():
     calls = []
 
