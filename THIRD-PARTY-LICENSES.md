@@ -12,6 +12,7 @@ same list is shown in-app under **Settings → About / Licenses**.
 | [openpyxl](https://openpyxl.readthedocs.io/) | Excel report generation | MIT |
 | [Send2Trash](https://github.com/arsenetar/send2trash) | moving files to the Recycle Bin | BSD-3-Clause |
 | [RapidFuzz](https://github.com/rapidfuzz/RapidFuzz) | fuzzy search ranking | MIT |
+| [rosu-pp-py](https://github.com/MaxOhn/rosu-pp-py) | local per-difficulty star ratings (compiled Rust/PyO3 wheel; import-guarded) | MIT |
 | [keyring](https://github.com/jaraco/keyring) | OS-native credential storage for the Google Drive OAuth refresh token | MIT |
 | [pywin32-ctypes](https://github.com/enthought/pywin32-ctypes) | keyring's Windows Credential Manager backend | BSD-3-Clause |
 | [jaraco.classes](https://github.com/jaraco/jaraco.classes), [jaraco.functools](https://github.com/jaraco/jaraco.functools), [jaraco.context](https://github.com/jaraco/jaraco.context), [more-itertools](https://github.com/more-itertools/more-itertools) | small utility libraries required by keyring | MIT |

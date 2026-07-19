@@ -10,6 +10,18 @@ the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.6.1] - 2026-07-19
+
+Documentation patch — no functional changes.
+
+### Changed
+- **README** refreshed to document shipped v1.1–v1.6 features: Library Health, Shortcuts job queue,
+  per-difficulty star ratings & query-syntax search, mania skillset ratings, the visual Filters panel,
+  and star-range export; roadmap updated through v1.6.
+
+### Fixed
+- **THIRD-PARTY-LICENSES.md** now lists **rosu-pp-py** (local star-rating engine, v1.5).
+
 ## [1.6.0] - 2026-07-19
 
 **Mania skillset ratings + a visual filters panel + star-range export.** Rosu now

@@ -51,7 +51,7 @@ Rosu bulk-extracts `.zip`/`.7z`/`.tar` beatmap packs into a deduplicated `.osz` 
 - **Refresh Library Data** rescans `Library/`, backfills metadata, and timestamps files that have disappeared instead of silently dropping them.
 
 **Shortcuts (one-click flows)**
-- A dedicated **Shortcuts** tab with an installed-music summary (osu!lazer / osu!(stable) / Library / Drive set counts) and one-tap actions: **transfer** sets between osu!lazer ↔ osu!(stable) (skipping what the target already has), **save** an installed client straight into the Library, **unpack Packs and import** to either/both clients (with a skip-duplicates choice), **export** {Library | Drive-backed | a client | all-merged} to **zip/7z** (single or split into 1 GB / 500 MB volumes, optionally uploaded to Drive with a shareable link), and **dedupe** the Library (preview + confirm, Recycle Bin). Long operations are cancellable.
+- A dedicated **Shortcuts** tab with an installed-music summary (osu!lazer / osu!(stable) / Library / Drive set counts) and one-tap actions: **transfer** sets between osu!lazer ↔ osu!(stable) (skipping what the target already has), **save** an installed client straight into the Library, **unpack Packs and import** to either/both clients (with a skip-duplicates choice), **export** {Library | Drive-backed | a client | all-merged} to **zip/7z** (single or split into 1 GB / 500 MB volumes, with optional **★≥ / ★≤** star bounds on Library sets, optionally uploaded to Drive with a shareable link), and **dedupe** the Library (preview + confirm, Recycle Bin). Long operations are cancellable and show live progress in the job queue.
 
 **Cloud backup (Google Drive)**
 - **Back up your Library to Google Drive** — log in once (loopback OAuth + PKCE, the minimal `drive.file` scope so Rosu only ever sees the files it creates). New `.osz` are uploaded incrementally as fixed-size, append-only chunk archives; re-running uploads only what's new. A pre-backup dialog previews the new-set count and total size and lets you cap how many sets to send this run and pick the chunk size — including an **Individual (one file per set)** mode.
@@ -63,10 +63,25 @@ Rosu bulk-extracts `.zip`/`.7z`/`.tar` beatmap packs into a deduplicated `.osz` 
 - **Lost-map detection** (optional; needs osu! API credentials): flags owned beatmapsets that no longer exist on osu! — deleted or taken down — so you know what's already unrecoverable. Rosu is the only pack-level archiver that surfaces this.
 
 **Search, metadata & reporting**
-- Relevance-ranked **Music Search** (exact > prefix > word > substring, with a fuzzy tiebreak) and a browsable **Artists** tab with sortable aggregates (avg. length, avg. BPM).
-- Rich per-track metadata parsed from each `.osz`'s `.osu` files: BPM, length, mapper/creator, mode, source, tags, difficulty count. Malformed names fall back to "Unknown" without breaking the import.
+- Relevance-ranked **Music Search** (tokenized AND on artist/title/name; optional tag/mapper search) with per-difficulty **Star** and **Keys** columns, a **Skill** column for mania (overall + dominant skillset, e.g. `5.42 CJ`), and location badges (🎮 lazer · 🕹️ stable · 💾 Library · ☁️ Drive).
+- **Query-syntax filters** — combine free text with `star>5`, `mode=mania`, `key=7`, `bpm>=180`, `length=4:03`, `status=ranked`, `artist=`/`mapper=`/`name=`, and CS/AR/OD/HP bounds; diff-level filters must match on the *same* difficulty.
+- **Visual Filters panel** — a collapsible Search sidebar with a dual-handle star slider, ruleset toggles (disabled when you own no maps of that mode), mania key picker, and BPM/length/AR/OD fields; writes the query syntax for you.
+- **Map Details** (double-click a result) — every difficulty's mode, keys, star, CS·AR·OD·HP, and (for mania) a **skillset radar**; plus osu!-API metadata when enriched.
+- **Star histogram** (Search → Distribution) — click/drag a range, double-click to search it, or **Export this range** straight into Shortcuts.
+- **Rosu Skillset Rating (mania)** — a local, offline heuristic across Etterna's seven skillsets + overall (not an Etterna port; swappable). Rated at unpack/refresh; whole-Library rescan from Settings. Packs: double-click a present pack for its average mania radar.
+- **Local star ratings** via **rosu-pp-py** (pinned, import-guarded) for every difficulty; optional **osu!-API metadata enrichment** (ranked status, dates, play/favourite counts, genre, language) from Settings.
+- Browsable **Artists** tab with sortable aggregates (avg. star, length, BPM) and an instant filter box.
 - Auto-generated **Excel report** (`data/tracking.xlsx`) with per-category sheets, an Artists sheet, and a Summary — confirmed-red rows only.
 - One-click cell copy, Ctrl+C for a full TSV of the selection, and right-click "Copy names".
+
+**Library health & settings**
+- **Library Health** (Settings) — read-only disk-usage total + biggest sets, a DB↔disk scrub (orphans / dead links / memory-only), and a cancellable off-thread **SHA-256 verify** against backup-time hashes.
+- Per-client **enable/disable** toggles (lazer on, stable off by default) — a disabled client vanishes app-wide (Settings path row, Dashboard import, Shortcuts).
+- **Save ⇄ Auto-Save** for Settings; **Report a problem** posts to the hosted form (with e-mail / web-form fallback).
+- Optional startup **update check** against GitHub Releases with a one-click download banner (on by default, fails silently offline).
+
+**Shortcuts job queue**
+- Long Shortcuts actions run as queued **jobs** with named sub-steps, live status, per-item cancel, and **DISK/DRIVE concurrency** (a disk export can run while a Drive upload proceeds). Double-click an archive row to reveal it in the file manager.
 
 **Safety & robustness**
 - Archive extraction is hardened against path traversal (drive-relative/ADS entry names) and zip-bomb/disk-exhaustion (size caps before unpacking).
@@ -75,10 +90,9 @@ Rosu bulk-extracts `.zip`/`.7z`/`.tar` beatmap packs into a deduplicated `.osz` 
 - **Folder self-heal**: if the app's own folder is moved or renamed, it detects the mismatch on launch and offers (with confirmation) to re-point to wherever `Library/`/`data/`/`logs/` actually live.
 
 **Customization**
-- 12 built-in themes (see [Themes](#themes)); toggles in Settings apply immediately, no save step.
+- 12 built-in themes (see [Themes](#themes)); toggles in Settings apply immediately in Auto-Save mode.
 - Mouse-wheel guard on dropdowns so scrolling never silently changes a value.
 - English/Turkish UI switch.
-- Optional startup **update check** against GitHub Releases with a one-click download banner (on by default, fails silently offline).
 
 ## Screenshots
 
@@ -169,13 +183,17 @@ python -m pytest tests/ -q
 
 ## Roadmap
 
-Rosu 1.0 is the first public release. Beyond it, the focus is:
+**Shipped through v1.6:** public essentials (v1.0) · Library Health & disk insight (v1.1) · Shortcuts tab
+(v1.2) · job queue (v1.3) · Settings overhaul + hosted bug report (v1.4) · per-difficulty star ratings,
+query-syntax search & osu!-API enrichment (v1.5) · mania skillset ratings, visual Filters panel & star-range
+export (v1.6).
 
-- **Deeper library tooling** — richer per-map metadata (star rating / ranked status / dates) from the osu! API, partial-pack detection, and collection management.
-- **Cross-platform** — macOS and Linux from the same Python codebase, packaged via PyInstaller.
-- **More UI languages and themes.**
+**Next on the Library Maturity line:** space-saving (prune heavy assets from `.osz` files), audio-fingerprint
+dedup, and deeper browsing UX — then the v2.0 capstone. Later lines add a music player, collections, sync
+hardening, an AI coach, streamer overlays, and cross-platform builds (macOS/Linux).
 
-Extra numbered pack series (ST/SC/T/L/P/A and beyond) are already auto-supported by the gap-detection logic as they appear.
+Extra numbered pack series (ST/SC/T/L/P/A and beyond) are already auto-supported by the gap-detection logic as
+they appear.
 
 See [`CHANGELOG.md`](CHANGELOG.md) for the full, version-by-version history.
 
