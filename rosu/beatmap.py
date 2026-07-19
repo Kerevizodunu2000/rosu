@@ -168,6 +168,58 @@ def read_osu_diff(raw: bytes, filename: str) -> DiffMeta:
     )
 
 
+def read_mania_notes(raw: bytes, keycount: int) -> list[tuple[int, int, int | None]]:
+    """Parse a mania ``.osu``'s hit objects → ``[(time_ms, column, end_time), ...]``.
+
+    osu!mania maps an object's ``x`` to a fixed column with
+    ``column = clamp(floor(x * K / 512), 0, K-1)``. Hold notes (type bit ``128``)
+    carry their release time in the first object-param field (before the first
+    ``:``); a normal note has ``end_time = None``. The list is sorted by time.
+
+    This retains the per-note column/timing data that :func:`parse_osu_sections`
+    deliberately throws away (it keeps only the last hit time) — :mod:`rosu.msd`
+    needs it to estimate skillset ratings. Best-effort: a bad line is skipped and
+    the function never raises; non-mania or unreadable input yields ``[]``.
+    """
+    if not keycount or keycount < 1:
+        return []
+    try:
+        text = raw.decode("utf-8", errors="replace")
+    except Exception:
+        return []
+    notes: list[tuple[int, int, int | None]] = []
+    section = ""
+    for line in text.splitlines():
+        s = line.strip()
+        if not s:
+            continue
+        if s.startswith("[") and s.endswith("]"):
+            section = s[1:-1]
+            continue
+        if section != "HitObjects":
+            continue
+        parts = s.split(",")
+        if len(parts) < 4:
+            continue
+        try:
+            x = int(float(parts[0]))
+            time = int(float(parts[2]))
+            otype = int(parts[3])
+        except ValueError:
+            continue
+        col = int(x * keycount / 512)
+        col = 0 if col < 0 else (keycount - 1 if col >= keycount else col)
+        end: int | None = None
+        if otype & 128 and len(parts) >= 6:      # mania hold note (end:hitsample)
+            try:
+                end = int(float(parts[5].split(":", 1)[0]))
+            except ValueError:
+                end = None
+        notes.append((time, col, end))
+    notes.sort(key=lambda n: n[0])
+    return notes
+
+
 def read_osz_full(osz_path: Path) -> tuple[TrackMeta, list[DiffMeta], dict[str, bytes]]:
     """Open an ``.osz`` once → ``(TrackMeta, [DiffMeta...], {filename: raw_bytes})``.
 

@@ -161,6 +161,21 @@ STRINGS: dict[str, dict[str, str]] = {
                            "tr": "Sanatçı, başlık veya id ara…"},
     "search_tags_toggle": {"en": "Also search tags / mapper",
                            "tr": "Etiketlerde / haritacıda da ara"},
+    # -- v1.6: visual filters panel ------------------------------------------
+    "filters_panel": {"en": "Filters", "tr": "Filtreler"},
+    "filters_clear": {"en": "Clear filters", "tr": "Filtreleri temizle"},
+    "filters_mode": {"en": "Mode", "tr": "Mod"},
+    "filters_star": {"en": "Star", "tr": "Yıldız"},
+    "filters_keys": {"en": "Keys (mania)", "tr": "Tuş (mania)"},
+    "filters_bpm": {"en": "BPM", "tr": "BPM"},
+    "filters_length": {"en": "Length", "tr": "Süre"},
+    "filters_arod": {"en": "AR / OD", "tr": "AR / OD"},
+    "filters_min": {"en": "min", "tr": "en az"},
+    "filters_max": {"en": "max", "tr": "en çok"},
+    "filters_mode_have": {"en": "{mode} — {n} set(s) in your Library",
+                          "tr": "{mode} — kütüphanende {n} set"},
+    "filters_mode_none": {"en": "No {mode} maps in your Library",
+                          "tr": "Kütüphanende hiç {mode} haritası yok"},
     "artist_filter_placeholder": {"en": "Filter artists…",
                                   "tr": "Sanatçı süz…"},
     "btn_reload": {"en": "Refresh", "tr": "Yenile"},
@@ -247,7 +262,20 @@ STRINGS: dict[str, dict[str, str]] = {
     "col_ar": {"en": "AR", "tr": "AR"},
     "col_od": {"en": "OD", "tr": "OD"},
     "col_hp": {"en": "HP", "tr": "HP"},
+    "col_skill": {"en": "Skill", "tr": "Beceri"},
     "map_details_title": {"en": "Map details", "tr": "Map detayları"},
+    "map_details_skillset": {"en": "Rosu Skillset Rating (mania)",
+                             "tr": "Rosu Beceri Puanı (mania)"},
+    "map_details_skill_of": {
+        "en": "{version} — overall {overall}",
+        "tr": "{version} — genel {overall}"},
+    "tip_col_skill": {
+        "en": "Rosu Skillset Rating — our in-house mania skillset estimate "
+              "(overall). Double-click / select a mania difficulty to see its "
+              "stream / jack / chordjack / tech breakdown on the radar.",
+        "tr": "Rosu Beceri Puanı — mania için kendi beceri tahminimiz (genel). "
+              "Radarda stream / jack / chordjack / tech dağılımını görmek için bir "
+              "mania zorluğunu seçin."},
     "map_details_mapper": {"en": "Mapper: {mapper}", "tr": "Mapper: {mapper}"},
     "map_details_status": {"en": "Status: {status}", "tr": "Durum: {status}"},
     "map_details_plays": {"en": "{n} plays", "tr": "{n} oynanma"},
@@ -509,6 +537,24 @@ STRINGS: dict[str, dict[str, str]] = {
 
     # Library Health (v1.1)
     "btn_library_health": {"en": "Library Health", "tr": "Kütüphane Sağlığı"},
+    # -- v1.6: Mania skillset (Rosu Skillset Rating) --------------------------
+    "btn_compute_msd": {"en": "Compute Skillset Ratings (mania)",
+                        "tr": "Beceri Puanlarını Hesapla (mania)"},
+    "tip_compute_msd": {
+        "en": "Estimate each mania difficulty's Rosu Skillset Rating (stream, jack, "
+              "chordjack, stamina, tech…) locally for the whole Library. Pure, "
+              "offline — no engine or internet needed.",
+        "tr": "Kütüphanedeki her mania zorluğu için Rosu Beceri Puanını (stream, jack, "
+              "chordjack, stamina, tech…) yerel olarak tahmin et. Tamamen çevrimdışı — "
+              "motor veya internet gerekmez."},
+    "msd_no_library": {
+        "en": "Your Library is empty — add some beatmaps first.",
+        "tr": "Kütüphanen boş — önce birkaç beatmap ekle."},
+    "msd_done": {
+        "en": "Skillset ratings: {rated} mania sets rated, {scanned} scanned, "
+              "{remaining} remaining.",
+        "tr": "Beceri puanları: {rated} mania set derecelendirildi, {scanned} tarandı, "
+              "{remaining} kaldı."},
     # -- v1.5: star ratings (rosu-pp) + osu! API metadata enrichment ----------
     "btn_compute_ratings": {"en": "Compute Star Ratings",
                             "tr": "Yıldız Derecelerini Hesapla"},
@@ -580,6 +626,7 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "{lo}★–{hi}★ · {count} sets ({pct}% of these results)",
         "tr": "{lo}★–{hi}★ · {count} set (bu sonuçların %{pct}'i)"},
     "star_dist_search": {"en": "Search this range", "tr": "Bu aralığı ara"},
+    "star_dist_export": {"en": "Export this range", "tr": "Bu aralığı dışa aktar"},
     "star_dist_empty": {
         "en": "No star ratings in the current results yet.",
         "tr": "Mevcut sonuçlarda henüz yıldız derecesi yok."},
@@ -930,7 +977,8 @@ STRINGS: dict[str, dict[str, str]] = {
               "osu.ppy.sh/beatmaps/packs</a> — drop the downloads into Packs/ "
               "and unpack. <b>Double-click a red (missing) row to open that "
               "pack's page; a single click copies its link (Ctrl-select "
-              "several to collect all their links). Right-click any pack for "
+              "several to collect all their links). Double-click a present pack "
+              "to see its mania skillset radar. Right-click any pack for "
               "its osu! page.</b>",
         "tr": "Eksik paket mi var? Tüm resmî beatmap paketleri "
               "<a href='https://osu.ppy.sh/beatmaps/packs'>"
@@ -938,11 +986,31 @@ STRINGS: dict[str, dict[str, str]] = {
               "indirdiklerini Packs/ klasörüne at ve aç. <b>Kırmızı (eksik) "
               "satıra çift tıklayınca o paketin sayfası açılır; tek tık "
               "linkini kopyalar (Ctrl ile çoklu seçersen tüm linkler "
-              "toplanır). Herhangi bir pakete sağ tıklayıp osu! sayfasını "
+              "toplanır). Mevcut bir pakete çift tıklayınca mania beceri "
+              "radarı açılır. Herhangi bir pakete sağ tıklayıp osu! sayfasını "
               "açabilirsin.</b>"},
     "menu_open_osu_page": {"en": "Open osu! page", "tr": "osu! sayfasını aç"},
+    # -- v1.6: pack skillset summary (double-click a present pack) ------------
+    "pack_skill_title": {"en": "Skillset — {code}", "tr": "Beceri — {code}"},
+    "pack_skill_sub": {
+        "en": "Average of {n} mania set(s) · overall {overall} · hardest {peak}",
+        "tr": "{n} mania setinin ortalaması · genel {overall} · en zor {peak}"},
+    "pack_skill_none": {
+        "en": "This pack has no rated mania charts yet. Run “Compute Skillset "
+              "Ratings (mania)” in Settings, or it may simply contain no mania maps.",
+        "tr": "Bu pakette henüz derecelendirilmiş mania haritası yok. Ayarlar’dan "
+              "“Beceri Puanlarını Hesapla (mania)”yı çalıştır ya da pakette hiç "
+              "mania haritası olmayabilir."},
     "sc_jobqueue_title": {"en": "Job queue", "tr": "İş kuyruğu"},
     "job_added": {"en": "Added to the queue.", "tr": "Kuyruğa eklendi."},
+    "sc_export_star_prefilled": {
+        "en": "Star range set from the histogram — pick a format and Export.",
+        "tr": "Yıldız aralığı histogramdan alındı — bir biçim seçip Dışa aktar’a bas."},
+    "tip_export_star": {
+        "en": "Only export Library sets whose hardest difficulty's star is in this "
+              "range. ★≥ — / ★≤ 12 means no limit.",
+        "tr": "Yalnızca en zor zorluğunun yıldızı bu aralıkta olan Kütüphane setlerini "
+              "dışa aktar. ★≥ — / ★≤ 12 = sınır yok."},
     "job_cancelled_rest": {"en": "Cancelled — the rest keep going.",
                            "tr": "İptal edildi — diğerleri devam ediyor."},
     "job_clear_finished": {"en": "Clear finished", "tr": "Bitenleri temizle"},

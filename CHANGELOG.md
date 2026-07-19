@@ -10,6 +10,40 @@ the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-07-19
+
+**Mania skillset ratings + a visual filters panel + star-range export.** Rosu now
+estimates *what kind* of mania difficulty each chart is — not just its star — and the
+Search tab gains a point-and-click way to filter your Library.
+
+### Added
+- **Rosu Skillset Rating (mania)** — a local, offline estimate of each mania
+  difficulty across Etterna's seven skillsets (stream, jumpstream, handstream,
+  stamina, jackspeed, chordjack, technical) plus an overall, stored per difficulty.
+  It is an in-house heuristic (labelled as such, not an Etterna-MSD port) and is
+  swappable — a closer algorithm can replace the numbers later with no data migration.
+  Pure Python: needs no engine or internet.
+  - **Map Details**: a skillset **radar** beside the difficulty table (select a mania
+    difficulty to see its breakdown) and a new *Skill* column.
+  - **Search**: a *Skill* column showing each set's hardest mania chart's overall +
+    dominant skill (e.g. `5.42 CJ`), with a per-difficulty breakdown on hover.
+  - **Packs**: double-click a present pack for its **average mania skillset radar**.
+  - **Settings → “Compute Skillset Ratings (mania)”** scans the whole Library
+    (cancellable, resumable); new maps are rated automatically at unpack / refresh.
+- **Visual Filters panel** in Search — a collapsible panel with a **dual-handle star
+  slider** + min/max boxes, ruleset toggles (our own glyphs; a ruleset you own no maps
+  of is disabled), a mania key-count picker, and BPM / length / AR / OD fields. It
+  composes the existing query syntax into the search box, so it doubles as a way to
+  learn the syntax. A blank control adds no filter.
+- **Export by star range** — the Shortcuts export gains `★≥ / ★≤` bounds (Library
+  sets only), and the Search star histogram gains an **“Export this range”** button
+  that hands the selection to the export flow.
+
+### Notes
+- The skillset heuristic is a first pass calibrated by eye; the numbers are meant to
+  rank a chart's skills relative to each other and will be tuned against real charts.
+- No new dependency — the skillset engine is pure Python.
+
 ## [1.5.0] - 2026-07-19
 
 **Metadata & rosu-pp foundation** — Rosu now knows each map's star rating and every

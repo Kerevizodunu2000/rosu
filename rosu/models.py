@@ -98,6 +98,35 @@ class DiffMeta:
 
 
 @dataclass
+class MsdResult:
+    """In-house "Rosu Skillset Rating" for one mania difficulty (v1.6).
+
+    Eight numbers on a rough 0–10+ scale (loosely comparable to osu! stars): an
+    ``overall`` plus Etterna's seven skillset names. Produced by the swappable
+    heuristic in :mod:`rosu.msd`; ``source`` records which algorithm made them so a
+    closer port can replace the numbers later with no schema change (the
+    ``difficulties`` table already carries an ``msd_source`` column).
+    """
+    overall: float = 0.0
+    stream: float = 0.0
+    jumpstream: float = 0.0
+    handstream: float = 0.0
+    stamina: float = 0.0
+    jackspeed: float = 0.0
+    chordjack: float = 0.0
+    technical: float = 0.0
+    source: str = "rosu-heuristic-v1"
+
+    # Radar axis order (Overall is the summary, not an axis).
+    SKILLS = ("stream", "jumpstream", "handstream", "stamina",
+              "jackspeed", "chordjack", "technical")
+
+    def skills(self) -> dict:
+        """The seven skillset values keyed by name (no ``overall``)."""
+        return {k: getattr(self, k) for k in self.SKILLS}
+
+
+@dataclass
 class GapRow:
     """A row in a series listing: either a present pack or a missing gap."""
     series: str

@@ -18,7 +18,7 @@ from pathlib import Path
 
 from .models import ParsedPack, ParsedTrack
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta (
@@ -114,6 +114,7 @@ CREATE INDEX IF NOT EXISTS idx_packs_category ON packs(category);
 CREATE INDEX IF NOT EXISTS idx_tracks_drive ON tracks(in_drive);
 CREATE INDEX IF NOT EXISTS idx_tracks_star_max ON tracks(star_max);
 CREATE INDEX IF NOT EXISTS idx_tracks_ranked_status ON tracks(ranked_status);
+CREATE INDEX IF NOT EXISTS idx_diff_msd ON difficulties(mode_int, msd_overall);
 """
 
 # Columns added after v1, applied via ALTER for databases upgrading in place.
@@ -134,6 +135,16 @@ _MIGRATIONS = {
         "play_count": "INTEGER", "favourite_count": "INTEGER",
         "genre": "TEXT", "language": "TEXT",
         "api_checked_at": "TEXT",                 # NULL = never enriched from the osu! API
+        # -- v1.6 Mania MSD (Rosu Skillset Rating) --------------------------
+        "msd_scanned_at": "TEXT",                 # NULL = never MSD-scanned by rosu/msd.py
+    },
+    # -- v1.6 Mania MSD: per-diff skillset ratings (mania-only; NULL elsewhere).
+    # Additive ALTERs onto the v1.5 `difficulties` table — same mechanism as tracks.
+    "difficulties": {
+        "msd_overall": "REAL", "msd_stream": "REAL", "msd_jumpstream": "REAL",
+        "msd_handstream": "REAL", "msd_stamina": "REAL", "msd_jackspeed": "REAL",
+        "msd_chordjack": "REAL", "msd_technical": "REAL",
+        "msd_source": "TEXT",                     # which algorithm produced the values
     },
 }
 
@@ -501,6 +512,55 @@ class Database:
                 "SELECT * FROM difficulties WHERE track_id=? "
                 "ORDER BY star_rating", (track_id,))
             return [dict(r) for r in cur.fetchall()]
+
+    def mode_set_counts(self) -> dict:
+        """How many in-Library sets contain at least one difficulty of each mode —
+        so the Search filters panel can disable a mode you own no maps of (v1.6)."""
+        with self._lock:
+            cur = self._conn.execute(
+                """SELECT d.mode AS mode, COUNT(DISTINCT d.track_id) AS n
+                   FROM difficulties d JOIN tracks t ON t.id = d.track_id
+                   WHERE t.in_library=1 AND d.mode IS NOT NULL
+                   GROUP BY d.mode""")
+            return {r["mode"]: r["n"] for r in cur.fetchall()}
+
+    def mania_msd_for_pack(self, pack_id: int) -> list[dict]:
+        """Every rated mania difficulty (``msd_*`` populated) among a pack's tracks —
+        for the Packs-tab skillset summary (v1.6)."""
+        with self._lock:
+            cur = self._conn.execute(
+                """SELECT d.* FROM difficulties d
+                   JOIN track_sources ts ON ts.track_id = d.track_id
+                   WHERE ts.pack_id=? AND d.mode_int=3 AND d.msd_overall IS NOT NULL""",
+                (pack_id,))
+            return [dict(r) for r in cur.fetchall()]
+
+    def apply_msd(self, track_id: int, results: dict, when: str) -> None:
+        """Write Rosu Skillset Rating values onto this track's mania difficulties.
+
+        ``results`` maps a diff ``filename`` → :class:`~.models.MsdResult`. Non-mania
+        diffs and mania diffs with too little data are simply absent from ``results``
+        and left untouched. ``msd_scanned_at`` is stamped on the parent track (even
+        when ``results`` is empty) so a whole-library backfill treats the set as done
+        and never re-scans it — matching the ``diffs_scanned_at``/``api_checked_at``
+        idiom.
+        """
+        with self._lock:
+            for fn, res in results.items():
+                if res is None:
+                    continue
+                self._conn.execute(
+                    """UPDATE difficulties SET msd_overall=?, msd_stream=?,
+                       msd_jumpstream=?, msd_handstream=?, msd_stamina=?,
+                       msd_jackspeed=?, msd_chordjack=?, msd_technical=?,
+                       msd_source=? WHERE track_id=? AND filename=?""",
+                    (res.overall, res.stream, res.jumpstream, res.handstream,
+                     res.stamina, res.jackspeed, res.chordjack, res.technical,
+                     res.source, track_id, fn))
+            self._conn.execute("UPDATE tracks SET msd_scanned_at=? WHERE id=?",
+                               (when, track_id))
+            self._conn.commit()
+            self._bump()
 
     def apply_api_enrichment(self, beatmapset_id: int, fields: dict,
                              when: str) -> None:

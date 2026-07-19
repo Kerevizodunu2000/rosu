@@ -10,14 +10,28 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QDialog, QDialogButtonBox, QHeaderView, QLabel, QTableWidget, QVBoxLayout,
+    QDialog, QDialogButtonBox, QHBoxLayout, QHeaderView, QLabel, QTableWidget,
+    QVBoxLayout, QWidget,
 )
 
+from ..models import MsdResult
 from .copy_table import SortItem
+from .radar_widget import RadarChart
+
+_DIFF_ROLE = Qt.UserRole + 5   # maps a (sortable) table row back to its diff dict
 
 
 def _num(v) -> str:
     return f"{v:g}" if v is not None else ""
+
+
+def _diff_skills(d: dict) -> dict:
+    """The seven Rosu Skillset values for one difficulty row (0.0 when absent)."""
+    return {k: d.get(f"msd_{k}") or 0.0 for k in MsdResult.SKILLS}
+
+
+def _has_msd(d: dict) -> bool:
+    return d.get("mode_int") == 3 and d.get("msd_overall") is not None
 
 
 class MapDetailsDialog(QDialog):
@@ -92,6 +106,14 @@ class MapDetailsDialog(QDialog):
             ("col_star", "tip_col_star",
              lambda d: (f"{d['star_rating']:.2f}" if d.get("star_rating") is not None
                         else "—", d.get("star_rating") or 0.0)),
+        ]
+        has_msd = any(_has_msd(d) for d in diffs)   # mania skillset ratings present
+        if has_msd:
+            columns.append(("col_skill", "tip_col_skill",
+                            lambda d: (f"{d['msd_overall']:.2f}"
+                                       if _has_msd(d) else "—",
+                                       d.get("msd_overall") or 0.0)))
+        columns += [
             ("col_cs", "tip_col_cs", lambda d: (_num(d.get("cs")), d.get("cs") or 0.0)),
             ("col_ar", "tip_col_ar", lambda d: (_num(d.get("ar")), d.get("ar") or 0.0)),
             ("col_od", "tip_col_od", lambda d: (_num(d.get("od")), d.get("od") or 0.0)),
@@ -115,13 +137,59 @@ class MapDetailsDialog(QDialog):
                 item = SortItem(str(text), sort_val)   # numeric-aware header sorting
                 if c != 0:
                     item.setTextAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
+                if c == 0:
+                    item.setData(_DIFF_ROLE, d)   # survives header re-sorts
                 table.setItem(r, c, item)
         table.setSortingEnabled(True)   # click a header to sort (numeric where apt)
         table.resizeColumnsToContents()
         table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
-        root.addWidget(table, 1)
+        self.table = table
+
+        if has_msd:
+            # Mania skillset radar beside the table; selecting a difficulty row
+            # redraws it for that chart (defaults to the hardest one).
+            self.radar = RadarChart()
+            self.radar_caption = QLabel(objectName="status")
+            self.radar_caption.setWordWrap(True)
+            self.radar_caption.setAlignment(Qt.AlignHCenter | Qt.AlignTop)
+            side = QWidget()
+            side_lay = QVBoxLayout(side)
+            side_lay.setContentsMargins(0, 0, 0, 0)
+            skill_title = QLabel(objectName="h2")
+            skill_title.setText(t("map_details_skillset"))
+            side_lay.addWidget(skill_title)
+            side_lay.addWidget(self.radar, 1)
+            side_lay.addWidget(self.radar_caption)
+            split = QHBoxLayout()
+            split.addWidget(table, 3)
+            split.addWidget(side, 2)
+            root.addLayout(split, 1)
+            table.itemSelectionChanged.connect(self._on_diff_selected)
+            hardest = max((d for d in diffs if _has_msd(d)),
+                          key=lambda d: d["msd_overall"])
+            self._show_skills(hardest)
+        else:
+            root.addWidget(table, 1)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Close)
         buttons.rejected.connect(self.reject)
         buttons.accepted.connect(self.accept)
         root.addWidget(buttons)
+
+    def _on_diff_selected(self) -> None:
+        items = self.table.selectedItems()
+        if not items:
+            return
+        col0 = self.table.item(items[0].row(), 0)
+        d = col0.data(_DIFF_ROLE) if col0 is not None else None
+        if isinstance(d, dict) and _has_msd(d):
+            self._show_skills(d)
+
+    def _show_skills(self, d: dict) -> None:
+        t = self.ctx.t
+        self.radar.set_values(_diff_skills(d))
+        skills = _diff_skills(d)
+        parts = "   ".join(f"{k[:2].upper()} {skills[k]:.1f}" for k in MsdResult.SKILLS)
+        self.radar_caption.setText(
+            t("map_details_skill_of", version=d.get("version") or "?",
+              overall=f"{d.get('msd_overall') or 0.0:.2f}") + "\n" + parts)

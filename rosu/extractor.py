@@ -11,7 +11,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import BinaryIO, Callable
 
-from . import archives, ratings
+from . import archives, msd, ratings
 from .beatmap import read_osz_full
 from .models import ExtractPlan, ParsedPack, ParsedTrack
 from .parsing import parse_osz_entry, parse_pack_name
@@ -123,6 +123,7 @@ def extract_pack(archive_path: Path, parsed: ParsedPack, output_dir: Path, db,
                     track_id, _is_new = db.upsert_track(t, when, meta)
                     db.upsert_difficulties(
                         track_id, diffs, ratings.stars_for_diffs(diffs, raw), when)
+                    db.apply_msd(track_id, msd.msd_for_diffs(diffs, raw), when)
                 else:
                     track_id, _is_new = db.upsert_track(t, when, None)
                 db.add_track_source(track_id, pack_id, t.subfolder, when)

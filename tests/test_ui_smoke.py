@@ -67,6 +67,47 @@ def test_update_banner_stays_hidden_when_not_newer(qapp, tmp_path, monkeypatch):
     ctx.db.close()
 
 
+def test_filters_panel_composes_query_tokens(qapp, tmp_path, monkeypatch):
+    """The v1.6 filters panel emits valid query-syntax that round-trips through
+    rosu.query.parse into the intended structured filters."""
+    from rosu import query
+    from rosu.ui.filters_panel import FiltersPanel
+    ctx = _ctx(tmp_path, monkeypatch)
+    fp = FiltersPanel(ctx)
+    fp.retranslate()
+    fp._on_mode_clicked("osu!mania")            # mania → keys row visible
+    fp.star.set_values(4.0, 6.5)
+    fp.keys.setCurrentIndex(fp.keys.findData(7))
+    toks = fp.filter_tokens()
+    assert "mode=mania" in toks and "key=7" in toks
+    assert "star>=4" in toks and "star<=6.5" in toks
+    got = {(f.field, f.op, f.value) for f in query.parse(" ".join(toks)).filters}
+    assert ("mode", "=", "osu!mania") in got
+    assert ("key", "=", 7) in got
+    assert ("star", ">=", 4.0) in got
+    # a mode the Library owns none of is disabled and can't contribute a filter
+    fp.set_mode_counts({"osu!mania": 3})
+    assert fp.mode_btns["osu!mania"].isEnabled()
+    assert not fp.mode_btns["osu!taiko"].isEnabled()
+    fp.clear()
+    assert fp.filter_tokens() == []
+    ctx.db.close()
+
+
+def test_star_range_export_prefill(qapp, tmp_path, monkeypatch):
+    """v1.6: prefill_star_range (from the Search histogram's 'Export this range')
+    fills the Shortcuts export star boxes and selects the Library source."""
+    from rosu.ui.main_window import MainWindow
+    ctx = _ctx(tmp_path, monkeypatch)
+    win = MainWindow(ctx, qapp)
+    win.shortcuts.prefill_star_range(3.5, 6.0)
+    assert win.shortcuts.export_star_lo.value() == 3.5
+    assert win.shortcuts.export_star_hi.value() == 6.0
+    assert win.shortcuts.export_source.currentData() == "library"
+    win.close()
+    ctx.db.close()
+
+
 def test_health_dialog_builds_and_renders_report(qapp, tmp_path, monkeypatch):
     """The v1.1 Library Health dialog constructs and populates from a report."""
     from rosu.ui.health_dialog import HealthDialog

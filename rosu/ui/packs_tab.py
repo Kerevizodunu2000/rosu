@@ -68,9 +68,10 @@ class PacksTab(QWidget):
         wire_link_hover(self.download_hint)
         root.addWidget(self.download_hint)
 
-        self.table = CopyTable(name_column=3)  # Code column
+        self.table = CopyTable(name_column=3, activate_details=True)  # Code column
         self.table.setColumnCount(len(_COLS))
         self.table.setHorizontalHeaderLabels(_COLS)
+        self.table.rowActivated.connect(self._show_pack_skillset)  # dbl-click present
         root.addWidget(self.table, 1)
 
     def retranslate(self) -> None:
@@ -154,6 +155,20 @@ class PacksTab(QWidget):
                     continue
             shown.append((category, gr, full))
         self._render(shown)
+
+    def _show_pack_skillset(self, view_row: int) -> None:
+        """Double-click a present pack → its average mania Rosu Skillset radar."""
+        code_item = self.table.item(view_row, 3)   # Code column
+        if code_item is None:
+            return
+        code = code_item.text().strip()
+        if not code:
+            return
+        summary = self.ctx.services.pack_skillset_summary(code)
+        if summary is None:
+            return
+        from .pack_skillset_dialog import PackSkillsetDialog
+        PackSkillsetDialog(self.ctx, code, summary, self).exec()
 
     def _render(self, rows: list) -> None:
         self.table.setUpdatesEnabled(False)

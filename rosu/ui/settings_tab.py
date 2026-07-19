@@ -206,6 +206,16 @@ class SettingsTab(QWidget):
         health_row.addWidget(self.lbl_health_status, 1)
         root.addLayout(health_row)
 
+        # Mania skillset (Rosu Skillset Rating) whole-library scan (v1.6). Pure
+        # Python (no rosu-pp needed); the button doubles as Cancel while running.
+        msd_row = QHBoxLayout()
+        self.btn_msd = QPushButton(objectName="secondary")
+        self.btn_msd.clicked.connect(self._compute_msd)
+        self.lbl_msd_status = QLabel(objectName="status")
+        msd_row.addWidget(self.btn_msd)
+        msd_row.addWidget(self.lbl_msd_status, 1)
+        root.addLayout(msd_row)
+
         # Google Drive backup (item 11)
         self.lbl_drive = QLabel(objectName="h1")
         root.addWidget(self.lbl_drive)
@@ -442,6 +452,9 @@ class SettingsTab(QWidget):
         self.lbl_library.setText(t("set_library_section"))
         self.btn_health.setText(t("btn_library_health"))
         self.btn_health.setToolTip(t("tip_library_health"))
+        if not getattr(self, "_msd_running", False):
+            self.btn_msd.setText(t("btn_compute_msd"))
+        self.btn_msd.setToolTip(t("tip_compute_msd"))
         self.lbl_drive.setText(t("set_drive"))
         self.lbl_drive_help.setText(t("set_drive_help"))
         self.btn_about.setText(t("btn_about"))
@@ -759,6 +772,45 @@ class SettingsTab(QWidget):
 
     def _health_failed(self, msg) -> None:
         self.btn_health.setEnabled(True)
+        QMessageBox.critical(self, self.ctx.t("app_title"), msg)
+
+    # -- Mania skillset (Rosu Skillset Rating) whole-library scan (v1.6) ------
+    def _compute_msd(self) -> None:
+        if getattr(self, "_msd_running", False):   # button doubles as Cancel mid-run
+            self.ctx.services.cancel_msd()
+            self.lbl_msd_status.setText(self.ctx.t("cancelling"))
+            return
+        status = self.ctx.services.msd_status()
+        if status["in_library"] == 0:
+            QMessageBox.information(self, self.ctx.t("app_title"),
+                                    self.ctx.t("msd_no_library"))
+            return
+        self._msd_running = True
+        self.btn_msd.setText(self.ctx.t("btn_cancel"))
+        self.lbl_msd_status.setText(self.ctx.t("working"))
+        w = Worker(self.ctx.services.compute_msd)
+        self._threads.append(w)
+        w.progressed.connect(self._on_msd_progress)
+        w.succeeded.connect(self._msd_done)
+        w.failed.connect(self._msd_failed)
+        w.finished.connect(lambda: self._threads.remove(w) if w in self._threads else None)
+        w.start()
+
+    def _on_msd_progress(self, msg) -> None:
+        if isinstance(msg, dict) and msg.get("kind") == "msd":
+            self.lbl_msd_status.setText(f"{msg['done']}/{msg['total']}")
+
+    def _msd_done(self, res) -> None:
+        self._msd_running = False
+        self.btn_msd.setText(self.ctx.t("btn_compute_msd"))
+        self.lbl_msd_status.setText(self.ctx.t(
+            "msd_done", rated=res["rated"], scanned=res["scanned"],
+            remaining=res["remaining"]))
+        self.mw.search.reload()
+
+    def _msd_failed(self, msg) -> None:
+        self._msd_running = False
+        self.btn_msd.setText(self.ctx.t("btn_compute_msd"))
         QMessageBox.critical(self, self.ctx.t("app_title"), msg)
 
     # -- auto-import from installed osu! clients (item 15) -------------------

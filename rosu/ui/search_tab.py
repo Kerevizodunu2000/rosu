@@ -13,9 +13,11 @@ from PySide6.QtWidgets import (
     QMessageBox, QPushButton, QVBoxLayout, QWidget,
 )
 
+from .. import query
 from ..i18n import human_duration
 from ..workers import Worker
 from .copy_table import CopyTable, SortItem
+from .filters_panel import FiltersPanel
 from .histogram import Histogram
 from .reveal import reveal_in_explorer
 
@@ -60,10 +62,37 @@ def _key_cell(diffs: list[dict]) -> tuple[str, int]:
     return ", ".join(f"{k}K" for k in keys), max(keys)
 
 
+_SKILL_ABBR = {"stream": "STR", "jumpstream": "JS", "handstream": "HS",
+               "stamina": "STM", "jackspeed": "JCK", "chordjack": "CJ",
+               "technical": "TCH"}
+
+
+def _skill_cell(diffs: list[dict]) -> tuple[str, float, str]:
+    """(text, sort, tooltip) for the Skill column — the set's hardest mania
+    difficulty's Rosu Skillset overall + its dominant skill (e.g. "5.42 CJ"), with
+    a per-diff breakdown on hover. Blank for sets with no rated mania chart."""
+    from ..models import MsdResult
+    rated = [d for d in diffs if d.get("mode_int") == 3
+             and d.get("msd_overall") is not None]
+    if not rated:
+        return "", 0.0, ""
+    best = max(rated, key=lambda d: d["msd_overall"])
+    skills = {k: best.get(f"msd_{k}") or 0.0 for k in MsdResult.SKILLS}
+    dom = max(skills, key=skills.get)
+    text = f"{best['msd_overall']:.2f} {_SKILL_ABBR[dom]}"
+    tip_lines = []
+    for d in rated:
+        vals = " ".join(f"{_SKILL_ABBR[k]}{(d.get(f'msd_{k}') or 0.0):.1f}"
+                        for k in MsdResult.SKILLS)
+        tip_lines.append(f"{d.get('version') or '?'}  {d['msd_overall']:.2f}★  [{vals}]")
+    return text, best["msd_overall"], "\n".join(tip_lines)
+
+
 class SearchTab(QWidget):
     _KEYS = ("col_name", "col_artist", "col_id", "col_bpm", "col_length",
-             "col_mapper", "col_mode", "col_star", "col_keys", "col_sources",
-             "col_first_seen", "col_attempts", "col_lib_status", "col_location")
+             "col_mapper", "col_mode", "col_star", "col_keys", "col_skill",
+             "col_sources", "col_first_seen", "col_attempts", "col_lib_status",
+             "col_location")
 
     def __init__(self, main_window):
         super().__init__()
@@ -93,6 +122,12 @@ class SearchTab(QWidget):
         row.addWidget(self.btn_reload)
         row.addWidget(self.btn_hist)
         root.addLayout(row)
+
+        # Visual filters panel (v1.6) — composes the same query syntax into the box.
+        self.filters = FiltersPanel(self.ctx)
+        self.filters.filtersChanged.connect(self._apply_filters_from_panel)
+        self._mode_counts_loaded = False
+        root.addWidget(self.filters)
 
         # Opt-in: also match creator/tags. Off by default — tag matching used to
         # flood results (e.g. every Vocaloid map for "Hatsune Miku").
@@ -127,6 +162,7 @@ class SearchTab(QWidget):
         self.btn_hist.setToolTip(t("tip_star_dist"))
         self.chk_tags.setText(t("search_tags_toggle"))
         self.chk_tags.setToolTip(t("tip_search_tags"))
+        self.filters.retranslate()
         self.hint.setText(t("copy_hint"))
         self.box.setToolTip(t("tip_search_box"))
         self.btn.setToolTip(t("tip_search_btn"))
@@ -137,14 +173,34 @@ class SearchTab(QWidget):
 
     def on_shown(self) -> None:
         # First time the tab is opened, show the full library so it's browsable.
+        self._refresh_mode_counts()
         if not self._loaded_once:
             self._loaded_once = True
             self.do_search()
 
     def reload(self) -> None:
         """Re-run the current query after the library changed elsewhere (item 7)."""
+        self._refresh_mode_counts()
         if self._loaded_once:
             self.do_search()
+
+    def _refresh_mode_counts(self) -> None:
+        """Tell the filters panel which ruleset toggles the Library can offer."""
+        try:
+            self.filters.set_mode_counts(self.ctx.services.mode_counts())
+            self._mode_counts_loaded = True
+        except Exception:
+            pass   # a mode-count hiccup must never block search
+
+    def _apply_filters_from_panel(self) -> None:
+        """A filters-panel change → rewrite only the box's filter tokens (keeping any
+        free text the user typed) and re-run the search."""
+        free = query.parse(self.box.text()).free_text
+        new = " ".join(([free] if free else []) + self.filters.filter_tokens()).strip()
+        self.box.blockSignals(True)     # avoid a second (debounced) search
+        self.box.setText(new)
+        self.box.blockSignals(False)
+        self.do_search()
 
     def refresh_now(self) -> None:
         """Explicit ⟳: clear the table first so the list visibly re-loads from
@@ -217,6 +273,7 @@ class SearchTab(QWidget):
                 diffs = row.get("difficulties") or []
                 star_text, star_sort, star_tip = _star_cell(diffs)
                 key_text, key_sort = _key_cell(diffs)
+                skill_text, skill_sort, skill_tip = _skill_cell(diffs)
                 cells = [
                     # Show the title only — the artist is its own column, so
                     # "Artist - Title" here was redundant and ate width. The full
@@ -230,6 +287,7 @@ class SearchTab(QWidget):
                     (row.get("mode") or "", None),
                     (star_text, star_sort),    # each diff's exact star; sort on hardest
                     (key_text, key_sort),      # mania key counts (blank for other modes)
+                    (skill_text, skill_sort),  # mania Rosu Skillset overall + dominant
                     (", ".join(row.get("sources", [])), None),
                     (row.get("first_seen_at", ""), None),
                     (str(attempts), attempts),
@@ -242,9 +300,11 @@ class SearchTab(QWidget):
                         item.setToolTip(text)      # full name/artist on hover (item 15)
                     if c == 7 and star_tip:
                         item.setToolTip(star_tip)  # per-diff star + CS/AR/OD/HP
-                    if c == 13:
+                    if c == 9 and skill_tip:
+                        item.setToolTip(skill_tip)  # per-diff Rosu Skillset breakdown
+                    if c == 14:
                         item.setToolTip(self.ctx.t("where_legend"))  # explain the icons
-                    if c in (2, 3, 4, 7, 8, 11):
+                    if c in (2, 3, 4, 7, 8, 9, 12):
                         item.setTextAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
                     self.table.setItem(r, c, item)
                 self.table.set_clean_name(r, row.get("display_name", ""))
@@ -253,7 +313,7 @@ class SearchTab(QWidget):
                 self.table.item(r, 0).setData(_DATA_ROW_ROLE, r)
                 full = row.get("source_full") or []
                 if full:
-                    self.table.set_copy_value(r, 9, "; ".join(full))
+                    self.table.set_copy_value(r, 10, "; ".join(full))
                 if row.get("in_library") and row.get("filename"):
                     self.table.set_row_path(
                         r, self.ctx.cfg.library_path / row["filename"])
@@ -348,7 +408,10 @@ class SearchTab(QWidget):
         bar = QHBoxLayout()
         btn_search = QPushButton(t("star_dist_search"))
         btn_search.setVisible(False)   # only after a bar is clicked/selected
+        btn_export = QPushButton(t("star_dist_export"), objectName="secondary")
+        btn_export.setVisible(False)
         bar.addStretch(1)
+        bar.addWidget(btn_export)
         bar.addWidget(btn_search)
         lay.addLayout(bar)
         buttons = QDialogButtonBox(QDialogButtonBox.Close)
@@ -360,12 +423,19 @@ class SearchTab(QWidget):
             sel.setText(t("star_dist_selected", lo=f"{lo:.2f}", hi=f"{hi:.2f}",
                           count=count, pct=f"{pct:.1f}"))
             btn_search.setVisible(True)
+            btn_export.setVisible(True)
 
         def do_range():
             rng = hist.selection_range()
             if rng:
                 dlg.accept()
                 self._search_star_range(rng[0], rng[1])
+
+        def do_export():
+            rng = hist.selection_range()
+            if rng:
+                dlg.accept()
+                self._export_star_range(rng[0], rng[1])
 
         def on_activated(lo, hi):
             dlg.accept()
@@ -374,9 +444,15 @@ class SearchTab(QWidget):
         hist.barSelected.connect(on_sel)
         hist.barActivated.connect(on_activated)
         btn_search.clicked.connect(do_range)
+        btn_export.clicked.connect(do_export)
         dlg.exec()
 
     def _search_star_range(self, lo: float, hi: float) -> None:
         """Put a star-range query in the box and run it (from the histogram)."""
         self.box.setText(f"star>={lo:.2f} star<{hi:.2f}")
         self.do_search()
+
+    def _export_star_range(self, lo: float, hi: float) -> None:
+        """Hand a star range to the Shortcuts export flow (from the histogram)."""
+        self.mw.shortcuts.prefill_star_range(lo, hi)
+        self.mw.tabs.setCurrentWidget(self.mw.shortcuts)

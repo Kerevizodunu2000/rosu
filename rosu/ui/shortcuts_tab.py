@@ -15,10 +15,12 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QCheckBox, QComboBox, QFileDialog, QFrame, QGridLayout, QGroupBox,
-    QHBoxLayout, QLabel, QMessageBox, QProgressBar, QPushButton, QScrollArea,
-    QSpinBox, QVBoxLayout, QWidget,
+    QCheckBox, QComboBox, QDoubleSpinBox, QFileDialog, QFrame, QGridLayout,
+    QGroupBox, QHBoxLayout, QLabel, QMessageBox, QProgressBar, QPushButton,
+    QScrollArea, QSpinBox, QVBoxLayout, QWidget,
 )
+
+_STAR_CAP = 12.0   # star-range export: max = cap = "no upper bound"
 
 from .. import config
 from ..jobs import State
@@ -226,11 +228,27 @@ class ShortcutsTab(QWidget):
         self.export_random_n.setValue(10)
         self.export_random_n.setEnabled(False)
         self.export_random.toggled.connect(self.export_random_n.setEnabled)
+        # v1.6: star-range export — keep only Library sets whose hardest diff's star
+        # is in [★≥, ★≤]. lo=0 & hi=cap → no star filter. Prefilled from the Search
+        # histogram's "Export this range".
+        self.export_star_lo = QDoubleSpinBox()
+        self.export_star_lo.setRange(0.0, _STAR_CAP)
+        self.export_star_lo.setDecimals(1)
+        self.export_star_lo.setSingleStep(0.1)
+        self.export_star_lo.setPrefix("★≥ ")
+        self.export_star_lo.setSpecialValueText("★≥ —")
+        self.export_star_hi = QDoubleSpinBox()
+        self.export_star_hi.setRange(0.0, _STAR_CAP)
+        self.export_star_hi.setDecimals(1)
+        self.export_star_hi.setSingleStep(0.1)
+        self.export_star_hi.setPrefix("★≤ ")
+        self.export_star_hi.setValue(_STAR_CAP)
         self.btn_export = QPushButton(objectName="secondary")
         self.btn_export.clicked.connect(self.on_export)
         for w in (self.export_source, self.export_format, self.export_split,
                   self.export_drive, self.export_share, self.export_random,
-                  self.export_random_n, self.btn_export):
+                  self.export_random_n, self.export_star_lo, self.export_star_hi,
+                  self.btn_export):
             erow.addWidget(w)
         erow.addStretch(1)
         root.addWidget(self.export_box)
@@ -301,6 +319,8 @@ class ShortcutsTab(QWidget):
         self.export_random.setText(t("sc_export_random"))
         self.export_random.setToolTip(t("tip_export_random"))
         self.export_random_n.setToolTip(t("tip_export_random"))
+        self.export_star_lo.setToolTip(t("tip_export_star"))
+        self.export_star_hi.setToolTip(t("tip_export_star"))
         self.btn_export.setText(t("btn_export"))
         self.btn_dedup.setText(t("btn_dedup"))
         self.btn_dedup.setToolTip(t("tip_dedup"))
@@ -517,6 +537,9 @@ class ShortcutsTab(QWidget):
         upload = self.export_drive.isChecked()
         share = self.export_share.isChecked()
         limit = self.export_random_n.value() if self.export_random.isChecked() else None
+        lo = self.export_star_lo.value()
+        hi = self.export_star_hi.value()
+        star_range = (lo, hi if hi > 0 else _STAR_CAP) if (lo > 0 or hi < _STAR_CAP) else None
         if upload and not self.services.drive_status().get("connected"):
             QMessageBox.information(self, t("app_title"), t("drive_connect_first"))
             return
@@ -530,7 +553,7 @@ class ShortcutsTab(QWidget):
         if dest_base.suffix.lower() in (".zip", ".7z"):
             dest_base = dest_base.with_suffix("")   # exporter re-appends the suffix
         job = self.services.build_export_job(source, dest_base, fmt, split,
-                                             upload, share, limit)
+                                             upload, share, limit, star_range)
         src_label = t(f"sc_source_{source}")
         job.title_kwargs["source"] = src_label              # translated in the title
         for st in job.steps:
@@ -538,6 +561,16 @@ class ShortcutsTab(QWidget):
                 st.label_kwargs["source"] = src_label       # ...and in the gather step
         self.queue.enqueue(job)
         self._set_status("job_added")
+
+    def prefill_star_range(self, lo: float, hi: float) -> None:
+        """Set the export source to Library and fill the star range (from the Search
+        histogram's 'Export this range'). The user then picks format/destination."""
+        idx = self.export_source.findData("library")
+        if idx >= 0:
+            self.export_source.setCurrentIndex(idx)
+        self.export_star_lo.setValue(max(0.0, min(lo, _STAR_CAP)))
+        self.export_star_hi.setValue(max(0.0, min(hi, _STAR_CAP)))
+        self._set_status("sc_export_star_prefilled")
 
     def on_dedup(self) -> None:
         """Queue a dedup job: it scans first, then WAITS at a gate for the preview

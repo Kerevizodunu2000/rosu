@@ -12,7 +12,7 @@ import shutil
 from pathlib import Path
 from typing import Callable
 
-from . import ratings
+from . import msd, ratings
 from .beatmap import read_osz_full
 from .parsing import parse_osz_entry
 
@@ -126,6 +126,7 @@ def refresh_library(library_dir: Path, db, when: str,
             track_id, _ = db.upsert_track(t, when, meta)
             db.upsert_difficulties(
                 track_id, diffs, ratings.stars_for_diffs(diffs, raw), when)
+            db.apply_msd(track_id, msd.msd_for_diffs(diffs, raw), when)
             db.set_library_state(track_id, True, "present", when)
             added += 1
         else:
@@ -140,6 +141,7 @@ def refresh_library(library_dir: Path, db, when: str,
                     enriched += 1
                 db.upsert_difficulties(
                     row["id"], diffs, ratings.stars_for_diffs(diffs, raw), when)
+                db.apply_msd(row["id"], msd.msd_for_diffs(diffs, raw), when)
             if row["library_status"] != "present" or row["in_library"] != 1:
                 db.set_library_state(row["id"], True, "present", when)
         if progress:

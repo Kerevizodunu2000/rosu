@@ -484,14 +484,32 @@ def test_export_sets_cancelled_before_write(tmp_path, monkeypatch):
     (cfg.library_path / "1 A - B.osz").write_bytes(b"a" * 10)
     orig = svc._gather_export_sources
 
-    def fake_gather(source, stage, progress=None):
-        files = orig(source, stage, progress)
+    def fake_gather(source, stage, progress=None, **kw):
+        files = orig(source, stage, progress, **kw)
         svc._cancel.set()                                  # user hits Cancel
         return files
 
     monkeypatch.setattr(svc, "_gather_export_sources", fake_gather)
     res = svc.export_sets("library", tmp_path / "out" / "C", fmt="zip")
     assert res["cancelled"] is True and res["archives"] == []
+    db.close()
+
+
+def test_gather_export_star_range_filters_library(tmp_path):
+    """v1.6: star-range export keeps only Library sets whose star_max is in range."""
+    cfg, db, svc = _svc(tmp_path)
+    for bid, fn, star in ((1, "low.osz", 2.0), (2, "mid.osz", 5.0), (3, "hi.osz", 8.0)):
+        (cfg.library_path / fn).write_bytes(b"x" * 10)
+        _add_lib(db, bid, fn)
+        db._conn.execute("UPDATE tracks SET star_max=? WHERE beatmapset_id=?", (star, bid))
+    db._conn.commit()
+    stage = tmp_path / "stage"
+    stage.mkdir()
+    got = svc._gather_export_sources("library", stage, star_range=(4.0, 6.0))
+    assert {p.name for p in got} == {"mid.osz"}
+    # no range → everything
+    allf = svc._gather_export_sources("library", stage, star_range=None)
+    assert {p.name for p in allf} == {"low.osz", "mid.osz", "hi.osz"}
     db.close()
 
 

@@ -61,6 +61,7 @@ class Services:
         self._verify_cancel = threading.Event()  # separate cancel for SHA-256 verify
         self._ratings_cancel = threading.Event()  # separate cancel for star-rating scan
         self._enrich_cancel = threading.Event()  # separate cancel for API enrichment
+        self._msd_cancel = threading.Event()  # separate cancel for skillset (MSD) scan
         self._rebuild_lock = threading.Lock()  # serialize tracking.xlsx writes
         self._reference_cache = None           # lazy osu! reference (invalidated on sync)
 
@@ -75,6 +76,7 @@ class Services:
         self._verify_cancel.set()
         self._ratings_cancel.set()
         self._enrich_cancel.set()
+        self._msd_cancel.set()
 
     # -- scanning / pre-check ------------------------------------------------
     def scan(self):
@@ -183,7 +185,7 @@ class Services:
         """Move loose .osz dropped straight into Packs into Output and record them
         with a 'Direct' source (they need no unpacking). Returns the count."""
         import shutil
-        from . import ratings
+        from . import msd, ratings
         from .beatmap import read_osz_full
         out = self.cfg.output_path
         out.mkdir(parents=True, exist_ok=True)
@@ -208,6 +210,7 @@ class Services:
             track_id, _ = self.db.upsert_track(t, when, meta)
             self.db.upsert_difficulties(
                 track_id, diffs, ratings.stars_for_diffs(diffs, raw), when)
+            self.db.apply_msd(track_id, msd.msd_for_diffs(diffs, raw), when)
             self.db.add_track_source(track_id, pack_id, None, when)
             moved += 1
             if progress:
@@ -689,6 +692,129 @@ class Services:
         values = [r["star_max"] for r in rows if r.get("star_max") is not None]
         return stats.histogram_bins(values, bins)
 
+    def compute_msd(self, progress=None, max_files: int | None = None) -> dict:
+        """Compute the in-house Rosu Skillset Rating for every Library set's mania
+        difficulties and store them (see :mod:`rosu.msd`).
+
+        Shaped like :meth:`compute_ratings`: own cancel token, per-file progress,
+        resumable. Never-scanned sets (``msd_scanned_at IS NULL``) go first; a
+        visited set is stamped even when it holds no mania chart, so it is never
+        re-scanned. Pure-Python — no engine gate (unlike star ratings). Returns
+        ``{"scanned", "rated", "cancelled", "remaining"}`` where ``rated`` counts
+        sets that yielded at least one mania skillset rating.
+        """
+        from . import msd, ratings
+        from .beatmap import read_osz_full
+        self._msd_cancel.clear()   # own token: never collides with other ops
+        lib = self.cfg.library_path
+        rows = [r for r in self.db.library_tracks()
+                if r.get("in_library") and r.get("filename")
+                and not r.get("msd_scanned_at")]
+        total = len(rows) if max_files is None else min(len(rows), max_files)
+        scanned = rated = 0
+        cancelled = False
+        remaining = 0
+        for i, r in enumerate(rows):
+            if self._msd_cancel.is_set():
+                cancelled = True
+                remaining = len(rows) - i
+                break
+            if max_files is not None and scanned >= max_files:
+                remaining = len(rows) - i
+                break
+            p = lib / r["filename"]
+            if not p.exists():
+                continue
+            _meta, diffs, raw = read_osz_full(p)
+            # MSD attaches to the per-diff rows, which normally already exist (every
+            # ingest path writes them). A set never diff-scanned (e.g. a pre-v1.5
+            # import not yet refreshed) has none — create them now (stars filled if
+            # rosu-pp is present, else left NULL for compute_ratings) so apply_msd has
+            # rows to update; already-scanned sets keep their existing rows/stars.
+            if not r.get("diffs_scanned_at"):
+                self.db.upsert_difficulties(
+                    r["id"], diffs, ratings.stars_for_diffs(diffs, raw), now_iso())
+            results = msd.msd_for_diffs(diffs, raw)
+            self.db.apply_msd(r["id"], results, now_iso())
+            scanned += 1
+            if results:
+                rated += 1
+            if progress:
+                progress({"kind": "msd", "done": scanned, "total": total,
+                          "name": r["filename"]})
+        self.log.info("COMPUTE_MSD", scanned=scanned, rated=rated,
+                      cancelled=cancelled, remaining=remaining)
+        return {"scanned": scanned, "rated": rated, "cancelled": cancelled,
+                "remaining": remaining}
+
+    def cancel_msd(self) -> None:
+        """Cancel only an in-progress skillset (MSD) scan (leaves other ops alone)."""
+        self._msd_cancel.set()
+
+    def msd_status(self) -> dict:
+        """Snapshot for the skillset scan flow: in-Library sets and how many have
+        not been MSD-scanned yet."""
+        rows = self.db.library_tracks()
+        inlib = len(rows)
+        unscanned = sum(1 for r in rows if not r.get("msd_scanned_at"))
+        return {"in_library": inlib, "unscanned": unscanned,
+                "scanned": inlib - unscanned}
+
+    def mania_radar_for_track(self, track_id: int) -> dict | None:
+        """Representative Rosu Skillset Rating for a set: its hardest rated mania
+        difficulty (highest ``msd_overall``). Returns ``{overall, skills{...},
+        version, keycount, source}`` or ``None`` when the set has no rated mania
+        chart. Mirrors v1.5's "``star_max`` as the set's representative".
+        """
+        from .models import MsdResult
+        best = None
+        for d in self.db.difficulties_for_track(track_id):
+            if d.get("mode_int") != 3 or d.get("msd_overall") is None:
+                continue
+            if best is None or d["msd_overall"] > best["msd_overall"]:
+                best = d
+        if best is None:
+            return None
+        return {
+            "overall": best["msd_overall"],
+            "skills": {k: best.get(f"msd_{k}") or 0.0 for k in MsdResult.SKILLS},
+            "version": best.get("version"), "keycount": best.get("keycount"),
+            "source": best.get("msd_source"),
+        }
+
+    def mode_counts(self) -> dict:
+        """{mode_display: set_count} over the Library — for the Search filters panel."""
+        return self.db.mode_set_counts()
+
+    def pack_skillset_summary(self, code: str) -> dict | None:
+        """Aggregate Rosu Skillset profile for a pack (v1.6): the AVERAGE of its
+        mania sets' representative (hardest-chart) radars, plus the peak overall and
+        the mania-set count. ``None`` if the pack code is unknown; ``n == 0`` when the
+        pack has no rated mania chart.
+        """
+        from .models import MsdResult
+        pack = self.db.get_pack_by_code(code)
+        if pack is None:
+            return None
+        rows = self.db.mania_msd_for_pack(pack["id"])
+        # Per set, keep its hardest mania chart as the representative, then average.
+        by_track: dict = {}
+        for r in rows:
+            cur = by_track.get(r["track_id"])
+            if cur is None or r["msd_overall"] > cur["msd_overall"]:
+                by_track[r["track_id"]] = r
+        reps = list(by_track.values())
+        n = len(reps)
+        if n == 0:
+            return {"code": code, "n": 0, "overall": 0.0, "peak": 0.0,
+                    "skills": {k: 0.0 for k in MsdResult.SKILLS}}
+        skills = {k: sum((rep.get(f"msd_{k}") or 0.0) for rep in reps) / n
+                  for k in MsdResult.SKILLS}
+        return {"code": code, "n": n,
+                "overall": sum(rep["msd_overall"] for rep in reps) / n,
+                "peak": max(rep["msd_overall"] for rep in reps),
+                "skills": skills}
+
     def refresh(self, progress=None) -> dict:
         when = now_iso()
         res = library.refresh_library(self.cfg.library_path, self.db, when, progress)
@@ -1131,7 +1257,7 @@ class Services:
     def export_sets(self, source: str, dest_base, fmt: str = "zip",
                     split_bytes: int | None = None, upload_to_drive: bool = False,
                     share: bool = False, progress=None,
-                    limit: int | None = None) -> dict:
+                    limit: int | None = None, star_range=None) -> dict:
         """Shortcut ④: gather the beatmaps from ``source`` and write them to
         archive(s) at ``dest_base``.
 
@@ -1152,7 +1278,8 @@ class Services:
         self._cancel.clear()   # own the token for this export (gather → write)
         stage = Path(tempfile.mkdtemp(prefix="rosu_export_"))
         try:
-            files = self._gather_export_sources(source, stage, progress)
+            files = self._gather_export_sources(source, stage, progress,
+                                                star_range=star_range)
             files = _sample_export(files, limit)
             if not files or self._cancel.is_set():
                 return {"source": source, "count": 0, "archives": [],
@@ -1172,21 +1299,34 @@ class Services:
             shutil.rmtree(stage, ignore_errors=True)
 
     def _gather_export_sources(self, source: str, stage, progress=None,
-                               cancel=None) -> list:
+                               cancel=None, star_range=None) -> list:
         """Collect the ``.osz`` file paths that make up an export ``source`` (see
         :meth:`export_sets`). Client sources are materialised into ``stage``.
-        ``cancel`` (a queued job's own token) is threaded into the client re-export."""
+        ``cancel`` (a queued job's own token) is threaded into the client re-export.
+        ``star_range`` ``(lo, hi)`` keeps only Library sets whose ``star_max`` is in
+        that range (v1.6) — applied to the Library-backed sources (library/drive and
+        the Library portion of ``merged``); client-only maps have no stored star, so
+        they are left unfiltered."""
         from .parsing import parse_osz_entry
         lib = self.cfg.library_path
+
+        def in_star_range(paths: list) -> list:
+            if not star_range:
+                return paths
+            lo, hi = star_range
+            smax = {r["filename"]: r.get("star_max") for r in self.db.library_records()
+                    if r.get("filename")}
+            return [p for p in paths
+                    if (s := smax.get(p.name)) is not None and lo <= s <= hi]
 
         def lib_files(only_drive: bool = False) -> list:
             if not lib.exists():
                 return []
             if not only_drive:
-                return sorted(lib.glob("*.osz"))
+                return in_star_range(sorted(lib.glob("*.osz")))
             names = {r["filename"] for r in self.db.library_records()
                      if r.get("in_drive") and r.get("filename")}
-            return sorted(p for n in names if (p := lib / n).exists())
+            return in_star_range(sorted(p for n in names if (p := lib / n).exists()))
 
         if source == "library":
             return lib_files()
@@ -1413,7 +1553,8 @@ class Services:
 
     def build_export_job(self, source: str, dest_base, fmt: str = "zip",
                          split_bytes: int | None = None, upload: bool = False,
-                         share: bool = False, limit: int | None = None) -> jobs.Job:
+                         share: bool = False, limit: int | None = None,
+                         star_range=None) -> jobs.Job:
         """Shortcut ④ as a job: gather → archive (DISK) → upload (DRIVE). The
         upload step is on the DRIVE lane, so once an export starts uploading the
         DISK lane frees for the next queued job (disk work ↔ Drive upload)."""
@@ -1431,7 +1572,7 @@ class Services:
 
         def s_gather(ctx, progress, cancel):
             files = self._gather_export_sources(source, ctx["stage"], progress,
-                                                cancel=cancel)
+                                                cancel=cancel, star_range=star_range)
             ctx["files"] = _sample_export(files, limit)
 
         def s_archive(ctx, progress, cancel):

@@ -6,7 +6,7 @@ from pathlib import Path
 
 from rosu import search
 from rosu.db import Database
-from rosu.models import DiffMeta, ParsedTrack
+from rosu.models import DiffMeta, MsdResult, ParsedTrack
 from rosu.query import Filter
 
 
@@ -39,6 +39,43 @@ def test_upsert_difficulties_writes_rows_and_rollup():
     t = db.all_tracks()[0]
     assert t["star_min"] == 2.5 and t["star_max"] == 6.2
     assert t["diffs_scanned_at"] == "when"
+    db.close()
+
+
+def test_apply_msd_writes_skillset_and_stamps_track():
+    db = _db()
+    tid = _track(db, 1)
+    db.upsert_difficulties(tid, [_diff("a.osu", keys=7)], {"a.osu": 5.0}, "when")
+    res = MsdResult(overall=5.4, stream=4.1, jumpstream=3.0, handstream=2.0,
+                    stamina=4.8, jackspeed=1.2, chordjack=0.5, technical=2.7)
+    db.apply_msd(tid, {"a.osu": res}, "later")
+    row = db.difficulties_for_track(tid)[0]
+    assert row["msd_overall"] == 5.4 and row["msd_stream"] == 4.1
+    assert row["msd_source"] == "rosu-heuristic-v1"
+    assert db.all_tracks()[0]["msd_scanned_at"] == "later"
+    db.close()
+
+
+def test_apply_msd_stamps_even_with_no_results():
+    db = _db()
+    tid = _track(db, 1)
+    db.apply_msd(tid, {}, "stamp")          # non-mania set: nothing to write
+    assert db.all_tracks()[0]["msd_scanned_at"] == "stamp"
+    db.close()
+
+
+def test_mania_msd_for_pack_aggregation():
+    db = _db()
+    from rosu.models import ParsedPack
+    pack_id = db.get_or_create_local_pack("TP1")
+    for bid, ov in ((1, 5.0), (2, 7.0)):
+        tid = _track(db, bid)
+        db.upsert_difficulties(tid, [_diff("a.osu", keys=4)], {"a.osu": 4.0}, "w")
+        db.add_track_source(tid, pack_id, None, "w")
+        db.apply_msd(tid, {"a.osu": MsdResult(overall=ov, stream=ov)}, "w")
+    rows = db.mania_msd_for_pack(pack_id)
+    assert len(rows) == 2
+    assert {round(r["msd_overall"], 1) for r in rows} == {5.0, 7.0}
     db.close()
 
 
