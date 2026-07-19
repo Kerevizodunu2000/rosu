@@ -950,6 +950,80 @@ STRINGS: dict[str, dict[str, str]] = {
               "bulundu (beatmapset id ile eşleşti — Rosu her set için tek kanonik "
               "kopya tutar, bunlar fazlalıklar). Geri Dönüşüm Kutusu'na gidecekler "
               "(kurtarılabilir), {freed} boşalacak. Devam edilsin mi?"},
+    "btn_prune": {"en": "Prune Library (save space)", "tr": "Alan Tasarrufu (Prune)"},
+    "tip_prune": {
+        "en": "Recycle heavy, non-essential files (video, or video+images) from "
+              "Library .osz — the map stays playable. Sends the originals to the "
+              "Recycle Bin (recoverable).",
+        "tr": "Library'deki .osz'lerden gereksiz ağır dosyaları (video, veya "
+              "video+görsel) Geri Dönüşüm'e gönderir — harita çalınabilir kalır. "
+              "Orijinaller kurtarılabilir."},
+    "sc_prune_none": {"en": "No maps to prune.", "tr": "Kırpılacak harita bulunamadı."},
+    "sc_prune_confirm": {
+        "en": "{count} map(s) will be pruned (about {freed} freed). This "
+              "permanently removes video/background files from the .osz — the "
+              "originals go to the Recycle Bin (recoverable). Continue?",
+        "tr": "{count} harita kırpılacak (yaklaşık {freed} boşalacak). Bu, .osz "
+              "içinden video/arkaplan dosyalarını kalıcı olarak kaldırır — "
+              "orijinaller Geri Dönüşüm Kutusu'na gider (kurtarılabilir). Devam "
+              "edilsin mi?"},
+    "sc_prune_done": {"en": "Pruned {pruned} map(s), freed {freed}.",
+                      "tr": "{pruned} harita kırpıldı. {freed} alan açıldı."},
+    "job_prune": {"en": "Prune Library", "tr": "Kütüphaneyi Kırp"},
+    "job_step_prune_scan": {"en": "Scan for heavy assets", "tr": "Ağır dosyaları tara"},
+    "job_step_prune_remove": {"en": "Trim heavy assets", "tr": "Ağır dosyaları kırp"},
+
+    "set_auto_prune": {"en": "Auto-Prune (strip heavy assets from new maps)",
+                       "tr": "Otomatik Kırp (yeni haritaları otomatik kırp)"},
+    "tip_auto_prune": {
+        "en": "When a new map is added to the Library, automatically prune it "
+              "(see Prune Mode below).",
+        "tr": "Yeni bir harita Kütüphane'ye eklendiğinde otomatik olarak kırpar "
+              "(aşağıdaki Prune Modu'na göre)."},
+    "set_export_prune": {"en": "Export Prune (prune on the fly when exporting)",
+                         "tr": "Dışa Aktarımda Kırp (osu!'ya aktarırken anlık kırp)"},
+    "tip_export_prune": {
+        "en": "Library files stay untouched — only the copy sent to osu! or "
+              "exported to a folder/archive is pruned.",
+        "tr": "Kütüphanedeki dosyalar bozulmaz — yalnızca osu!'ya veya bir "
+              "klasöre/arşive aktarılan kopya kırpılır."},
+    "lbl_prune_mode": {"en": "Prune mode:", "tr": "Prune Modu:"},
+    "prune_mode_video_only": {"en": "Video only (safe)", "tr": "Sadece video (güvenli)"},
+    "prune_mode_heavy_assets": {"en": "Video + images (aggressive)",
+                                "tr": "Video + görsel (agresif)"},
+
+    "btn_sync_coll": {"en": "Sync Collections", "tr": "Koleksiyonları Eşitle"},
+    "tip_sync_coll": {
+        "en": "Reads osu!(stable)'s collection.db and tags matching Library maps "
+              "with their collection name.",
+        "tr": "osu!(stable) collection.db dosyasını okuyup eşleşen Kütüphane "
+              "haritalarını koleksiyon adıyla etiketler."},
+    "sync_coll_no_stable": {
+        "en": "collection.db not found. Make sure osu!(stable) is installed and "
+              "its path is set in Settings.",
+        "tr": "collection.db bulunamadı. osu!(stable)'ın kurulu olduğundan ve "
+              "yolunun Ayarlar'da tanımlı olduğundan emin ol."},
+    "sync_coll_done": {
+        "en": "Tagged {tagged} map(s) from {collections} collection(s).",
+        "tr": "{collections} koleksiyondan toplam {tagged} harita etiketlendi."},
+
+    "repair_confirm_title": {"en": "Repair confirmation", "tr": "Onarım Onayı"},
+    "repair_confirm_body": {
+        "en": "{filename} will be re-downloaded from a third-party osu! mirror, "
+              "not the official osu! servers. As with any beatmap archive, this "
+              "may contain third-party copyrighted audio and artwork — you are "
+              "responsible for what you download. Continue?",
+        "tr": "{filename} resmi olmayan bir üçüncü taraf osu! mirror'ından yeniden "
+              "indirilecek (resmi osu! sunucuları değil). Diğer beatmap "
+              "arşivlerinde olduğu gibi bu da üçüncü taraf telifli ses/görsel "
+              "içerebilir — indirdiğin içerikten sen sorumlusun. Devam edilsin mi?"},
+    "repair_done": {"en": "{repaired} map(s) repaired.",
+                    "tr": "{repaired} harita onarıldı."},
+    "repair_partial": {"en": "{repaired} map(s) repaired, {failed} could not be downloaded.",
+                       "tr": "{repaired} harita onarıldı, {failed} harita indirilemedi."},
+    "repair_none": {"en": "Could not download any of the selected map(s).",
+                    "tr": "Seçilen haritaların hiçbiri indirilemedi."},
+
     "drive_disconnect_busy_title": {"en": "Operation in progress",
                                     "tr": "İşlem sürüyor"},
     "drive_disconnect_busy_body": {
@@ -1081,6 +1155,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "Export a random sample of this many sets instead of all of them.",
         "tr": "Hepsi yerine bu kadar seti rastgele seçip dışa aktarır."},
     "menu_open_location": {"en": "Open file location", "tr": "Dosya konumunu aç"},
+    "menu_repair": {"en": "Download original (mirror repair)",
+                   "tr": "Orijinalini indir (mirror onarımı)"},
 
     # -- Settings overhaul (v1.4) --------------------------------------------
     "set_lazer_enabled": {"en": "Enable osu!lazer", "tr": "osu!lazer'i etkinleştir"},

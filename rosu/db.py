@@ -18,7 +18,7 @@ from pathlib import Path
 
 from .models import ParsedPack, ParsedTrack
 
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta (
@@ -68,7 +68,9 @@ CREATE TABLE IF NOT EXISTS tracks (
     in_osu_lazer      INTEGER DEFAULT 0,
     drive_chunk       TEXT,
     drive_hash        TEXT,
-    availability      TEXT
+    availability      TEXT,
+    is_pruned         INTEGER DEFAULT 0,
+    original_size     INTEGER
 );
 CREATE TABLE IF NOT EXISTS track_sources (
     track_id  INTEGER NOT NULL,
@@ -137,6 +139,9 @@ _MIGRATIONS = {
         "api_checked_at": "TEXT",                 # NULL = never enriched from the osu! API
         # -- v1.6 Mania MSD (Rosu Skillset Rating) --------------------------
         "msd_scanned_at": "TEXT",                 # NULL = never MSD-scanned by rosu/msd.py
+        # -- v1.7 Prune & Schema v9 -------------------------------------------
+        "is_pruned": "INTEGER DEFAULT 0",
+        "original_size": "INTEGER",
     },
     # -- v1.6 Mania MSD: per-diff skillset ratings (mania-only; NULL elsewhere).
     # Additive ALTERs onto the v1.5 `difficulties` table — same mechanism as tracks.
@@ -186,6 +191,20 @@ class Database:
         for r in rows:
             self._conn.execute("UPDATE packs SET category=? WHERE id=?",
                                (pack_category(r["series"]), r["id"]))
+
+    import contextlib
+
+    @contextlib.contextmanager
+    def bulk(self):
+        """Context manager for bulk inserts to skip per-statement fsync."""
+        with self._lock:
+            try:
+                self._conn.execute("BEGIN IMMEDIATE")
+                yield
+                self._conn.commit()
+            except:
+                self._conn.rollback()
+                raise
 
     def _apply_migrations(self) -> None:
         """Add any columns missing from an older database (idempotent)."""
@@ -454,49 +473,52 @@ class Database:
         rosu-pp-py was unavailable/failed — left NULL for the osu! API to fill
         later). A re-parse reconciles: rows whose ``.osu`` no longer exists are
         deleted; a run without a fresh local star never wipes a star already stored
-        (so re-running the parser without rosu-pp installed doesn't lose ratings).
+        (so re-running the parser without rosu-pp installed doesn't lose rating).
         """
         with self._lock:
-            present = {d.filename for d in diffs}
-            for r in self._conn.execute(
-                    "SELECT filename FROM difficulties WHERE track_id=?",
-                    (track_id,)).fetchall():
-                if r["filename"] not in present:
-                    self._conn.execute(
-                        "DELETE FROM difficulties WHERE track_id=? AND filename=?",
-                        (track_id, r["filename"]))
-            for d in diffs:
-                star_val = stars.get(d.filename)
-                row = self._conn.execute(
-                    "SELECT id FROM difficulties WHERE track_id=? AND filename=?",
-                    (track_id, d.filename)).fetchone()
-                if row:
-                    if star_val is not None:
-                        self._conn.execute(
-                            """UPDATE difficulties SET version=?, mode_int=?, mode=?,
-                               keycount=?, cs=?, ar=?, od=?, hp=?, bpm=?,
-                               length_seconds=?, checksum=?, star_rating=?,
-                               star_source='rosu-pp', star_mods='' WHERE id=?""",
-                            (d.version, d.mode_int, d.mode, d.keycount, d.cs, d.ar,
-                             d.od, d.hp, d.bpm, d.length_seconds, d.checksum,
-                             star_val, row["id"]))
-                    else:
-                        self._conn.execute(
-                            """UPDATE difficulties SET version=?, mode_int=?, mode=?,
-                               keycount=?, cs=?, ar=?, od=?, hp=?, bpm=?,
-                               length_seconds=?, checksum=? WHERE id=?""",
-                            (d.version, d.mode_int, d.mode, d.keycount, d.cs, d.ar,
-                             d.od, d.hp, d.bpm, d.length_seconds, d.checksum, row["id"]))
-                else:
-                    self._conn.execute(
-                        """INSERT INTO difficulties(track_id, filename, version,
-                           mode_int, mode, keycount, cs, ar, od, hp, bpm,
-                           length_seconds, checksum, star_rating, star_source)
-                           VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                        (track_id, d.filename, d.version, d.mode_int, d.mode,
-                         d.keycount, d.cs, d.ar, d.od, d.hp, d.bpm, d.length_seconds,
-                         d.checksum, star_val,
-                         "rosu-pp" if star_val is not None else None))
+            if not diffs:
+                self._conn.execute("DELETE FROM difficulties WHERE track_id=?", (track_id,))
+            else:
+                present = {d.filename for d in diffs}
+                placeholders = ",".join(["?"] * len(present))
+                self._conn.execute(
+                    f"DELETE FROM difficulties WHERE track_id=? AND filename NOT IN ({placeholders})",
+                    [track_id] + list(present))
+
+                upsert_sql = """
+                    INSERT INTO difficulties(
+                        track_id, filename, version, mode_int, mode, keycount,
+                        cs, ar, od, hp, bpm, length_seconds, checksum,
+                        star_rating, star_source, star_mods
+                    ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    ON CONFLICT(track_id, filename) DO UPDATE SET
+                        version=excluded.version,
+                        mode_int=excluded.mode_int,
+                        mode=excluded.mode,
+                        keycount=excluded.keycount,
+                        cs=excluded.cs,
+                        ar=excluded.ar,
+                        od=excluded.od,
+                        hp=excluded.hp,
+                        bpm=excluded.bpm,
+                        length_seconds=excluded.length_seconds,
+                        checksum=excluded.checksum,
+                        star_rating=COALESCE(excluded.star_rating, difficulties.star_rating),
+                        star_source=CASE WHEN excluded.star_rating IS NOT NULL THEN excluded.star_source ELSE difficulties.star_source END,
+                        star_mods=CASE WHEN excluded.star_rating IS NOT NULL THEN excluded.star_mods ELSE difficulties.star_mods END
+                """
+                
+                rows = []
+                for d in diffs:
+                    star_val = stars.get(d.filename)
+                    src = 'rosu-pp' if star_val is not None else None
+                    mods = ''   # column default is '' (nomod); keep new rows consistent
+                    rows.append((track_id, d.filename, d.version, d.mode_int, d.mode,
+                                 d.keycount, d.cs, d.ar, d.od, d.hp, d.bpm,
+                                 d.length_seconds, d.checksum, star_val, src, mods))
+                
+                self._conn.executemany(upsert_sql, rows)
+
             agg = self._conn.execute(
                 "SELECT MIN(star_rating) mn, MAX(star_rating) mx FROM difficulties "
                 "WHERE track_id=?", (track_id,)).fetchone()
@@ -672,13 +694,39 @@ class Database:
             self._conn.commit()
 
     def set_availability(self, beatmapset_id: int, status: str) -> None:
-        """Record whether a beatmapset still exists on osu! (item F, v1.0):
-        'available' / 'gone' / 'unknown'. Keyed by beatmapset id."""
         with self._lock:
             self._conn.execute(
                 "UPDATE tracks SET availability=? WHERE beatmapset_id=?",
                 (status, beatmapset_id))
             self._conn.commit()
+
+    def set_pruned_state(self, track_id: int, is_pruned: bool, original_size: int) -> None:
+        with self._lock:
+            self._conn.execute(
+                "UPDATE tracks SET is_pruned=?, original_size=? WHERE id=?",
+                (1 if is_pruned else 0, original_size, track_id))
+            self._conn.commit()
+
+    def unpruned_library_filenames(self) -> list[str]:
+        """Filenames of every physically-present Library track not yet pruned."""
+        with self._lock:
+            return [r["filename"] for r in self._conn.execute(
+                "SELECT filename FROM tracks WHERE in_library=1 AND is_pruned=0")]
+
+    def checksum_to_track_id(self) -> dict[str, int]:
+        """``{difficulty checksum: track_id}`` for every diff with a known MD5 —
+        used to map collection.db entries (keyed by beatmap MD5) to tracks."""
+        with self._lock:
+            return {r["checksum"]: r["track_id"] for r in self._conn.execute(
+                "SELECT checksum, track_id FROM difficulties WHERE checksum IS NOT NULL")}
+
+    def track_beatmapset_id(self, filename: str) -> tuple[int | None, int] | None:
+        """``(beatmapset_id, track_id)`` for a Library filename, or ``None``."""
+        with self._lock:
+            r = self._conn.execute(
+                "SELECT beatmapset_id, id FROM tracks WHERE filename=?",
+                (filename,)).fetchone()
+            return (r["beatmapset_id"], r["id"]) if r else None
 
     def lost_map_count(self) -> int:
         """How many owned beatmapsets are flagged as gone from osu! (item F)."""

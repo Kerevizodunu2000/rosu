@@ -10,6 +10,82 @@ the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-07-20
+
+**Space-saving (Prune) + services package split + collection sync + map repair.**
+
+### Added
+- **Prune**: recycle non-essential heavy files (video only, or video + large images) from Library `.osz`
+  sets to save disk space — in place, on-the-fly on export/import (the persisted Library copy stays
+  untouched), or as a Shortcuts batch action (scan → preview + confirm → recycle, same gated pattern as
+  Dedupe). Settings: Auto-Prune / Export Prune toggles + Prune Mode. Originals go to the Recycle Bin.
+- **Sync Collections** (Settings): reads osu!(stable)'s `collection.db` and tags matching Library maps with
+  their collection name.
+- **Repair** (Search, right-click a missing/pruned map): re-downloads it from a third-party osu! mirror —
+  disclosed as such, with a confirmation dialog, before any download starts — and clears its pruned flag on
+  success.
+- Schema v9: `tracks.is_pruned` / `tracks.original_size`.
+- `Database.bulk()`: a deferred-commit transaction context manager for multi-statement writes.
+- `upsert_difficulties` rewritten as a single `INSERT ... ON CONFLICT DO UPDATE` (was a per-diff
+  SELECT+INSERT/UPDATE loop); a fresh `NULL` star still never overwrites a star already stored.
+
+### Changed
+- **`rosu/services.py` (2041 lines) split into a `rosu/services/` package** of mixins (core / extract /
+  library / import / health / metadata / export / collection) combined into the same public `Services`
+  facade — every call site and every test is unchanged.
+- `library.copy_to_library` no longer overwrites an already-pruned Library file just because its size no
+  longer matches a freshly re-imported original.
+- Library Health's SHA-256 verify no longer reports a pruned file as a "mismatch" (pruning intentionally
+  changes the file's bytes — it's counted separately now instead of reading as corruption).
+
+### Fixed
+This release's new code (prune/collections/repair, and the mechanical parts of the services split) had not
+been exercised before this pass found and fixed:
+- Four call sites imported `from PyQt5.QtWidgets import QMessageBox` in this PySide6-only app — a guaranteed
+  `ModuleNotFoundError` the moment they ran. Switched to PySide6, and moved dialog presentation for the two
+  service-layer sites into the UI layer (the service layer stays Qt-free, matching the rest of the codebase).
+- The collection-sync and map-repair actions were unreachable: they built a job object with an invalid
+  constructor shape and submitted it to `self.job_queue`, an attribute never assigned on the Settings/Search
+  tabs (the real job queue is owned locally by the Shortcuts tab). Rewired through the existing off-thread
+  `Worker` pattern already used by every other Settings/Search action.
+- About 15 new UI strings assumed `i18n.t(key, default="...")` was a supported fallback; it isn't (a missing
+  key just displays the raw key). All added properly to `rosu/i18n.py`, in English and Turkish.
+- Prune: a zip member's declared size is now capped before being read into memory (zip-bomb guard) —
+  previously unbounded. Verified by an adversarial security pass: a real, correctly-compressed zip bomb and
+  a hand-patched size-lying archive were both refused cleanly with no memory growth.
+- Prune: the swap-in sequence is now a single atomic rename (`os.replace(temp, original)`) with the original
+  copied aside (not moved) beforehand purely for Recycle Bin recoverability — there is no longer any instant
+  where the Library file could be left missing, even if the rename itself fails or the process is killed
+  mid-operation. (The original fix in this pass — rename-aside-then-swap-back-on-failure — closed the
+  reported data-loss bug but left a narrower window if the *recovery* rename also failed; this redesign
+  removes that window entirely rather than narrowing it further.)
+- The Shortcuts batch prune action was marking every scanned file as pruned regardless of whether any bytes
+  were actually freed — which then permanently excluded that file from ever being refreshed by a later
+  import — and was silently ignoring the configured Prune Mode (always ran video-only).
+- **`collection.db` parsing had no cap on its length-prefix decoding** — a malformed/tampered file could
+  drive a multi-GB read attempt or peg a CPU core from a file only a few bytes long. Both the ULEB128
+  continuation-byte count and the decoded string length are now capped before any large read is attempted.
+- Repairing a fully-missing (not just pruned) map didn't mark it back as present in the Library, so it kept
+  showing as missing in Search until an unrelated Refresh reconciled it.
+- The repair action's context-menu label was hardcoded in Turkish regardless of the UI language; wired
+  through `i18n.py` like every other menu action.
+- "Sync Collections" now hides when osu!(stable) is disabled, consistent with every other stable-only control
+  (collection.db only exists for osu!(stable)).
+- Several places read/wrote the database directly instead of through a locked accessor, a real race risk now
+  that they run off the UI thread; added locked `Database` methods and routed through those instead.
+- The mirror downloader now caps response size against both the declared and the actual byte count, so a
+  misbehaving/compromised mirror can't fill the disk; its consent dialog now also names the copyright
+  responsibility, matching the existing Google Drive public-share warning's precedent.
+- Two existing Settings buttons and one new one had been switched to an undefined style class and rendered
+  unstyled; reverted to the existing button style.
+
+### Tests
+- New: `tests/test_prune.py`, `tests/test_collections.py`, `tests/test_api_mirror.py`,
+  `tests/test_services_prune.py`; extended `tests/test_library_dedup.py` and `tests/test_job_builders.py`.
+  427 tests total (was 375). Shipped only after two independent adversarial review passes (general
+  correctness + a security-focused pass that live-tested the zip-bomb guard, the swap failure modes, and the
+  collection.db parser against real crafted inputs rather than reasoning about them statically).
+
 ## [1.6.3] - 2026-07-19
 
 **Hardening patch** — robustness, safety nets and test depth ahead of v1.7; no new

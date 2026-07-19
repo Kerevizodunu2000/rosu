@@ -31,7 +31,9 @@ def _scan_osz(folder: Path):
 def copy_to_library(output_dir: Path, library_dir: Path, db, when: str,
                     physical_copy: bool = True,
                     progress: Callable[[str], None] | None = None,
-                    source_label: str | None = None) -> dict:
+                    source_label: str | None = None,
+                    auto_prune: bool = False,
+                    prune_mode: str = "video_only") -> dict:
     """Copy new beatmaps from Output into Library; dedup the rest.
 
     A set counts as a duplicate when it is already in the Library either by
@@ -78,10 +80,38 @@ def copy_to_library(output_dir: Path, library_dir: Path, db, when: str,
 
         if physical_copy:
             target = library_dir / t.filename
-            same_file = (target.exists()
-                         and target.stat().st_size == src_path.stat().st_size)
+            
+            is_pruned = False
+            original_size = None
+            if row:
+                # use try-except in case column is missing before migrations
+                try:
+                    is_pruned = bool(row["is_pruned"])
+                    original_size = row["original_size"]
+                except IndexError:
+                    pass
+            
+            
+            same_file = False
+            if target.exists():
+                st_size = target.stat().st_size
+                if st_size == src_path.stat().st_size:
+                    same_file = True
+                elif is_pruned and original_size == src_path.stat().st_size:
+                    same_file = True
+            
             if not same_file:
-                shutil.copy2(src_path, target)   # new file, or refreshed on size change
+                if is_pruned and target.exists():
+                    # Do not overwrite an already pruned target with an unpruned version
+                    pass
+                else:
+                    shutil.copy2(src_path, target)   # new file, or refreshed on size change
+                    if auto_prune:
+                        from .prune import prune_osz
+                        original_size_before = target.stat().st_size
+                        freed = prune_osz(target, mode=prune_mode)
+                        if freed > 0:
+                            db.set_pruned_state(track_id, True, original_size_before)
             db.set_library_state(track_id, True, "present", when)
             # A byte-identical file already in Library is an existing copy even if the
             # DB row wasn't flagged yet (manual/restored files) — don't count it new.

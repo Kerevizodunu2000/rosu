@@ -90,13 +90,23 @@ class SettingsTab(QWidget):
         self.cb_auto_backup = QCheckBox(); self.cb_auto_backup.setChecked(cfg.auto_backup_after_extract)
         self.cb_check_updates = QCheckBox(); self.cb_check_updates.setChecked(cfg.check_updates)
         self.cb_auto_refresh = QCheckBox(); self.cb_auto_refresh.setChecked(cfg.auto_refresh_on_tab)
+        self.cb_auto_prune = QCheckBox(); self.cb_auto_prune.setChecked(getattr(cfg, "auto_prune", False))
+        self.cb_export_prune = QCheckBox(); self.cb_export_prune.setChecked(getattr(cfg, "export_prune", False))
+        
         # Settings-commit mode (v1.4): Auto hides the Save button (everything
         # applies immediately); Manual keeps the explicit Save + dirty-guard.
         self.cb_autosave = QCheckBox(); self.cb_autosave.setChecked(cfg.settings_autosave)
         for cb in (self.cb_physical,
-                   self.cb_auto_backup, self.cb_clear_before,
-                   self.cb_check_updates, self.cb_auto_refresh, self.cb_autosave):
+                   self.cb_auto_backup, self.cb_clear_before, self.cb_auto_prune,
+                   self.cb_export_prune, self.cb_check_updates, self.cb_auto_refresh, self.cb_autosave):
             root.addWidget(cb)
+            
+        prune_row = QHBoxLayout()
+        self.lbl_prune_mode = QLabel()
+        self.cbo_prune_mode = QComboBox()
+        self._reload_prune_mode_options()
+        prune_row.addWidget(self.lbl_prune_mode); prune_row.addWidget(self.cbo_prune_mode); prune_row.addStretch(1)
+        root.addLayout(prune_row)
 
         zip_row = QHBoxLayout()
         self.lbl_zip = QLabel()
@@ -112,10 +122,11 @@ class SettingsTab(QWidget):
         # effect you need to SEE to choose. Physical-copy keeps its own guarded
         # confirm flow because turning it off deletes files.)
         for cb in (self.cb_auto_backup, self.cb_clear_before, self.cb_check_updates,
-                   self.cb_auto_refresh):
+                   self.cb_auto_refresh, self.cb_auto_prune, self.cb_export_prune):
             cb.toggled.connect(self._on_setting_changed)
         self.cb_physical.toggled.connect(self._on_physical_toggled)
         self.zip.currentIndexChanged.connect(self._on_setting_changed)
+        self.cbo_prune_mode.currentIndexChanged.connect(self._on_setting_changed)
         # Per-client toggles: commit + reactive hide/show in Auto mode; dirty
         # in manual mode (the UI re-syncs on Save). The save-mode toggle itself
         # is always live — it's the switch that decides the commit model.
@@ -123,7 +134,7 @@ class SettingsTab(QWidget):
         self.cb_stable_enabled.toggled.connect(self._on_client_toggle_changed)
         self.cb_autosave.toggled.connect(self._on_autosave_toggled)
         # Combos must not change on an accidental wheel scroll (item 16).
-        wheel_guard.guard(self.lang, self.theme, self.zip)
+        wheel_guard.guard(self.lang, self.theme, self.zip, self.cbo_prune_mode)
 
         # osu! API reference
         self.lbl_api = QLabel(objectName="h1")
@@ -181,11 +192,15 @@ class SettingsTab(QWidget):
         imp_row = QHBoxLayout()
         self.btn_import_stable = QPushButton(objectName="secondary")
         self.btn_import_lazer = QPushButton(objectName="secondary")
+        self.btn_sync_coll = QPushButton(objectName="secondary")
         self.btn_import_stable.clicked.connect(lambda: self._run_import("stable"))
         self.btn_import_lazer.clicked.connect(lambda: self._run_import("lazer"))
+        self.btn_sync_coll.clicked.connect(self._sync_collections)
         self.lbl_import_status = QLabel(objectName="status")
         imp_row.addWidget(self.btn_import_stable)
         imp_row.addWidget(self.btn_import_lazer)
+        imp_row.addWidget(self.btn_sync_coll)
+        imp_row.addStretch(1)
         imp_row.addWidget(self.lbl_import_status, 1)
         root.addLayout(imp_row)
         # Busy bar: the osu!lazer export runs a long .NET subprocess with no
@@ -426,6 +441,12 @@ class SettingsTab(QWidget):
         self.cb_check_updates.setToolTip(t("tip_check_updates"))
         self.cb_auto_refresh.setText(t("set_auto_refresh"))
         self.cb_auto_refresh.setToolTip(t("tip_auto_refresh"))
+        self.cb_auto_prune.setText(t("set_auto_prune"))
+        self.cb_auto_prune.setToolTip(t("tip_auto_prune"))
+        self.cb_export_prune.setText(t("set_export_prune"))
+        self.cb_export_prune.setToolTip(t("tip_export_prune"))
+        self.lbl_prune_mode.setText(t("lbl_prune_mode"))
+        self._reload_prune_mode_options()
         self.cb_enrich.setText(t("set_enrich_api"))
         self.cb_enrich.setToolTip(t("tip_enrich_api"))
         self.btn_enrich.setText(t("btn_enrich_api"))
@@ -449,6 +470,8 @@ class SettingsTab(QWidget):
         self.lbl_import_help.setText(t("set_import_help"))
         self.btn_import_stable.setText(t("btn_import_stable"))
         self.btn_import_lazer.setText(t("btn_import_lazer"))
+        self.btn_sync_coll.setText(t("btn_sync_coll"))
+        self.btn_sync_coll.setToolTip(t("tip_sync_coll"))
         self.lbl_library.setText(t("set_library_section"))
         self.btn_health.setText(t("btn_library_health"))
         self.btn_health.setToolTip(t("tip_library_health"))
@@ -515,6 +538,18 @@ class SettingsTab(QWidget):
         self.zip.blockSignals(False)
         if dropped and getattr(self, "_ui_ready", False):
             self._on_setting_changed()   # commit (auto) or flag unsaved (manual)
+
+    def _reload_prune_mode_options(self) -> None:
+        """Rebuild the Prune-mode combo's translated labels (init + retranslate)."""
+        t = self.ctx.t
+        cur = self.cbo_prune_mode.currentData() or getattr(self.ctx.cfg, "prune_mode", "video_only")
+        self.cbo_prune_mode.blockSignals(True)
+        self.cbo_prune_mode.clear()
+        self.cbo_prune_mode.addItem(t("prune_mode_video_only"), "video_only")
+        self.cbo_prune_mode.addItem(t("prune_mode_heavy_assets"), "heavy_assets")
+        idx = self.cbo_prune_mode.findData(cur)
+        self.cbo_prune_mode.setCurrentIndex(idx if idx >= 0 else 0)
+        self.cbo_prune_mode.blockSignals(False)
 
     def _refresh_drive_status(self) -> None:
         t = self.ctx.t
@@ -936,6 +971,8 @@ class SettingsTab(QWidget):
         cfg.library_physical_copy = self.cb_physical.isChecked()
         cfg.auto_backup_after_extract = self.cb_auto_backup.isChecked()
         cfg.clear_output_before_extract = self.cb_clear_before.isChecked()
+        cfg.auto_prune = self.cb_auto_prune.isChecked()
+        cfg.export_prune = self.cb_export_prune.isChecked()
         cfg.check_updates = self.cb_check_updates.isChecked()
         cfg.auto_refresh_on_tab = self.cb_auto_refresh.isChecked()
         cfg.enrich_from_api_enabled = self.cb_enrich.isChecked()
@@ -943,6 +980,7 @@ class SettingsTab(QWidget):
         cfg.stable_enabled = self.cb_stable_enabled.isChecked()
         cfg.settings_autosave = self.cb_autosave.isChecked()
         cfg.zip_disposal = self.zip.currentData()
+        cfg.prune_mode = self.cbo_prune_mode.currentData() or "video_only"
         self.ctx.save_config()
         self.saved_label.setText(self.ctx.t("saved"))
         # auto-copy toggle changes whether the Dashboard shows its Copy button.
@@ -976,7 +1014,9 @@ class SettingsTab(QWidget):
         import runs the visible buttons stay disabled (the busy bar is showing)."""
         running = self.import_bar.isVisible()
         for btn, on in ((self.btn_import_lazer, self.cb_lazer_enabled.isChecked()),
-                        (self.btn_import_stable, self.cb_stable_enabled.isChecked())):
+                        (self.btn_import_stable, self.cb_stable_enabled.isChecked()),
+                        # collection.db only exists for osu!(stable) — same rule
+                        (self.btn_sync_coll, self.cb_stable_enabled.isChecked())):
             btn.setVisible(bool(on))
             btn.setEnabled(not running)
 
@@ -1014,6 +1054,32 @@ class SettingsTab(QWidget):
     def _commit_live(self) -> None:
         if self.ctx.cfg.settings_autosave:
             self._save(silent=True)
+
+    def _sync_collections(self) -> None:
+        db_path = self.ctx.services.locate_stable_collection_db()
+        if db_path is None:
+            QMessageBox.warning(self, self.ctx.t("app_title"),
+                                self.ctx.t("sync_coll_no_stable"))
+            return
+        self.btn_sync_coll.setEnabled(False)
+        self.lbl_import_status.setText(self.ctx.t("working"))
+        w = Worker(lambda progress=None: self.ctx.services.sync_collections(db_path))
+        self._threads.append(w)
+        w.succeeded.connect(self._sync_collections_done)
+        w.failed.connect(self._sync_collections_failed)
+        w.finished.connect(lambda: self._threads.remove(w) if w in self._threads else None)
+        w.start()
+
+    def _sync_collections_done(self, res) -> None:
+        self.btn_sync_coll.setEnabled(True)
+        self.lbl_import_status.setText(self.ctx.t(
+            "sync_coll_done", tagged=res.get("tagged", 0),
+            collections=res.get("collections", 0)))
+        self.mw.search.reload()
+
+    def _sync_collections_failed(self, msg) -> None:
+        self.btn_sync_coll.setEnabled(True)
+        QMessageBox.critical(self, self.ctx.t("app_title"), msg)
 
     # -- save (paths + API) --------------------------------------------------
     def _save(self, silent: bool = False) -> bool:

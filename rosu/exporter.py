@@ -78,7 +78,8 @@ def _open_archive(tmp: Path, fmt: str):
 
 
 def _write_volume(members: list[tuple[str, Path]], out_path: Path, fmt: str,
-                  progress, cancel, counter: list[int], total: int) -> bool:
+                  progress, cancel, counter: list[int], total: int,
+                  prune_mode: str | None = None) -> bool:
     """Write one archive volume, checking ``cancel`` and emitting per-member
     progress BETWEEN files (not just once per volume), so even a single large
     archive is cancellable and shows live progress. Written to a ``.part`` temp
@@ -91,7 +92,24 @@ def _write_volume(members: list[tuple[str, Path]], out_path: Path, fmt: str,
             for name, path in members:
                 if cancel is not None and cancel():
                     raise _CancelledWrite()
-                z.write(path, arcname=name)
+                
+                if prune_mode:
+                    import tempfile, shutil, os
+                    from .prune import prune_osz
+                    fd, tmp_osz = tempfile.mkstemp(suffix=".osz")
+                    os.close(fd)
+                    try:
+                        shutil.copy2(path, tmp_osz)
+                        prune_osz(tmp_osz, mode=prune_mode)
+                        z.write(tmp_osz, arcname=name)
+                    finally:
+                        try:
+                            os.remove(tmp_osz)
+                        except OSError:
+                            pass
+                else:
+                    z.write(path, arcname=name)
+                    
                 counter[0] += 1
                 if progress:
                     progress({"kind": "export", "done": counter[0],
@@ -114,7 +132,7 @@ def _write_volume(members: list[tuple[str, Path]], out_path: Path, fmt: str,
 
 def write_export(files: list[Path], dest_base: Path, fmt: str = "zip",
                  split_bytes: int | None = None, progress=None,
-                 cancel=None) -> list[Path]:
+                 cancel=None, prune_mode: str | None = None) -> list[Path]:
     """Archive ``files`` into a single archive, or several ``.partNN`` volumes
     when ``split_bytes`` forces a split. Returns the written archive Paths in
     order.
@@ -159,7 +177,7 @@ def write_export(files: list[Path], dest_base: Path, fmt: str = "zip",
                 f"{dest_base.stem}.part{vol_num:0{width}d}{suffix}")
         members = [(names[i], existing[i]) for i in vol]
         if not _write_volume(members, out_path, fmt, progress, cancel,
-                             counter, total):
+                             counter, total, prune_mode=prune_mode):
             break   # cancelled mid-volume — stop, keep the volumes finished so far
         written.append(out_path)
     return written

@@ -237,6 +237,29 @@ def test_build_dedup_job_gated_then_removes(tmp_path, monkeypatch):
     db.close()
 
 
+def test_build_prune_job_gated_then_prunes(tmp_path):
+    import zipfile
+    cfg, db, svc = _svc(tmp_path)
+    p = cfg.library_path / "456 A - B.osz"
+    with zipfile.ZipFile(p, "w") as zf:
+        zf.writestr("map.osu", b"osu file format v14\n")
+        zf.writestr("video.mp4", b"z" * 5000)
+    db._conn.execute(
+        "INSERT INTO tracks(beatmapset_id, filename, in_library, library_status) "
+        "VALUES(456,'456 A - B.osz',1,'present')")
+    db._conn.commit()
+
+    job = svc.build_prune_job()
+    assert _step_keys(job) == ["job_step_prune_scan", "job_step_prune_remove"]
+    assert job.steps[1].gated is True   # remove waits for confirm, same as dedup
+    res = run_job_sync(job)
+    assert job.ctx["plan"]["count"] == 1
+    assert res["pruned"] == 1 and res["freed_bytes"] == 5000
+    with zipfile.ZipFile(p) as zf:
+        assert "video.mp4" not in zf.namelist()
+    db.close()
+
+
 # -- per-client enable/disable (v1.4) ----------------------------------------
 def test_dispatch_disabled_client_returns_disabled(tmp_path):
     cfg, db, svc = _svc(tmp_path)

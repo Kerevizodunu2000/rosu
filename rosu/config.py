@@ -26,6 +26,8 @@ THEMES = (
 # only offered in Settings while Drive is connected.
 ZIP_DISPOSAL = ("recycle", "move", "delete", "drive")
 
+PRUNE_MODES = ("video_only", "heavy_assets")
+
 
 def app_root() -> Path:
     """Directory the app treats as its working root.
@@ -75,6 +77,11 @@ class Config:
     zip_disposal: str = "recycle"
     check_updates: bool = True   # check GitHub for a newer release on startup
     auto_refresh_on_tab: bool = True   # re-run a tab's on_shown() when switched to
+    
+    auto_prune: bool = False     # automatically prune new maps added to library
+    export_prune: bool = False   # prune on the fly when exporting/importing to osu!
+    prune_mode: str = "video_only"  # 'video_only' or 'heavy_assets'
+    
     # Per-client enable/disable (v1.4): a disabled client's import/transfer/export
     # controls are hidden everywhere and it is never written to. osu!lazer is on by
     # default; osu!(stable) is off (enable it in Settings).
@@ -162,6 +169,8 @@ def _fill_defaults(cfg: Config) -> Config:
         cfg.theme = "dark"
     if cfg.zip_disposal not in ZIP_DISPOSAL:
         cfg.zip_disposal = "recycle"
+    if getattr(cfg, "prune_mode", None) not in PRUNE_MODES:
+        cfg.prune_mode = "video_only"
     # osu! client executables: the legacy single osu_exe meant osu!lazer. Migrate
     # it into osu_lazer_exe once, then keep osu_exe mirrored so an older build
     # (or a hand-edited config.json) still reads a sensible value.

@@ -83,6 +83,11 @@ Rosu bulk-extracts `.zip`/`.7z`/`.tar` beatmap packs into a deduplicated `.osz` 
 **Shortcuts job queue**
 - Long Shortcuts actions run as queued **jobs** with named sub-steps, live status, per-item cancel, and **DISK/DRIVE concurrency** (a disk export can run while a Drive upload proceeds). Double-click an archive row to reveal it in the file manager.
 
+**Space saving (Prune) & collections**
+- **Prune Library** (Shortcuts) — recycles non-essential heavy files from your Library `.osz` sets (**Video only**, or **Video + images**) to save disk space; scans first, shows a preview + total freed before anything is touched, and the originals go to the Recycle Bin. **Auto-Prune** (Settings) prunes new maps as they're added to the Library; **Export Prune** prunes only the copy sent to osu! or exported to a folder/archive, leaving the Library file itself untouched.
+- **Sync Collections** (Settings) — reads osu!(stable)'s `collection.db` and tags matching Library maps with their collection name.
+- **Repair** (Search, right-click a missing or pruned map) — re-downloads it from a third-party osu! mirror (not the official osu! servers — disclosed before download starts) and clears its pruned flag on success.
+
 **Safety & robustness**
 - Archive extraction is hardened against path traversal (drive-relative/ADS entry names) and zip-bomb/disk-exhaustion (size caps before unpacking).
 - Guarded, countdown-confirmed deletions before removing physical Library copies.
@@ -183,14 +188,14 @@ python -m pytest tests/ -q
 
 ## Roadmap
 
-**Shipped through v1.6:** public essentials (v1.0) · Library Health & disk insight (v1.1) · Shortcuts tab
+**Shipped through v1.7:** public essentials (v1.0) · Library Health & disk insight (v1.1) · Shortcuts tab
 (v1.2) · job queue (v1.3) · Settings overhaul + hosted bug report (v1.4) · per-difficulty star ratings,
 query-syntax search & osu!-API enrichment (v1.5) · mania skillset ratings, visual Filters panel & star-range
-export (v1.6).
+export (v1.6) · space-saving (Prune), collection sync & mirror-based map repair (v1.7).
 
-**Next on the Library Maturity line:** space-saving (prune heavy assets from `.osz` files), audio-fingerprint
-dedup, and deeper browsing UX — then the v2.0 capstone. Later lines add a music player, collections, sync
-hardening, an AI coach, streamer overlays, and cross-platform builds (macOS/Linux).
+**Next on the Library Maturity line:** audio-fingerprint dedup and deeper browsing UX — then the v2.0
+capstone. Later lines add a music player, collections, sync hardening, an AI coach, streamer overlays, and
+cross-platform builds (macOS/Linux).
 
 Extra numbered pack series (ST/SC/T/L/P/A and beyond) are already auto-supported by the gap-detection logic as
 they appear.

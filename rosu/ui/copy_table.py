@@ -15,12 +15,13 @@
 count) sort numerically even when displayed as formatted text.
 """
 from __future__ import annotations
+from pathlib import Path
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
     QAbstractItemView, QApplication, QHeaderView, QMenu, QTableWidget,
-    QTableWidgetItem,
+    QTableWidgetItem, QMessageBox
 )
 
 _CLEAN_ROLE = Qt.UserRole + 11  # per-row clean copy name (single-click copy)
@@ -28,6 +29,7 @@ _COPY_ROLE = Qt.UserRole + 12   # per-cell TSV copy override (Ctrl+C / double-cl
 _PATH_ROLE = Qt.UserRole + 13   # per-row file path for "Open file location" (v1.3)
 _URL_ROLE = Qt.UserRole + 14    # per-row web URL ("Open osu! page", v1.4.1)
 _URL_PRIMARY_ROLE = Qt.UserRole + 15  # True → clicks act on the URL (missing rows)
+_REPAIR_ROLE = Qt.UserRole + 16 # per-row filename for the mirror-repair action
 
 
 class SortItem(QTableWidgetItem):
@@ -56,6 +58,7 @@ class SortItem(QTableWidgetItem):
 
 class CopyTable(QTableWidget):
     openLocationRequested = Signal(str)   # emitted with a file path (v1.3)
+    repairRequested = Signal(str)
     rowActivated = Signal(int)            # double-click a row (v1.5, opt-in)
 
     def __init__(self, name_column: int = 0, parent=None,
@@ -69,6 +72,7 @@ class CopyTable(QTableWidget):
         self._menu_table = "Copy as table (Ctrl+C)"
         self._menu_open_location = ""            # set via retranslate; empty = hidden
         self._menu_open_url = ""                 # set via retranslate; empty = hidden
+        self._menu_repair = ""                   # set via retranslate; empty = hidden
         self._widths_seeded = False
         self.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.setSelectionBehavior(QAbstractItemView.SelectRows)
@@ -121,13 +125,17 @@ class CopyTable(QTableWidget):
         if item is not None:
             item.setData(_COPY_ROLE, text)
 
-    def set_row_path(self, row: int, path) -> None:
-        """Attach a file path to this row for the "Open file location" context
-        menu entry (v1.3). Stored on the name-column item, same as the other
-        per-row roles."""
+    def set_row_path(self, row: int, path: Path | str) -> None:
+        """Store an absolute file path for 'Open file location' context action."""
         item = self.item(row, self._name_column)
         if item is not None:
             item.setData(_PATH_ROLE, str(path))
+
+    def set_repair_filename(self, row: int, filename: str) -> None:
+        """Store the filename for the mirror-repair context action."""
+        item = self.item(row, self._name_column)
+        if item is not None:
+            item.setData(_REPAIR_ROLE, filename)
 
     def _row_path(self, row: int) -> str:
         item = self.item(row, self._name_column)
@@ -239,6 +247,17 @@ class CopyTable(QTableWidget):
                 act_url = QAction(self._menu_open_url, self)
                 act_url.triggered.connect(lambda: self._open_url(url))
                 menu.addAction(act_url)
+                
+        if len(rows) == 1 and self._menu_repair:
+            item = self.item(rows[0], self._name_column)
+            if item is not None:
+                repair_fn = item.data(_REPAIR_ROLE)
+                if repair_fn:
+                    menu.addSeparator()
+                    act_repair = QAction(self._menu_repair, self)
+                    act_repair.triggered.connect(lambda: self.repairRequested.emit(repair_fn))
+                    menu.addAction(act_repair)
+
         menu.exec(self.viewport().mapToGlobal(pos))
 
     def keyPressEvent(self, event) -> None:

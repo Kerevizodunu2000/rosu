@@ -148,6 +148,7 @@ class SearchTab(QWidget):
         self.table = CopyTable(name_column=0, activate_details=True)
         self.table.setColumnCount(len(self._KEYS))
         self.table.openLocationRequested.connect(self._open_location)
+        self.table.repairRequested.connect(self._repair_map)
         self.table.rowActivated.connect(self._show_map_details)   # dbl-click → details
         root.addWidget(self.table, 1)
 
@@ -175,6 +176,7 @@ class SearchTab(QWidget):
         self.table.setHorizontalHeaderLabels([t(k) for k in self._KEYS])
         self.table.set_menu_labels(t("copy_names_action"), t("copy_table_action"))
         self.table._menu_open_location = t("menu_open_location")
+        self.table._menu_repair = t("menu_repair")
 
     def on_shown(self) -> None:
         # First time the tab is opened, show the full library so it's browsable.
@@ -325,9 +327,15 @@ class SearchTab(QWidget):
                 full = row.get("source_full") or []
                 if full:
                     self.table.set_copy_value(r, 10, "; ".join(full))
-                if row.get("in_library") and row.get("filename"):
-                    self.table.set_row_path(
-                        r, self.ctx.cfg.library_path / row["filename"])
+                
+                # Expose 'Open location' / 'Repair'
+                is_missing = not row.get("in_library")
+                is_pruned = row.get("is_pruned")
+                if row.get("filename"):
+                    if not is_missing:
+                        self.table.set_row_path(r, self.ctx.cfg.library_path / row["filename"])
+                    if is_missing or is_pruned:
+                        self.table.set_repair_filename(r, row["filename"])
         finally:
             self.table.setSortingEnabled(True)
             self.table.setUpdatesEnabled(True)
@@ -335,6 +343,38 @@ class SearchTab(QWidget):
 
     def _open_location(self, path: str) -> None:
         reveal_in_explorer(self, self.ctx, path)
+
+    def _repair_map(self, filename: str) -> None:
+        t = self.ctx.t
+        reply = QMessageBox.question(
+            self, t("repair_confirm_title"),
+            t("repair_confirm_body", filename=filename),
+            QMessageBox.Yes | QMessageBox.No)
+        if reply != QMessageBox.Yes:
+            return
+        w = Worker(lambda progress=None:
+                  self.ctx.services.repair_maps([filename], progress))
+        self._threads.append(w)
+        w.succeeded.connect(self._repair_done)
+        w.failed.connect(self._repair_failed)
+        w.finished.connect(lambda: self._threads.remove(w) if w in self._threads else None)
+        w.start()
+
+    def _repair_done(self, res) -> None:
+        t = self.ctx.t
+        repaired = res.get("repaired", 0)
+        failed = len(res.get("failed", []))
+        if repaired and not failed:
+            self.result.setText(t("repair_done", repaired=repaired))
+        elif repaired:
+            self.result.setText(t("repair_partial", repaired=repaired, failed=failed))
+        else:
+            self.result.setText(t("repair_none"))
+        if repaired:
+            self.reload()
+
+    def _repair_failed(self, msg) -> None:
+        QMessageBox.critical(self, self.ctx.t("app_title"), msg)
 
     def _show_map_details(self, view_row: int) -> None:
         """Double-click a result → full per-difficulty details + enriched metadata."""

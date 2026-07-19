@@ -258,6 +258,10 @@ class ShortcutsTab(QWidget):
         self.btn_dedup = QPushButton(objectName="secondary")
         self.btn_dedup.clicked.connect(self.on_dedup)
         drow.addWidget(self.btn_dedup)
+        
+        self.btn_prune = QPushButton(objectName="secondary")
+        self.btn_prune.clicked.connect(self.on_prune)
+        drow.addWidget(self.btn_prune)
         drow.addStretch(1)
         root.addLayout(drow)
 
@@ -324,6 +328,8 @@ class ShortcutsTab(QWidget):
         self.btn_export.setText(t("btn_export"))
         self.btn_dedup.setText(t("btn_dedup"))
         self.btn_dedup.setToolTip(t("tip_dedup"))
+        self.btn_prune.setText(t("btn_prune"))
+        self.btn_prune.setToolTip(t("tip_prune"))
         self.jobqueue_box.setTitle(t("sc_jobqueue_title"))
         self.btn_clear_finished.setText(t("job_clear_finished"))
         self.queue_empty.setText(t("queue_empty"))
@@ -581,6 +587,12 @@ class ShortcutsTab(QWidget):
         self.queue.enqueue(self.services.build_dedup_job())
         self._set_status("job_added")
 
+    def on_prune(self) -> None:
+        """Queue a prune job: it scans first, then WAITS at a gate for the preview
+        confirmation before recycling anything."""
+        self.queue.enqueue(self.services.build_prune_job())
+        self._set_status("job_added")
+
     # -- queue reactions -------------------------------------------------------
     def _refresh_queue(self) -> None:
         jobs = self.queue.jobs
@@ -601,8 +613,14 @@ class ShortcutsTab(QWidget):
         self.queue_empty.setVisible(not jobs)
 
     def _on_gate_needed(self, job) -> None:
-        """A dedup job finished scanning — show the preview + confirm before it
-        recycles anything. No duplicates → skip the remove step cleanly."""
+        if job.kind == "dedup":
+            self._handle_dedup_gate(job)
+        elif job.kind == "prune":
+            self._handle_prune_gate(job)
+            
+    def _handle_dedup_gate(self, job) -> None:
+        """A dedup job finished scanning - show the preview + confirm before it
+        recycles anything. No duplicates -> skip the remove step cleanly."""
         t = self.ctx.t
         plan = job.ctx.get("plan", {})
         if plan.get("count", 0) == 0:
@@ -619,6 +637,23 @@ class ShortcutsTab(QWidget):
         else:
             self.queue.cancel_job(job)
 
+    def _handle_prune_gate(self, job) -> None:
+        """A prune job finished scanning - show the preview + confirm."""
+        t = self.ctx.t
+        plan = job.ctx.get("plan", {})
+        if plan.get("count", 0) == 0:
+            self._set_status("sc_prune_none")
+            self.queue.skip_gate(job)
+            return
+        reply = QMessageBox.question(
+            self, t("app_title"),
+            t("sc_prune_confirm", count=plan["count"], freed=_fmt_size(plan["total_bytes"])),
+            QMessageBox.Ok | QMessageBox.Cancel, QMessageBox.Cancel)
+        if reply == QMessageBox.Ok:
+            self.queue.confirm_gate(job)
+        else:
+            self.queue.cancel_job(job)
+
     def _on_job_finished(self, job) -> None:
         """Route a completed job's result to the matching presenter (preserving
         the v1.2 completion dialogs), then refresh the installed-summary counts."""
@@ -627,6 +662,7 @@ class ShortcutsTab(QWidget):
             "transfer": self._present_transfer, "save": self._present_save,
             "unpack": self._present_unpack, "export": self._present_export,
             "dedup": self._present_dedup,
+            "prune": self._present_prune,
         }.get(job.kind)
         if presenter is not None:
             presenter(res)
@@ -707,6 +743,13 @@ class ShortcutsTab(QWidget):
             self._set_status("sc_dedup_none")
         else:
             self._set_status("sc_dedup_done", removed=res["removed"],
+                             freed=_fmt_size(res["freed_bytes"]))
+
+    def _present_prune(self, res) -> None:
+        if res.get("pruned", 0) == 0:
+            self._set_status("sc_prune_none")
+        else:
+            self._set_status("sc_prune_done", pruned=res["pruned"],
                              freed=_fmt_size(res["freed_bytes"]))
 
     # -- worker plumbing (summary refresh only) --------------------------------

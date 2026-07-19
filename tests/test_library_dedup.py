@@ -77,3 +77,58 @@ def test_data_generation_bumps_on_write_only(tmp_path):
     db.artists_ranked()                   # a pure read
     assert db.data_generation() == g1     # reads never bump
     db.close()
+
+
+# -- v1.7 prune interaction: a pruned Library target must never be re-inflated --
+def test_pruned_target_not_overwritten_on_size_mismatch(tmp_path):
+    cfg, db = _make(tmp_path)
+    _osz(cfg.output_path, "88 A - T.osz", b"original-full-file")
+    library.copy_to_library(cfg.output_path, cfg.library_path, db, "t1")
+    row = db.find_track_row(88, "88 A - T.osz")
+    db.set_pruned_state(row["id"], True, len(b"original-full-file"))
+
+    # Simulate the on-disk effect of a prune: the Library copy shrinks.
+    lib_file = cfg.library_path / "88 A - T.osz"
+    lib_file.write_bytes(b"pruned")
+
+    # A later re-import of the (still full-size) set must NOT overwrite the
+    # pruned Library copy with the unpruned bytes — that would silently undo
+    # the space savings on every subsequent import/refresh.
+    _osz(cfg.output_path, "88 A - T.osz", b"original-full-file")
+    library.copy_to_library(cfg.output_path, cfg.library_path, db, "t2")
+    assert lib_file.read_bytes() == b"pruned"
+    db.close()
+
+
+def test_pruned_target_matching_original_size_counts_as_duplicate(tmp_path):
+    cfg, db = _make(tmp_path)
+    original = b"original-full-file"
+    _osz(cfg.output_path, "89 A - T.osz", original)
+    library.copy_to_library(cfg.output_path, cfg.library_path, db, "t1")
+    row = db.find_track_row(89, "89 A - T.osz")
+    db.set_pruned_state(row["id"], True, len(original))
+    (cfg.library_path / "89 A - T.osz").write_bytes(b"pruned")
+
+    _osz(cfg.output_path, "89 A - T.osz", original)
+    res = library.copy_to_library(cfg.output_path, cfg.library_path, db, "t2")
+    assert (res["new"], res["duplicates"]) == (0, 1)
+    db.close()
+
+
+def test_auto_prune_shrinks_new_video_bearing_set(tmp_path):
+    import zipfile
+    cfg, db = _make(tmp_path)
+    cfg.output_path.mkdir(parents=True, exist_ok=True)
+    p = cfg.output_path / "90 A - T.osz"
+    with zipfile.ZipFile(p, "w") as zf:
+        zf.writestr("map.osu", b"osu file format v14\n")
+        zf.writestr("video.mp4", b"z" * 5000)
+
+    res = library.copy_to_library(cfg.output_path, cfg.library_path, db, "t1",
+                                  auto_prune=True, prune_mode="video_only")
+    assert res["new"] == 1
+    row = db.find_track_row(90, "90 A - T.osz")
+    assert row["is_pruned"] == 1
+    with zipfile.ZipFile(cfg.library_path / "90 A - T.osz") as zf:
+        assert "video.mp4" not in zf.namelist()
+    db.close()
