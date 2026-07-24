@@ -12,11 +12,17 @@ block_cipher = None
 # PyInstaller's static analysis misses -> collect them (plus win32ctypes, the
 # Windows Credential Manager backend's dependency) and the rosu.drive submodules
 # (only lazily imported from services, so name them explicitly to be safe).
+# Same reasoning for the v1.7 modules: the services package imports prune /
+# api_mirror inside functions, so a missed one would only surface as a crash the
+# moment the user clicks Prune or Repair in the frozen exe. Naming the whole
+# services package too keeps the mixin split immune to the same class of miss.
 _drive_hidden = (
     collect_submodules('keyring')
     + collect_submodules('win32ctypes')
     + ['rosu.drive', 'rosu.drive.auth', 'rosu.drive.client',
        'rosu.drive.bundle', 'rosu.drive.manifest']
+    + ['rosu.prune', 'rosu.api_mirror', 'rosu.collections']
+    + collect_submodules('rosu.services')
 )
 
 # Embed the OAuth client only if present. CI writes rosu/drive/oauth_client.json

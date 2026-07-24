@@ -2,9 +2,29 @@
 """Space-saving feature to strip heavy assets from mapsets."""
 import os
 import shutil
+import stat
 import zipfile
 import tempfile
 from pathlib import Path
+
+
+def _discard(path) -> None:
+    """Delete a temp/working file, best effort.
+
+    Clears the read-only bit first: ``shutil.copy2`` copies an .osz's mode bits
+    along with its content, so the aside-copy of a read-only Library file is
+    itself read-only and a plain ``os.remove`` raises ``PermissionError`` on
+    Windows — which used to leave a stray ``*.osz.orig`` behind in the Library
+    folder on every prune attempt against such a file.
+    """
+    try:
+        os.chmod(path, stat.S_IWRITE | stat.S_IREAD)
+    except OSError:
+        pass
+    try:
+        os.remove(path)
+    except OSError:
+        pass
 
 # Per-entry uncompressed-size cap: refuse to read a zip member past this size
 # so a crafted/zip-bomb entry (tiny compressed, huge declared file_size) can't
@@ -110,7 +130,7 @@ def prune_osz(osz_path: Path | str, mode: str = 'video_only', max_unessential_si
                         freed += info.file_size
 
         if freed <= 0:
-            os.remove(temp_path)
+            _discard(temp_path)
             return 0
 
         # Keep the original recoverable (Recycle Bin) WITHOUT gating the
@@ -126,23 +146,19 @@ def prune_osz(osz_path: Path | str, mode: str = 'video_only', max_unessential_si
         try:
             shutil.copy2(str(p), trash_copy)
         except Exception:
-            os.remove(trash_copy)
+            _discard(trash_copy)
             raise
         try:
             os.replace(temp_path, str(p))   # atomic: p always has valid content
         except Exception:
-            os.remove(trash_copy)   # p untouched; drop the now-unneeded copy
+            _discard(trash_copy)   # p untouched; drop the now-unneeded copy
             raise
         try:
             from send2trash import send2trash
             send2trash(trash_copy)
         except Exception:
-            try:
-                os.remove(trash_copy)
-            except OSError:
-                pass
+            _discard(trash_copy)
         return freed
     except Exception:
-        if os.path.exists(temp_path):
-            os.remove(temp_path)
+        _discard(temp_path)
         return 0

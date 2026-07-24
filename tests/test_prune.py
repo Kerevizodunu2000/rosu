@@ -159,6 +159,30 @@ def test_swap_failure_leaves_original_untouched(tmp_path, monkeypatch):
     assert list(tmp_path.iterdir()) == [p]
 
 
+def test_readonly_file_leaves_no_stray_orig_copy(tmp_path):
+    # shutil.copy2 also copies the read-only bit, so the aside-copy of a
+    # read-only Library file is itself read-only and a plain os.remove raises
+    # PermissionError on Windows — which used to litter the Library folder with
+    # a stray *.osz.orig on every prune attempt against such a file.
+    import os
+    import stat
+
+    p = tmp_path / "set.osz"
+    _make_osz(p, {
+        "map.osu": _OSU_TEXT.encode("utf-8"),
+        "video.mp4": b"z" * 5000,
+    })
+    original_bytes = p.read_bytes()
+    os.chmod(p, stat.S_IREAD)
+    try:
+        prune.prune_osz(p, mode="video_only")
+        assert p.exists()
+        assert p.read_bytes() == original_bytes
+        assert [f.name for f in tmp_path.iterdir()] == ["set.osz"]
+    finally:
+        os.chmod(p, stat.S_IWRITE | stat.S_IREAD)
+
+
 def test_trash_copy_failure_leaves_original_untouched(tmp_path, monkeypatch):
     # If even making the recoverable copy fails, the original must still be
     # untouched (the swap-in never runs).
