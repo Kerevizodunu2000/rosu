@@ -32,6 +32,23 @@ except ImportError:  # graceful fallback if rapidfuzz isn't installed
 
 _WORD = re.compile(r"\w+", re.UNICODE)
 
+# How many rows a search may return. The old default was 500, which silently
+# truncated every query — a range that really held 1600 sets listed 500 and the
+# user had no way to tell the difference between "500 matches" and "500 shown".
+# Browsing already used 5000 (``db.all_tracks``), so searching now matches it,
+# and the caller is told the total so a hit at the ceiling can be reported
+# honestly instead of looking like the whole answer.
+DEFAULT_LIMIT = 5000
+
+# Free-text recall: how many rows the DB may hand the ranker, per displayed row.
+# A pre-ranking cap is still needed (a one-letter query must not pull a whole
+# huge library into Python) but a FIXED cap dropped relevant rows before they
+# were ever scored, so it follows the requested limit instead — never falling
+# below the old flat 2000, so a deliberately small page still ranks over a wide
+# candidate pool (and still reports an accurate total).
+_RECALL_FACTOR = 4
+_MIN_RECALL = 2000
+
 # How well ONE token matches ONE field-set (high to low).
 _S_EXACT, _S_PREFIX, _S_WORD_EQ, _S_WORD_PREFIX, _S_SUBSTR, _S_NONE = 5, 4, 3, 2, 1, 0
 
@@ -104,8 +121,16 @@ def _strong_score(q: str, tokens: list[str],
     return tier, total + whole
 
 
-def rank(rows: list[dict], query: str, limit: int = 500,
+def rank(rows: list[dict], query: str, limit: int = DEFAULT_LIMIT,
          search_tags: bool = False) -> list[dict]:
+    """The best ``limit`` matches for ``query``, most relevant first."""
+    return rank_all(rows, query, search_tags=search_tags)[:limit]
+
+
+def rank_all(rows: list[dict], query: str,
+             search_tags: bool = False) -> list[dict]:
+    """Every qualifying row, ranked — no truncation, so the caller can report
+    how many matched *before* deciding what to show."""
     q = _norm(query)
     raw = query.strip()
     tokens = tokenize(query)
@@ -128,31 +153,48 @@ def rank(rows: list[dict], query: str, limit: int = 500,
         name_len = len(r.get("display_name") or "")
         scored.append((tier, total, fz, -name_len, r.get("copy_attempts", 0), r))
     scored.sort(key=lambda x: (x[0], x[1], x[2], x[3], x[4]), reverse=True)
-    return [s[5] for s in scored[:limit]]
+    return [s[5] for s in scored]
 
 
-def search(db, query: str, limit: int = 500,
+def search(db, query: str, limit: int = DEFAULT_LIMIT,
            search_tags: bool = False) -> list[dict]:
-    """Structured filters (``star>5 mode=mania``) + free-text relevance search.
+    """Structured filters (``star>5 mode=mania``) + free-text relevance search."""
+    return search_counted(db, query, limit, search_tags=search_tags)[0]
+
+
+def search_counted(db, query: str, limit: int = DEFAULT_LIMIT,
+                   search_tags: bool = False) -> tuple[list[dict], int]:
+    """``(rows, total)`` — the rows to show and how many matched in all.
 
     The query is split into filters and free text (:mod:`rosu.query`). Filters are
     hard constraints applied as SQL; free text is ranked. A filters-only query has
     nothing to rank (``rank`` on zero tokens drops every row), so it returns the
     filter-recalled rows name-sorted instead.
+
+    ``total`` lets the caller say "showing 5000 of 8123" rather than silently
+    cutting the list. For the free-text path it counts the rows that survived
+    ranking, so it is exact unless the recall itself hit its (much larger) cap —
+    in which case ``total`` is still a lower bound, never an overstatement.
     """
     from .query import parse
     parsed = parse(query)
     free = parsed.free_text.strip()
     if not free and not parsed.filters:
-        return []
+        return [], 0
     if not free:   # filters only — no ranking, return name-sorted matches
         rows = db.filtered_tracks(parsed.filters, limit)
+        # Only pay for the COUNT when the page actually filled up; otherwise the
+        # rows we already have ARE the total.
+        total = (db.count_filtered_tracks(parsed.filters)
+                 if len(rows) >= limit else len(rows))
         db.attach_sources_bulk(rows)
         db.attach_difficulties_bulk(rows)
-        return rows
-    candidates = db.search_candidates(free, search_tags=search_tags,
-                                      filters=parsed.filters)
-    ranked = rank(candidates, free, limit, search_tags=search_tags)
-    db.attach_sources_bulk(ranked)  # only the displayed rows — no N+1
-    db.attach_difficulties_bulk(ranked)
-    return ranked
+        return rows, total
+    candidates = db.search_candidates(
+        free, limit=max(limit * _RECALL_FACTOR, _MIN_RECALL),
+        search_tags=search_tags, filters=parsed.filters)
+    ranked = rank_all(candidates, free, search_tags=search_tags)
+    rows = ranked[:limit]
+    db.attach_sources_bulk(rows)  # only the displayed rows — no N+1
+    db.attach_difficulties_bulk(rows)
+    return rows, len(ranked)

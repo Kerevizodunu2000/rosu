@@ -135,18 +135,29 @@ class MetadataMixin:
             return {"in_library": inlib, "unrated": unrated,
                     "rated": inlib - unrated, "engine": ratings.available()}
 
-        def star_histogram_data(self, scope: str = "library",
-                                bins: int = 20) -> list[tuple[float, float, int]]:
-            """Binned distribution of set star ratings (``star_max``) for a histogram.
-    
-            Synchronous — binning a few thousand floats is microseconds, so no worker
-            is needed. ``scope`` is ``"library"`` (in-Library sets) or ``"all"``.
+        def star_histogram_data(self, scope: str = "library", bins: int = 20,
+                                mode: str = "auto") -> dict:
+            """Star distribution of the whole Library, binned **per difficulty**.
+
+            Two things this is deliberately NOT: it is not built from the current
+            search result (that described at most one capped page while claiming to
+            be the library's distribution), and it does not bin ``tracks.star_max``
+            (a set's hardest diff only — so a 2★+5★ set landed solely in the 5★
+            bucket yet still matched a ``star>=2 star<2.5`` search).
+
+            Returns ``{"bins", "difficulties", "sets"}``: the bin tuples, how many
+            rated difficulties were counted, and how many distinct sets they live in
+            — the caller must state which unit it is showing, since N difficulties
+            can come from fewer than N sets. Synchronous: binning a few thousand
+            floats is microseconds. ``scope`` is ``"library"`` or ``"all"``;
+            ``mode`` is a :data:`rosu.stats.MODES` value.
             """
             from .. import stats
-            rows = (self.db.library_tracks() if scope == "library"
-                    else self.db.all_tracks())
-            values = [r["star_max"] for r in rows if r.get("star_max") is not None]
-            return stats.histogram_bins(values, bins)
+            pairs = self.db.difficulty_stars(scope)
+            values = [star for _tid, star in pairs]
+            return {"bins": stats.histogram_bins(values, bins, mode),
+                    "difficulties": len(values),
+                    "sets": len({tid for tid, _star in pairs})}
 
         def compute_msd(self, progress=None, max_files: int | None = None) -> dict:
             """Compute the in-house Rosu Skillset Rating for every Library set's mania
@@ -381,20 +392,37 @@ class MetadataMixin:
             return numbered
 
         def search(self, query: str, search_tags: bool = False,
-                   progress=None) -> list[dict]:
+                   progress=None, limit: int | None = None) -> list[dict]:
             """Ranked search, or the full name-sorted listing when the box is empty
             (item 11). ``search_tags`` opts into matching creator/tags too (off by
             default — it flooded results). ``progress`` is accepted so it can run in a
             Worker thread."""
+            return self.search_page(query, search_tags, progress, limit)["rows"]
+
+        def search_page(self, query: str, search_tags: bool = False,
+                        progress=None, limit: int | None = None) -> dict:
+            """:meth:`search` plus the honest totals: ``{"rows", "total",
+            "limit", "truncated"}``.
+
+            ``total`` is how many tracks matched, not how many are being shown, so
+            the UI can say "showing 5000 of 8123". Searching used to pass no limit
+            at all and inherit an unannounced 500 — a star range holding 1600 sets
+            listed 500 of them and looked complete.
+            """
+            limit = search.DEFAULT_LIMIT if limit is None else max(1, int(limit))
             if query.strip():
-                rows = search.search(self.db, query, search_tags=search_tags)
+                rows, total = search.search_counted(self.db, query, limit,
+                                                    search_tags=search_tags)
             else:
-                rows = self.db.all_tracks()
+                rows = self.db.all_tracks(limit)
+                total = (self.db.count_filtered_tracks([])
+                         if len(rows) >= limit else len(rows))
                 self.db.attach_sources_bulk(rows)
                 self.db.attach_difficulties_bulk(rows)
             self.log.info("SEARCH", query=query or "(all)", results=len(rows),
-                          tags=search_tags)
-            return rows
+                          total=total, tags=search_tags)
+            return {"rows": rows, "total": total, "limit": limit,
+                    "truncated": total > len(rows)}
 
         def artists(self, metric: str = "count", descending: bool = True) -> list[dict]:
             return self.db.artists_ranked(metric, descending)

@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
-    QCheckBox, QDialog, QDialogButtonBox, QHBoxLayout, QLabel, QLineEdit,
-    QMessageBox, QPushButton, QVBoxLayout, QWidget,
+    QCheckBox, QComboBox, QDialog, QDialogButtonBox, QHBoxLayout, QLabel,
+    QLineEdit, QMessageBox, QPushButton, QVBoxLayout, QWidget,
 )
 
 from .. import query
@@ -106,8 +106,9 @@ class SearchTab(QWidget):
         self._threads: list[Worker] = []
         self._search_seq = 0        # ignore results from superseded searches
         self._loaded_once = False
-        self._last_rows: list[dict] = []   # current results, for the star histogram
+        self._last_rows: list[dict] = []   # current results (row → Map Details)
         self._pending_histogram = False    # open the histogram once results refresh
+        self._hist_mode = "auto"           # star-histogram binning, remembered
 
         root = QVBoxLayout(self)
         root.setContentsMargins(18, 18, 18, 18)
@@ -229,10 +230,10 @@ class SearchTab(QWidget):
         self._search_seq += 1
         seq = self._search_seq
         self.result.setText(self.ctx.t("working"))
-        w = Worker(self.ctx.services.search, query,
+        w = Worker(self.ctx.services.search_page, query,
                    search_tags=self.chk_tags.isChecked())
         self._threads.append(w)
-        w.succeeded.connect(lambda rows, s=seq, q=query: self._on_results(rows, s, q))
+        w.succeeded.connect(lambda res, s=seq, q=query: self._on_results(res, s, q))
         w.failed.connect(self._on_failed)
         w.finished.connect(lambda: self._threads.remove(w) if w in self._threads else None)
         w.start()
@@ -240,15 +241,22 @@ class SearchTab(QWidget):
     def _on_failed(self, msg: str) -> None:
         self.result.setText(msg)
 
-    def _on_results(self, rows: list[dict], seq: int, query: str) -> None:
+    def _on_results(self, res: dict, seq: int, query: str) -> None:
         if seq != self._search_seq:
             return  # a newer search already ran; drop this stale result
+        rows = res["rows"]
+        total = res["total"]
         self._populate(rows)
-        if not query:
-            self.result.setText(self.ctx.t("browse_all", n=len(rows)))
+        t = self.ctx.t
+        if res["truncated"]:
+            # Never present the cap as if it were the whole answer — the silent
+            # 500-row cut is exactly what made a 1600-set range look like 500.
+            self.result.setText(t("search_truncated", n=len(rows), total=total))
+        elif not query:
+            self.result.setText(t("browse_all", n=len(rows)))
         else:
-            self.result.setText(self.ctx.t("search_have", n=len(rows)) if rows
-                                else self.ctx.t("search_none"))
+            self.result.setText(t("search_have", n=len(rows)) if rows
+                                else t("search_none"))
         if self._pending_histogram:   # a compute-ratings run just refreshed us
             self._pending_histogram = False
             self._open_histogram()
@@ -434,22 +442,43 @@ class SearchTab(QWidget):
         self.do_search()
 
     def _open_histogram(self) -> None:
+        """The whole Library's star distribution, binned per DIFFICULTY.
+
+        Both halves of this used to lie: the bars came from ``self._last_rows``
+        (one capped page of search results, not the library) and they binned each
+        set's ``star_max`` (its hardest diff) while clicking a bar searched
+        ``star>=lo star<hi``, which matches *any* difficulty — so a 2★+5★ set was
+        drawn in the 5★ bar yet turned up in the 2★ search. The service now bins
+        difficulties, which is the same unit the ``star>=`` filter already used.
+        """
         t = self.ctx.t
-        values = [r["star_max"] for r in self._last_rows
-                  if r.get("star_max") is not None]
-        if not values:
+        data = self.ctx.services.star_histogram_data(mode=self._hist_mode)
+        if not data["bins"]:
             QMessageBox.information(self, t("app_title"), t("star_dist_empty"))
             return
-        from ..stats import histogram_bins
         dlg = QDialog(self)
         dlg.setWindowTitle(t("star_dist_title"))
         dlg.setMinimumSize(520, 380)
         lay = QVBoxLayout(dlg)
         head = QLabel(objectName="status")
-        head.setText(t("star_dist_head", n=len(values)))
+        head.setText(t("star_dist_head", n=data["difficulties"], sets=data["sets"]))
         lay.addWidget(head)
+
+        # Bin mode: the data-driven split gives edges like 3.94–4.55, which is
+        # unreadable as "how many 5★ maps do I have"; plain 1★ buckets answer that.
+        mode_row = QHBoxLayout()
+        mode_row.addWidget(QLabel(t("star_dist_bins")))
+        mode_box = QComboBox()
+        mode_box.addItem(t("star_dist_bins_auto"), "auto")
+        mode_box.addItem(t("star_dist_bins_integer"), "integer")
+        idx = mode_box.findData(self._hist_mode)
+        mode_box.setCurrentIndex(idx if idx >= 0 else 0)
+        mode_row.addWidget(mode_box)
+        mode_row.addStretch(1)
+        lay.addLayout(mode_row)
+
         hist = Histogram()
-        hist.set_bins(histogram_bins(values))
+        hist.set_bins(data["bins"])
         lay.addWidget(hist, 1)
         sel = QLabel(objectName="status")
         sel.setWordWrap(True)
@@ -492,6 +521,17 @@ class SearchTab(QWidget):
             dlg.accept()
             self._search_star_range(lo, hi)   # double-click a bar → jump to Search
 
+        def on_mode(_i=None):
+            self._hist_mode = mode_box.currentData() or "auto"
+            fresh = self.ctx.services.star_histogram_data(mode=self._hist_mode)
+            hist.set_bins(fresh["bins"])      # also clears the selection
+            head.setText(t("star_dist_head", n=fresh["difficulties"],
+                           sets=fresh["sets"]))
+            sel.setText(t("star_dist_hint"))
+            btn_search.setVisible(False)
+            btn_export.setVisible(False)
+
+        mode_box.currentIndexChanged.connect(on_mode)
         hist.barSelected.connect(on_sel)
         hist.barActivated.connect(on_activated)
         btn_search.clicked.connect(do_range)

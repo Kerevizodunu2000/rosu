@@ -883,6 +883,18 @@ class Database:
                 f"ORDER BY display_name COLLATE NOCASE LIMIT ?", params + [limit])
             return [dict(r) for r in cur.fetchall()]
 
+    def count_filtered_tracks(self, filters: list) -> int:
+        """How many tracks match ``filters`` — the *untruncated* total, so a
+        capped result page can honestly say "showing 5000 of 8123" instead of
+        presenting the cap as if it were the whole answer. An empty filter list
+        counts every track."""
+        where, params = self._build_filter_sql(filters or [])
+        sql = "SELECT COUNT(*) AS c FROM tracks"
+        if where:
+            sql += f" WHERE {where}"
+        with self._lock:
+            return self._conn.execute(sql, params).fetchone()["c"]
+
     def all_tracks(self, limit: int = 5000) -> list[dict]:
         """Every track, name-sorted — the default browse listing (item 11)."""
         with self._lock:
@@ -979,6 +991,26 @@ class Database:
                     by_track.setdefault(r["track_id"], []).append(dict(r))
         for row in rows:
             row["difficulties"] = by_track.get(row["id"], [])
+
+    def difficulty_stars(self, scope: str = "library") -> list[tuple[int, float]]:
+        """``(track_id, star_rating)`` for every rated difficulty — the source for
+        the star histogram.
+
+        Per **difficulty**, not per set: ``tracks.star_max`` holds only a set's
+        hardest diff, so binning it put a set with a 2★ and a 5★ chart solely in
+        the 5★ bucket while ``star>=2 star<2.5`` still matched it. Both sides now
+        speak the same unit. ``scope`` is ``"library"`` (in-Library sets only) or
+        ``"all"``. The track id comes along so the caller can also report how many
+        distinct sets those difficulties live in.
+        """
+        sql = ("SELECT d.track_id AS track_id, d.star_rating AS star_rating "
+               "FROM difficulties d JOIN tracks t ON t.id = d.track_id "
+               "WHERE d.star_rating IS NOT NULL")
+        if scope != "all":
+            sql += " AND t.in_library=1"
+        with self._lock:
+            cur = self._conn.execute(sql)
+            return [(r["track_id"], r["star_rating"]) for r in cur.fetchall()]
 
     def artists_by_count(self, descending: bool = True) -> list[dict]:
         return self.artists_ranked("count", descending)

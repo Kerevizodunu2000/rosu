@@ -332,6 +332,10 @@ class ExportMixin:
                            tooltip=str(dest_base.parent))
             stage = Path(tempfile.mkdtemp(prefix="rosu_export_"))
             job.ctx["stage"] = stage
+            # Where this job will write. The UI reads it to refuse a second export
+            # aimed at the same destination — otherwise job 2's archive overwrites
+            # job 1's *while job 1 is uploading it* (the lanes overlap by design).
+            job.ctx["dest_base"] = str(dest_base)
             job.on_cleanup.append(lambda: shutil.rmtree(stage, ignore_errors=True))
     
             def s_gather(ctx, progress, cancel):

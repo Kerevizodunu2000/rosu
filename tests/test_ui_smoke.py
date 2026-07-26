@@ -130,6 +130,91 @@ def test_share_toggle_requires_informed_consent(qapp, tmp_path, monkeypatch):
     ctx.db.close()
 
 
+def test_search_tab_says_when_results_were_truncated(qapp, tmp_path, monkeypatch):
+    """v1.7.1: a capped page must never be presented as the whole answer — that
+    is what made a 1600-set star range read as exactly 500 matches."""
+    from rosu.ui.main_window import MainWindow
+    ctx = _ctx(tmp_path, monkeypatch)
+    win = MainWindow(ctx, qapp)
+    tab = win.search
+    seq = tab._search_seq
+
+    tab._on_results({"rows": [], "total": 1600, "limit": 500, "truncated": True},
+                    seq, "star>=3 star<4")
+    assert "1600" in tab.result.text()
+
+    tab._on_results({"rows": [], "total": 0, "limit": 5000, "truncated": False},
+                    seq, "nothing-matches-this")
+    assert tab.result.text() == ctx.t("search_none")
+    win.close()
+    ctx.db.close()
+
+
+def test_export_dest_in_use_blocks_a_second_job(qapp, tmp_path, monkeypatch):
+    """v1.7.1: two exports aimed at the same destination meant job 2's archive
+    landed on the file job 1 was still uploading (the DRIVE lane overlaps DISK),
+    so the uploaded bytes were not the bytes job 1 exported."""
+    from rosu.jobs import Job, State, new_id
+    from rosu.ui.main_window import MainWindow
+    ctx = _ctx(tmp_path, monkeypatch)
+    win = MainWindow(ctx, qapp)
+    tab = win.shortcuts
+    dest = tmp_path / "rosu-export-library"
+
+    assert not tab._dest_in_use(dest)             # nothing queued yet
+    job = Job(new_id(), "job_export", kind="export")
+    job.ctx["dest_base"] = str(dest)
+    tab.queue.jobs.append(job)                    # queued, still running/uploading
+    assert tab._dest_in_use(dest)
+    assert not tab._dest_in_use(tmp_path / "other")   # a different name is free
+    job.state = State.DONE                        # finished → no longer reserved
+    assert not tab._dest_in_use(dest)
+    win.close()
+    ctx.db.close()
+
+
+def test_export_split_volume_overwrite_is_confirmed(qapp, tmp_path, monkeypatch):
+    """The save dialog only vets the single name the user typed; a split export
+    writes <stem>.partNN.zip volumes it never checks."""
+    from PySide6.QtWidgets import QMessageBox
+    from rosu.ui.main_window import MainWindow
+    ctx = _ctx(tmp_path, monkeypatch)
+    win = MainWindow(ctx, qapp)
+    tab = win.shortcuts
+    dest = tmp_path / "pack"
+
+    assert tab._confirm_volume_overwrite(dest, ".zip")     # nothing there yet
+    (tmp_path / "pack.part01.zip").write_bytes(b"old")
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.No)
+    assert not tab._confirm_volume_overwrite(dest, ".zip")  # declined → don't run
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.Yes)
+    assert tab._confirm_volume_overwrite(dest, ".zip")
+    # a different base name is unaffected
+    assert tab._confirm_volume_overwrite(tmp_path / "other", ".zip")
+    win.close()
+    ctx.db.close()
+
+
+def test_export_result_dialog_renders_a_live_link(qapp, tmp_path, monkeypatch):
+    """v1.7.1: the share link used to be plain text inside a QMessageBox — not
+    clickable, not reliably selectable, never on the clipboard."""
+    from PySide6.QtCore import Qt
+    from rosu.ui.main_window import MainWindow
+    ctx = _ctx(tmp_path, monkeypatch)
+    win = MainWindow(ctx, qapp)
+    url = "https://drive.google.com/file/d/abc123/view"
+    dlg = win.shortcuts.build_export_result_dialog(
+        f'Done<br><a href="{url}">{url}</a>', [url])
+    label = dlg.body_label
+    assert f'href="{url}"' in label.text()             # a real anchor
+    assert label.textFormat() == Qt.RichText
+    assert label.openExternalLinks()                   # clicking opens the browser
+    assert label.textInteractionFlags() & Qt.TextSelectableByMouse   # selectable
+    dlg.close()
+    win.close()
+    ctx.db.close()
+
+
 def test_health_dialog_builds_and_renders_report(qapp, tmp_path, monkeypatch):
     """The v1.1 Library Health dialog constructs and populates from a report."""
     from rosu.ui.health_dialog import HealthDialog

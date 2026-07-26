@@ -10,6 +10,53 @@ the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+**Live-test correctness batch: search no longer hides results, and the star histogram
+now describes the library it claims to describe.**
+
+### Fixed
+- **Search results were silently capped at 500.** `Services.search` never passed a limit, so
+  every query inherited `rosu.search.search`'s 500 default — a star range holding 1600 sets
+  listed exactly 500 of them and looked complete, while browsing with an empty box (which used
+  5000) showed far more. Searching now uses the same 5000 limit, and when a result really is
+  truncated the count line says so ("Showing 5000 of 8123") instead of presenting the cap as
+  the whole answer. The pre-ranking recall cap that fed the ranker is no longer a flat 2000
+  either: it scales with the requested limit (never below the old 2000), so relevant rows are
+  no longer dropped before they are ever scored.
+- **The star histogram was built from the current search result, not the library.** It binned
+  `self._last_rows` — at most one (capped) page — while telling the user it was the library's
+  distribution. It now comes from the whole Library via the service layer.
+- **The histogram and a star-range search could never agree.** The bars binned each set's
+  `star_max` (its hardest difficulty only), but clicking a bar searches `star>=lo star<hi`,
+  which matches *any* difficulty — so a set with a 2★ and a 5★ chart was drawn in the 5★ bar
+  yet turned up in the 2★ search. Both sides now speak the same unit: the histogram bins
+  **difficulties**, matching the `star>=` filter and the Search "Star" column. The bar labels
+  state the unit, and the remaining honest asymmetry (N difficulties can live in fewer than N
+  sets) is spelled out on screen — e.g. "1493 difficulties in 1254 sets".
+- **A second export could overwrite the first export's archive while it was still uploading.**
+  The suggested filename was a constant per source (`rosu-export-library.zip`), so accepting it
+  twice sent both jobs to the same path; because the DRIVE lane deliberately overlaps the DISK
+  lane, job 2's archive write could land on the exact file job 1 was uploading. The default name
+  is now timestamped, a queued or uploading job reserves its destination (a second export aimed
+  at it is refused, not silently allowed), and a split export asks before overwriting existing
+  `.partNN` volumes — which the save dialog never checked.
+- **The Drive share link was not clickable, selectable or copyable.** It was rendered by
+  `QMessageBox`, which draws plain text, so a correct and genuinely public link was inert. The
+  export-complete dialog now shows a real anchor (with the app-wide hover-to-see-the-target
+  behaviour), copies the link to the clipboard as soon as it opens, and offers a Copy button
+  that does not close the dialog.
+
+### Added
+- Histogram bin mode: keep the data-driven ranges (which produce edges like 3.94–4.55) or switch
+  to plain whole-star buckets (0–1, 1–2, 2–3 …). Empty buckets inside the range are kept so the
+  axis reads continuously.
+- Settings now names the Google Drive folder Rosu backs up into, as a link, and explains why a
+  "Rosu" folder it did not create is invisible to it: Rosu asks for the narrow `drive.file`
+  permission, which only ever exposes files this app created — so a folder made by hand, or one
+  created by a pre-v1.3.3 Rosu (a different Google client), cannot be found and a new one is made
+  instead. The narrow scope is deliberate and is not changing; older backups are still in Drive.
+- `Database.count_filtered_tracks` and `Database.difficulty_stars` — locked accessors for the
+  untruncated match count and the per-difficulty star values.
+
 ## [1.7.0] - 2026-07-20
 
 **Space-saving (Prune) + services package split + collection sync + map repair.**

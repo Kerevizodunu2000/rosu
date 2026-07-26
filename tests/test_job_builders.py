@@ -156,6 +156,17 @@ def test_build_export_job_library(tmp_path):
     db.close()
 
 
+def test_build_export_job_records_its_destination(tmp_path):
+    """v1.7.1: the UI needs to know where a queued/uploading export writes, so it
+    can refuse a second export aimed at the same path instead of letting it
+    overwrite an archive that is still being uploaded."""
+    cfg, db, svc = _svc(tmp_path)
+    dest = tmp_path / "out" / "E"
+    job = svc.build_export_job("library", dest, fmt="zip")
+    assert job.ctx["dest_base"] == str(dest)
+    db.close()
+
+
 def test_build_export_job_upload_step_on_drive_lane(tmp_path):
     cfg, db, svc = _svc(tmp_path)
     job = svc.build_export_job("library", tmp_path / "out" / "E", fmt="zip",

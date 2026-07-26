@@ -184,6 +184,10 @@ STRINGS: dict[str, dict[str, str]] = {
     "search_none": {"en": "Not found in your memory.", "tr": "Hafızanızda bulunamadı."},
     "browse_all": {"en": "Showing all {n} tracks in your library.",
                    "tr": "Kütüphanendeki {n} müzik listeleniyor."},
+    "search_truncated": {
+        "en": "Showing {n} of {total} matches — narrow the query to see the rest.",
+        "tr": "{total} eşleşmenin {n} tanesi listeleniyor — kalanı için aramayı "
+              "daralt."},
     "copy_names_action": {"en": "Copy names", "tr": "İsimleri kopyala"},
     "copy_table_action": {"en": "Copy as table (Ctrl+C)", "tr": "Tablo olarak kopyala (Ctrl+C)"},
     "col_name": {"en": "Name", "tr": "İsim"},
@@ -530,6 +534,21 @@ STRINGS: dict[str, dict[str, str]] = {
     "btn_drive_connect": {"en": "Connect Google Drive", "tr": "Google Drive'a Bağlan"},
     "btn_drive_disconnect": {"en": "Disconnect", "tr": "Bağlantıyı Kes"},
     "drive_connected": {"en": "Connected.", "tr": "Bağlı."},
+    "drive_folder_line": {"en": "Backing up into this Drive folder:",
+                          "tr": "Yedekleme şu Drive klasörüne yapılıyor:"},
+    "drive_folder_scope_note": {
+        "en": "Rosu can only see the files it created itself (the narrow "
+              "drive.file permission), so a “Rosu” folder you made by hand — or "
+              "one created by a Rosu older than v1.3.3, which used a different "
+              "Google client — is invisible to it and a fresh folder is made "
+              "instead. Older backups are still in your Drive; open the old "
+              "folder yourself to reach them.",
+        "tr": "Rosu yalnızca kendi oluşturduğu dosyaları görebilir (dar "
+              "drive.file izni). Bu yüzden elle oluşturduğun bir “Rosu” klasörü "
+              "— ya da farklı bir Google istemcisi kullanan v1.3.3 öncesi bir "
+              "Rosu'nun oluşturduğu klasör — uygulamaya görünmez ve yerine yeni "
+              "bir klasör açılır. Eski yedeklerin Drive'ında duruyor; onlara "
+              "ulaşmak için eski klasörü kendin aç."},
     "drive_disconnected": {"en": "Not connected.", "tr": "Bağlı değil."},
     "drive_disconnected_done": {"en": "✓ Disconnected from Google Drive.",
                                 "tr": "✓ Google Drive bağlantısı kesildi."},
@@ -624,24 +643,35 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "Fetch metadata from the osu! API (ranked status, dates, play counts)",
         "tr": "osu! API’den meta veri çek (ranked durumu, tarihler, oynanma sayıları)"},
     "btn_star_dist": {"en": "★ Distribution", "tr": "★ Dağılımı"},
-    "tip_star_dist": {"en": "Show the star-rating distribution of the current results.",
-                      "tr": "Mevcut sonuçların yıldız derecesi dağılımını göster."},
+    "tip_star_dist": {
+        "en": "Show the star-rating distribution of your whole Library, counted "
+              "per difficulty.",
+        "tr": "Tüm kütüphanenin yıldız derecesi dağılımını göster (zorluk başına "
+              "sayılır)."},
     "star_dist_title": {"en": "Star distribution", "tr": "Yıldız dağılımı"},
-    "star_dist_head": {"en": "{n} rated sets in the current results",
-                       "tr": "Mevcut sonuçlarda {n} derecelendirilmiş set"},
+    "star_dist_head": {
+        "en": "{n} rated difficulties in {sets} Library sets",
+        "tr": "Kütüphanedeki {sets} sette {n} derecelendirilmiş zorluk"},
+    "star_dist_bins": {"en": "Ranges:", "tr": "Aralıklar:"},
+    "star_dist_bins_auto": {"en": "Fit to the data",
+                            "tr": "Veriye göre"},
+    "star_dist_bins_integer": {"en": "Whole stars (0–1, 1–2, …)",
+                               "tr": "Tam yıldız (0–1, 1–2, …)"},
     "star_dist_hint": {
         "en": "Click a bar to select it (drag across bars for a range); "
               "double-click a bar to search that range.",
         "tr": "Bir çubuğa tıklayıp seç (aralık için çubuklar üzerinde sürükle); "
               "bir çubuğa çift tıklayınca o aralık aratılır."},
     "star_dist_selected": {
-        "en": "{lo}★–{hi}★ · {count} sets ({pct}% of these results)",
-        "tr": "{lo}★–{hi}★ · {count} set (bu sonuçların %{pct}'i)"},
+        "en": "{lo}★–{hi}★ · {count} difficulties ({pct}% of the Library). "
+              "Searching this range lists the SETS that contain them.",
+        "tr": "{lo}★–{hi}★ · {count} zorluk (kütüphanenin %{pct}'i). Bu aralığı "
+              "aramak, bu zorlukları içeren SETLERİ listeler."},
     "star_dist_search": {"en": "Search this range", "tr": "Bu aralığı ara"},
     "star_dist_export": {"en": "Export this range", "tr": "Bu aralığı dışa aktar"},
     "star_dist_empty": {
-        "en": "No star ratings in the current results yet.",
-        "tr": "Mevcut sonuçlarda henüz yıldız derecesi yok."},
+        "en": "No star ratings in your Library yet.",
+        "tr": "Kütüphanende henüz yıldız derecesi yok."},
     "star_dist_no_library": {
         "en": "Your Library is empty — add some music first, then star ratings can "
               "be computed.",
@@ -914,6 +944,22 @@ STRINGS: dict[str, dict[str, str]] = {
     "sc_export_empty": {"en": "Nothing to export from that source.",
                         "tr": "Bu kaynakta dışa aktarılacak bir şey yok."},
     "sc_export_link": {"en": "Shareable link(s):", "tr": "Paylaşılabilir link(ler):"},
+    "sc_export_link_copied": {"en": "Link copied to the clipboard.",
+                              "tr": "Link panoya kopyalandı."},
+    "btn_copy_link": {"en": "Copy link", "tr": "Linki kopyala"},
+    "btn_close": {"en": "Close", "tr": "Kapat"},
+    "sc_export_dest_busy": {
+        "en": "Another export is still queued or uploading to “{name}”. Pick a "
+              "different name — writing there now would overwrite the archive "
+              "that export is still using.",
+        "tr": "“{name}” hedefine yazan başka bir dışa aktarım hâlâ kuyrukta ya da "
+              "yükleniyor. Farklı bir ad seç — şimdi oraya yazmak, o işin hâlâ "
+              "kullandığı arşivin üzerine yazar."},
+    "sc_export_overwrite_volumes": {
+        "en": "{n} archive volume(s) with this name already exist and would be "
+              "overwritten ({names}). Continue?",
+        "tr": "Bu adla {n} arşiv parçası zaten var ve üzerine yazılacak "
+              "({names}). Devam edilsin mi?"},
     "sc_export_upload_failed": {"en": "(Drive upload failed.)",
                                 "tr": "(Drive yükleme başarısız.)"},
     "sc_export_shared_no_link": {

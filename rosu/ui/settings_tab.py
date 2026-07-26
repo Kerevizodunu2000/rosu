@@ -2,6 +2,7 @@
 """Settings tab: language, theme, folders, osu! path, toggles and API reference."""
 from __future__ import annotations
 
+import html
 from pathlib import Path
 
 from PySide6.QtCore import Qt
@@ -16,6 +17,7 @@ from .. import config
 from ..workers import Worker
 from . import wheel_guard
 from .countdown_dialog import CountdownConfirmDialog
+from .links import wire_link_hover
 
 _ZIP_ORDER = ["recycle", "move", "delete"]
 
@@ -244,6 +246,20 @@ class SettingsTab(QWidget):
         drive_row.addWidget(self.btn_drive)
         drive_row.addWidget(self.lbl_drive_status, 1)
         root.addLayout(drive_row)
+        # WHICH Drive folder Rosu uses. Without this the owner had no way to tell
+        # that a second "Rosu" folder had appeared, or why: Rosu asks for the
+        # narrow `drive.file` scope, which only ever exposes files this OAuth
+        # client created — so a folder made by hand, or by the pre-v1.3.3 OAuth
+        # client, is genuinely invisible to the app and ensure_folder correctly
+        # creates its own. Show the folder in use and say why. (The scope stays
+        # narrow on purpose; a broader one would let Rosu read the user's Drive.)
+        self.lbl_drive_folder = QLabel(objectName="status")
+        self.lbl_drive_folder.setWordWrap(True)
+        self.lbl_drive_folder.setTextFormat(Qt.RichText)
+        self.lbl_drive_folder.setOpenExternalLinks(True)
+        self.lbl_drive_folder.setTextInteractionFlags(Qt.TextBrowserInteraction)
+        wire_link_hover(self.lbl_drive_folder)
+        root.addWidget(self.lbl_drive_folder)
 
         # About / licenses
         about_row = QHBoxLayout()
@@ -551,9 +567,25 @@ class SettingsTab(QWidget):
         self.cbo_prune_mode.setCurrentIndex(idx if idx >= 0 else 0)
         self.cbo_prune_mode.blockSignals(False)
 
+    def _refresh_drive_folder(self) -> None:
+        """Show the Drive folder Rosu backs up into, as a link, plus why a folder
+        it did not create is invisible to it."""
+        t = self.ctx.t
+        fid = (self.ctx.cfg.drive_folder_id or "").strip()
+        if not fid:
+            self.lbl_drive_folder.setVisible(False)
+            return
+        url = f"https://drive.google.com/drive/folders/{fid}"
+        self.lbl_drive_folder.setText(
+            f'{html.escape(t("drive_folder_line"))} '
+            f'<a href="{html.escape(url, quote=True)}">{html.escape(fid)}</a>'
+            f'<br>{html.escape(t("drive_folder_scope_note"))}')
+        self.lbl_drive_folder.setVisible(True)
+
     def _refresh_drive_status(self) -> None:
         t = self.ctx.t
         self._reload_zip_options()   # offer/remove the Drive disposal option
+        self._refresh_drive_folder()
         st = self.ctx.services.drive_status()
         if not st["configured"]:
             self.btn_drive.setEnabled(False)

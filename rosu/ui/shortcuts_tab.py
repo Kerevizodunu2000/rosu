@@ -11,13 +11,16 @@ several jobs can be queued at once.
 from __future__ import annotations
 
 import html
+import os
+import time
 from pathlib import Path
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import (
-    QCheckBox, QComboBox, QDoubleSpinBox, QFileDialog, QFrame, QGridLayout,
-    QGroupBox, QHBoxLayout, QLabel, QMessageBox, QProgressBar, QPushButton,
-    QScrollArea, QSpinBox, QVBoxLayout, QWidget,
+    QCheckBox, QComboBox, QDialog, QDoubleSpinBox, QFileDialog, QFrame,
+    QGridLayout, QGroupBox, QHBoxLayout, QLabel, QMessageBox, QProgressBar,
+    QPushButton, QScrollArea, QSpinBox, QVBoxLayout, QWidget,
 )
 
 _STAR_CAP = 12.0   # star-range export: max = cap = "no upper bound"
@@ -26,6 +29,7 @@ from .. import config
 from ..jobs import State
 from ..workers import Worker
 from .job_queue import JobQueueController
+from .links import wire_link_hover
 
 _GIB = 1024 ** 3
 _MIB = 1024 ** 2
@@ -42,6 +46,27 @@ _STATE_KEY = {
 
 def _fmt_size(n: int) -> str:
     return f"{n / _MIB:,.1f} MB"
+
+
+def _norm_path(p) -> str:
+    """Compare two destinations the way the filesystem does — absolute, and
+    case-insensitively on Windows, so ``C:\\x\\Pack`` and ``c:/x/pack`` are not
+    mistaken for two different export targets."""
+    return os.path.normcase(os.path.abspath(str(p)))
+
+
+def _copy_to_clipboard(text: str) -> bool:
+    """Put ``text`` on the clipboard; ``False`` if this platform has none (the
+    offscreen Qt plugin used by the tests, for instance). Never raises — a
+    missing clipboard must not take the dialog down with it."""
+    try:
+        cb = QGuiApplication.clipboard()
+    except Exception:
+        return False
+    if cb is None:
+        return False
+    cb.setText(text)
+    return True
 
 
 class JobRowWidget(QFrame):
@@ -553,7 +578,12 @@ class ShortcutsTab(QWidget):
             QMessageBox.information(self, t("app_title"), t("drive_connect_first"))
             return
         suffix = ".7z" if fmt == "7z" else ".zip"
-        default_name = f"rosu-export-{source}{suffix}"   # e.g. rosu-export-lazer.zip
+        # Timestamped: the default used to be a constant per source
+        # ("rosu-export-library.zip"), so accepting it twice sent both jobs to the
+        # SAME path — and since the DRIVE lane overlaps the DISK lane, job 2's
+        # archive could land on the very file job 1 was still uploading.
+        stamp = time.strftime("%Y%m%d-%H%M%S")
+        default_name = f"rosu-export-{source}-{stamp}{suffix}"
         path, _ = QFileDialog.getSaveFileName(
             self, t("sc_export_choose"), default_name, f"Archive (*{suffix})")
         if not path:
@@ -561,6 +591,14 @@ class ShortcutsTab(QWidget):
         dest_base = Path(path)
         if dest_base.suffix.lower() in (".zip", ".7z"):
             dest_base = dest_base.with_suffix("")   # exporter re-appends the suffix
+        if self._dest_in_use(dest_base):
+            # Belt and braces: even a hand-typed name can collide with a job that
+            # is still queued or uploading. Refuse rather than clobber it.
+            QMessageBox.warning(self, t("app_title"),
+                                t("sc_export_dest_busy", name=dest_base.name))
+            return
+        if split and not self._confirm_volume_overwrite(dest_base, suffix):
+            return
         job = self.services.build_export_job(source, dest_base, fmt, split,
                                              upload, share, limit, star_range)
         src_label = t(f"sc_source_{source}")
@@ -570,6 +608,41 @@ class ShortcutsTab(QWidget):
                 st.label_kwargs["source"] = src_label       # ...and in the gather step
         self.queue.enqueue(job)
         self._set_status("job_added")
+
+    def _dest_in_use(self, dest_base: Path) -> bool:
+        """Is another export job — queued, running or uploading — already writing
+        to this destination? Two jobs sharing a destination means the second one's
+        archive overwrites the first's *while the first is being uploaded*, so the
+        bytes that reach Drive are not the bytes that job exported."""
+        target = _norm_path(dest_base)
+        for job in self.queue.jobs:
+            if job.kind != "export" or job.state in (
+                    State.DONE, State.FAILED, State.CANCELLED):
+                continue
+            other = job.ctx.get("dest_base")
+            if other and _norm_path(other) == target:
+                return True
+        return False
+
+    def _confirm_volume_overwrite(self, dest_base: Path, suffix: str) -> bool:
+        """A split export writes ``<stem>.partNN<suffix>`` volumes, which the save
+        dialog never vets (it only checked the single name the user typed). Ask
+        before overwriting any that already exist."""
+        prefix = f"{dest_base.stem}.part"
+        try:
+            hits = sorted(p.name for p in dest_base.parent.iterdir()
+                          if p.name.startswith(prefix)
+                          and p.name.lower().endswith(suffix))
+        except OSError:
+            return True     # can't list the folder — the exporter will report it
+        if not hits:
+            return True
+        t = self.ctx.t
+        shown = ", ".join(hits[:5]) + (", …" if len(hits) > 5 else "")
+        return QMessageBox.question(
+            self, t("app_title"),
+            t("sc_export_overwrite_volumes", n=len(hits), names=shown),
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No) == QMessageBox.Yes
 
     def prefill_star_range(self, lo: float, hi: float) -> None:
         """Set the export source to Library and fill the star range (from the Search
@@ -698,17 +771,73 @@ class ShortcutsTab(QWidget):
         links = [f["link"] for f in dfiles if f.get("link")]
         shared_no_link = [f for f in dfiles if f.get("shared") and not f.get("link")]
         # Completion dialog: exactly WHERE it went + the archive filenames (+ links).
-        body = [msg, "", t("sc_export_saved_to", path=location)]
-        body += [f"• {Path(a).name}" for a in archives]
+        body = [html.escape(msg), "", html.escape(t("sc_export_saved_to", path=location))]
+        body += [f"• {html.escape(Path(a).name)}" for a in archives]
         if drive.get("error"):
-            body += ["", t("sc_export_upload_failed")]
+            body += ["", html.escape(t("sc_export_upload_failed"))]
         if links:
-            body += ["", t("sc_export_link")] + links
-        QMessageBox.information(self, t("app_title"), "\n".join(body))
+            body += ["", html.escape(t("sc_export_link"))]
+            body += [f'<a href="{html.escape(u, quote=True)}">{html.escape(u)}</a>'
+                     for u in links]
+        self._export_result_dialog("<br>".join(body), links)
         if shared_no_link:
             # The file(s) were made public but the link couldn't be fetched — the
             # user must know so they can review/revoke the share in Drive.
             QMessageBox.warning(self, t("app_title"), t("sc_export_shared_no_link"))
+
+    def build_export_result_dialog(self, body_html: str, links: list[str]) -> QDialog:
+        """Export-complete dialog whose share link is actually usable.
+
+        This used to be ``QMessageBox.information``, which renders **plain text**:
+        the URL had no anchor, could not be reliably selected, and never reached
+        the clipboard — the link was correct and genuinely public, but inert. A
+        rich-text QLabel with ``openExternalLinks`` gives a real clickable anchor
+        (and ``wire_link_hover`` shows the target, as everywhere else in the app);
+        the link is put on the clipboard the moment the dialog is built, with an
+        explicit Copy button that does NOT close the dialog.
+
+        Returns the dialog rather than showing it, so it can be built and
+        inspected without a blocking ``exec()``.
+        """
+        t = self.ctx.t
+        dlg = QDialog(self)
+        dlg.setWindowTitle(t("app_title"))
+        dlg.setMinimumWidth(460)
+        lay = QVBoxLayout(dlg)
+        label = QLabel(body_html)
+        label.setTextFormat(Qt.RichText)
+        label.setWordWrap(True)
+        label.setOpenExternalLinks(True)
+        label.setTextInteractionFlags(Qt.TextBrowserInteraction)  # clickable + selectable
+        wire_link_hover(label)
+        lay.addWidget(label)
+        dlg.body_label = label     # named for the tests
+
+        note = QLabel(objectName="status")
+        note.setWordWrap(True)
+        note.setVisible(bool(links))
+        lay.addWidget(note)
+
+        bar = QHBoxLayout()
+        bar.addStretch(1)
+        if links:
+            def copy_links() -> None:
+                if _copy_to_clipboard("\n".join(links)):
+                    note.setText(t("sc_export_link_copied"))
+
+            copy_links()   # already on the clipboard before the user asks
+            btn_copy = QPushButton(t("btn_copy_link"), objectName="secondary")
+            btn_copy.clicked.connect(copy_links)
+            bar.addWidget(btn_copy)
+        btn_close = QPushButton(t("btn_close"))
+        btn_close.setDefault(True)
+        btn_close.clicked.connect(dlg.accept)
+        bar.addWidget(btn_close)
+        lay.addLayout(bar)
+        return dlg
+
+    def _export_result_dialog(self, body_html: str, links: list[str]) -> None:
+        self.build_export_result_dialog(body_html, links).exec()
 
     def _on_job_failed(self, job) -> None:
         """A job FAILED (a step raised). For an export whose archives were already
