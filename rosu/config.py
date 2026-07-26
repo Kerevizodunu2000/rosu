@@ -26,7 +26,8 @@ THEMES = (
 # only offered in Settings while Drive is connected.
 ZIP_DISPOSAL = ("recycle", "move", "delete", "drive")
 
-PRUNE_MODES = ("video_only", "heavy_assets")
+PRUNE_MODES = ("video_only", "images_only", "video_and_images",
+               "heavy_assets")
 
 
 def app_root() -> Path:

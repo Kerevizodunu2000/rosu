@@ -1026,7 +1026,6 @@ STRINGS: dict[str, dict[str, str]] = {
                          "tr": "yalnızca sende olmayan setler"},
     "job_opt_every_set": {"en": "every set, duplicates included",
                           "tr": "kopyalar dahil her set"},
-    "job_opt_prune_mode": {"en": "mode: {mode}", "tr": "mod: {mode}"},
     "sc_job_repeat_confirm": {
         "en": "You just started this exact job — it is in the queue below. Start "
               "it again anyway?",
@@ -1123,9 +1122,119 @@ STRINGS: dict[str, dict[str, str]] = {
         "tr": "Kütüphanedeki dosyalar bozulmaz — yalnızca osu!'ya veya bir "
               "klasöre/arşive aktarılan kopya kırpılır."},
     "lbl_prune_mode": {"en": "Prune mode:", "tr": "Prune Modu:"},
+
+    # -- v1.7.1: the Prune dialog (source · mode · order · limit · preview) ---
+    "prune_title": {"en": "Space saving (Prune)", "tr": "Alan Tasarrufu (Prune)"},
+    "prune_intro": {
+        "en": "Removes the heavy extras from beatmap sets — the beatmaps "
+              "themselves (.osu) are never touched, so every map still plays. "
+              "Pick what to strip, preview exactly what would go, then confirm.",
+        "tr": "Beatmap setlerindeki ağır ekleri kaldırır — beatmap dosyalarının "
+              "(.osu) kendisine asla dokunulmaz, yani her harita oynanmaya devam "
+              "eder. Neyin çıkacağını seç, tam olarak ne gideceğini önizle, sonra "
+              "onayla."},
+    "prune_source": {"en": "Where:", "tr": "Nerede:"},
+    "prune_source_library": {"en": "Rosu Library", "tr": "Rosu Kütüphanesi"},
+    "prune_source_stable": {"en": "osu!(stable)", "tr": "osu!(stable)"},
+    "prune_source_lazer": {"en": "osu!lazer", "tr": "osu!lazer"},
+    "prune_n_sets": {"en": "{n} set(s)", "tr": "{n} set"},
+    "prune_frees": {"en": "frees {size}", "tr": "{size} kazandırır"},
+    "prune_why_no_stable": {
+        "en": "osu!(stable) was not found (or is turned off in Settings), so there "
+              "is nothing here to prune.",
+        "tr": "osu!(stable) bulunamadı (ya da Ayarlar'da kapalı), bu yüzden burada "
+              "kırpılacak bir şey yok."},
+    "prune_why_lazer_realm": {
+        "en": "osu!lazer cannot be pruned by deleting files, and this is not a "
+              "setting: lazer stores every file by content hash and SHARES one "
+              "copy between all sets that contain the same asset, so removing one "
+              "set's video would break other sets and leave lazer's database "
+              "pointing at a file that no longer exists. Doing it safely means "
+              "going through lazer's own database, which arrives together with "
+              "the “remove maps from a client” feature.",
+        "tr": "osu!lazer dosya silerek kırpılamaz ve bu bir tercih değil: lazer her "
+              "dosyayı içerik özetine göre saklar ve aynı dosyayı içeren TÜM setler "
+              "arasında tek bir kopyayı PAYLAŞIR. Yani bir setin videosunu silmek "
+              "başka setleri bozar ve lazer'in veritabanı artık var olmayan bir "
+              "dosyayı göstermeye devam eder. Bunu güvenle yapmak lazer'in kendi "
+              "veritabanı üzerinden geçmeyi gerektiriyor; o da “istemciden harita "
+              "kaldırma” özelliğiyle birlikte gelecek."},
+    "prune_mode": {"en": "Remove:", "tr": "Kaldırılacak:"},
     "prune_mode_video_only": {"en": "Video only (safe)", "tr": "Sadece video (güvenli)"},
-    "prune_mode_heavy_assets": {"en": "Video + images (aggressive)",
-                                "tr": "Video + görsel (agresif)"},
+    "prune_mode_video_only_tip": {
+        "en": "Removes only video files. Backgrounds, audio and hitsounds stay — "
+              "this is the safest option and usually frees the most.",
+        "tr": "Yalnızca video dosyalarını kaldırır. Arka planlar, ses ve hitsound'lar "
+              "kalır — en güvenli seçenek ve genelde en çok yeri o açar."},
+    "prune_mode_images_only": {"en": "Images only", "tr": "Sadece görseller"},
+    "prune_mode_images_only_tip": {
+        "en": "Removes image files — INCLUDING each map's background. Pick this "
+              "only if you play with backgrounds off. Audio and video are kept.",
+        "tr": "Görsel dosyaları kaldırır — haritaların ARKA PLANI DAHİL. Bunu "
+              "yalnızca arka planları kapalı oynuyorsan seç. Ses ve video kalır."},
+    "prune_mode_video_and_images": {"en": "Video + images",
+                                    "tr": "Video + görseller"},
+    "prune_mode_video_and_images_tip": {
+        "en": "Removes both video and image files (backgrounds included). Audio "
+              "and the beatmaps themselves are kept.",
+        "tr": "Hem video hem görsel dosyalarını kaldırır (arka planlar dahil). Ses "
+              "ve beatmap'lerin kendisi kalır."},
+    "prune_mode_heavy_assets": {"en": "Smart clean-up",
+                                "tr": "Akıllı temizlik"},
+    "prune_mode_heavy_assets_tip": {
+        "en": "Keeps whatever a beatmap actually references (its audio and its "
+              "background) plus small images and hitsounds, and drops the rest — "
+              "video, storyboard scripts (.osb) and unused images over 500 KB.",
+        "tr": "Bir beatmap'in gerçekten kullandığı şeyleri (sesi ve arka planı) "
+              "artı küçük görselleri ve hitsound'ları tutar, gerisini atar — video, "
+              "storyboard betikleri (.osb) ve 500 KB üstü kullanılmayan görseller."},
+    "prune_order": {"en": "Order:", "tr": "Sıralama:"},
+    "prune_sort_largest": {"en": "Biggest saving first",
+                           "tr": "En çok yer açan önce"},
+    "prune_sort_smallest": {"en": "Smallest saving first",
+                            "tr": "En az yer açan önce"},
+    "prune_sort_name": {"en": "By name", "tr": "İsme göre"},
+    "prune_limit": {"en": "How many:", "tr": "Kaç tane:"},
+    "prune_limit_all": {"en": "All of them", "tr": "Hepsi"},
+    "prune_limit_tip": {
+        "en": "Prune only this many sets, taken from the top of the order above. "
+              "0 means all of them.",
+        "tr": "Yukarıdaki sıralamanın başından yalnızca bu kadar seti kırp. 0 = hepsi."},
+    "prune_scan": {"en": "Rescan", "tr": "Yeniden tara"},
+    "prune_scanning": {"en": "Checking what could be removed…",
+                       "tr": "Neyin kaldırılabileceği kontrol ediliyor…"},
+    "prune_scanning_n": {"en": "Checking… {done}/{total}",
+                         "tr": "Kontrol ediliyor… {done}/{total}"},
+    "prune_scanned": {
+        "en": "Checked {scanned} set(s), {n} have something to remove. "
+              "{size} in total on disk.",
+        "tr": "{scanned} set kontrol edildi, {n} tanesinde kaldırılacak bir şey var. "
+              "Diskte toplam {size}."},
+    "prune_no_source": {
+        "en": "Nothing here can be pruned right now.",
+        "tr": "Şu anda burada kırpılabilecek bir şey yok."},
+    "prune_col_freed": {"en": "Would free", "tr": "Kazanılacak"},
+    "prune_total": {"en": "{n} set(s) selected · {size} would be freed",
+                    "tr": "{n} set seçildi · {size} kazanılacak"},
+    "prune_run": {"en": "Prune", "tr": "Kırp"},
+    "prune_run_n": {"en": "Prune {n} set(s)", "tr": "{n} seti kırp"},
+    "prune_confirm_body": {
+        "en": "About to prune {n} set(s) in {source} using “{mode}”, freeing about "
+              "{size}.\n\nThis changes files. {recovery}\n\nMake sure osu! is "
+              "closed first.",
+        "tr": "{source} içinde {n} set “{mode}” ile kırpılacak, yaklaşık {size} "
+              "kazanılacak.\n\nBu işlem dosyaları değiştirir. {recovery}\n\nÖnce "
+              "osu!'nun kapalı olduğundan emin ol."},
+    "prune_recovery_osz": {
+        "en": "Each original .osz goes to the Recycle Bin first, and any pruned set "
+              "can be re-downloaded later from Search (right-click → Repair).",
+        "tr": "Her orijinal .osz önce Geri Dönüşüm Kutusu'na gider ve kırpılan her "
+              "set daha sonra Arama'dan yeniden indirilebilir (sağ tık → Onar)."},
+    "prune_recovery_folder": {
+        "en": "The removed files go to the Recycle Bin, so you can put them back "
+              "from there. The .osu beatmap files are never removed.",
+        "tr": "Kaldırılan dosyalar Geri Dönüşüm Kutusu'na gider, oradan geri "
+              "alabilirsin. .osu beatmap dosyaları asla kaldırılmaz."},
 
     "btn_sync_coll": {"en": "Sync Collections", "tr": "Koleksiyonları Eşitle"},
     "tip_sync_coll": {

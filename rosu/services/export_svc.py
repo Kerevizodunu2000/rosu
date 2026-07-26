@@ -424,6 +424,31 @@ class ExportMixin:
                 "result", {"removed": 0, "freed_bytes": 0, "groups": 0})
             return job
 
+        def build_prune_apply_job(self, source: str, mode: str, keys,
+                                  freed_estimate: int = 0) -> jobs.Job:
+            """Apply an ALREADY-PREVIEWED prune (the v1.7.1 Prune dialog).
+
+            No gate here on purpose: the dialog has shown exactly which sets would
+            lose what, and taken a countdown confirmation. Re-asking inside the
+            queue would be a second confirmation for a decision already made.
+            """
+            keys = list(keys or [])
+            job = jobs.Job(jobs.new_id(), "job_prune", kind="prune",
+                           title_kwargs={})
+            job.ctx["options"] = {"prune_source": source, "mode": mode,
+                                  "sets": len(keys),
+                                  "freed_estimate": int(freed_estimate)}
+
+            def s_remove(ctx, progress, cancel):
+                ctx["result"] = self.prune_apply(source, mode, keys,
+                                                 progress=progress, cancel=cancel)
+
+            job.steps = [jobs.Step("job_step_prune_remove", jobs.Lane.DISK,
+                                   s_remove)]
+            job.finalize = lambda ctx: ctx.get(
+                "result", {"pruned": 0, "freed_bytes": 0})
+            return job
+
         def build_prune_job(self) -> jobs.Job:
             """Library prune as a job: scan (preview) -> GATED remove. The remove step
             waits for an explicit UI confirmation."""

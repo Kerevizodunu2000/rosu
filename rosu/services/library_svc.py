@@ -153,13 +153,18 @@ class LibraryMixin:
                     "total_bytes": sum(sizes.get(n, 0) for n in names),
                     "names": names}
 
-        def prune_library(self, names=None, progress=None, cancel=None) -> dict:
-            """Recycle heavy assets from .osz in the Library. 
-            Returns ``{"pruned","freed_bytes"}``."""
+        def prune_library(self, names=None, progress=None, cancel=None,
+                          mode: str | None = None) -> dict:
+            """Recycle heavy assets from .osz in the Library.
+
+            ``mode`` overrides the Settings default, so the Prune dialog can offer
+            the choice at the point of use. Returns ``{"pruned","freed_bytes"}``.
+            """
             from ..prune import prune_osz
             _eff = cancel if cancel is not None else (lambda: False)
             lib = self.cfg.library_path
-            
+            mode = mode or self.cfg.prune_mode
+
             if names is None:
                 names, sizes = self._prune_scan()
             else:
@@ -180,7 +185,7 @@ class LibraryMixin:
                 original_size = sizes.get(name, 0)
                 if p.exists() and original_size > 0:
                     try:
-                        freed_this = prune_osz(p, mode=self.cfg.prune_mode)
+                        freed_this = prune_osz(p, mode=mode)
                         if freed_this > 0:
                             pruned_count += 1
                             freed += freed_this
@@ -196,6 +201,158 @@ class LibraryMixin:
             if pruned_count:
                 self.log.info("LIBRARY_PRUNED", pruned=pruned_count, freed_bytes=freed)
             return {"pruned": pruned_count, "freed_bytes": freed}
+
+        # -- prune sources (v1.7.1: choose at the point of use) ----------------
+        def prune_sources(self) -> list[dict]:
+            """The three prune sources and whether each can actually be used.
+
+            ``[{"key", "available", "sets", "reason"}]``. Sizes are deliberately
+            NOT computed here — that needs a full scan, which the dialog runs off
+            the UI thread once a source is picked.
+
+            ``lazer`` is always ``available: False`` with ``reason="lazer_realm"``.
+            That is a technical fact, not a preference: lazer stores files
+            content-addressed and **shares one copy between every set containing
+            that byte-identical asset**, so deleting a set's video can break other
+            sets, and ``client.realm`` would still reference the missing file.
+            Pruning lazer must go through its own model (the bundled Realm
+            helper) — never the filesystem.
+            """
+            from .. import client_import
+            out = [{"key": "library", "available": True,
+                    "sets": len(self.db.unpruned_library_filenames()),
+                    "reason": ""}]
+
+            songs = None
+            if self.client_enabled("stable"):
+                try:
+                    songs = client_import.stable_songs_dir()
+                except Exception:
+                    songs = None
+            if songs is not None:
+                try:
+                    sets = sum(1 for _ in client_import.iter_stable_folders(songs))
+                except OSError:
+                    sets = 0
+                out.append({"key": "stable", "available": True, "sets": sets,
+                            "reason": ""})
+            else:
+                out.append({"key": "stable", "available": False, "sets": 0,
+                            "reason": "no_stable"})
+
+            out.append({"key": "lazer", "available": False, "sets": 0,
+                        "reason": "lazer_realm"})
+            return out
+
+        def _prune_candidates(self, source: str):
+            """``(key, display_name, path)`` for every set a prune could touch."""
+            from .. import client_import
+            if source == "stable":
+                songs = client_import.stable_songs_dir()
+                if songs is None:
+                    return []
+                return [(f.name, f.name, f)
+                        for f in client_import.iter_stable_folders(songs)]
+            lib = self.cfg.library_path
+            # Already-pruned sets are excluded by the query, so a second run
+            # never re-offers what it already stripped.
+            return [(n, n, lib / n) for n in self.db.unpruned_library_filenames()]
+
+        def prune_scan(self, source: str = "library", mode: str | None = None,
+                       progress=None, cancel=None) -> dict:
+            """Read-only preview: what each set would lose under ``mode``.
+
+            Returns ``{"source", "mode", "sets": [{"key","name","size","freed"}],
+            "total_bytes", "freed_bytes", "scanned", "cancelled"}``. Nothing is
+            written or deleted — the caller picks a sort/limit from this and only
+            then applies.
+            """
+            from .. import prune as prune_mod
+            mode = mode or self.cfg.prune_mode
+            # Own token, so closing the dialog mid-scan stops THIS scan without
+            # disturbing an import or a Drive upload running alongside it.
+            self._prune_cancel.clear()
+            _eff = cancel if cancel is not None else self._prune_cancel.is_set
+            scan = (prune_mod.scan_folder if source == "stable"
+                    else prune_mod.scan_osz)
+            candidates = self._prune_candidates(source)
+            rows: list[dict] = []
+            total = freed = 0
+            cancelled = False
+            for i, (key, name, path) in enumerate(candidates):
+                if _eff():
+                    cancelled = True
+                    break
+                try:
+                    size, removable = scan(path, mode)
+                except Exception:
+                    continue      # one unreadable set must not abort the scan
+                total += size
+                freed += removable
+                if removable > 0:
+                    rows.append({"key": key, "name": name, "size": size,
+                                 "freed": removable})
+                if progress:
+                    progress({"kind": "prune_scan", "done": i + 1,
+                              "total": len(candidates), "name": name})
+            self.log.info("PRUNE_SCAN", source=source, mode=mode,
+                          candidates=len(candidates), prunable=len(rows),
+                          freed_bytes=freed, cancelled=cancelled)
+            return {"source": source, "mode": mode, "sets": rows,
+                    "total_bytes": total, "freed_bytes": freed,
+                    "scanned": len(candidates), "cancelled": cancelled}
+
+        def cancel_prune_scan(self) -> None:
+            """Cancel only an in-progress prune SCAN (leaves other ops alone)."""
+            self._prune_cancel.set()
+
+        def prune_stable(self, folders, progress=None, cancel=None,
+                         mode: str | None = None) -> dict:
+            """Recycle the unwanted files inside the given ``Songs/<set>/`` folders.
+
+            Every folder is resolved against the detected Songs directory before
+            anything is touched, so a name that escapes it is refused rather than
+            deleted.
+            """
+            from .. import client_import, prune as prune_mod
+            mode = mode or self.cfg.prune_mode
+            _eff = cancel if cancel is not None else (lambda: False)
+            songs = client_import.stable_songs_dir()
+            if songs is None:
+                return {"pruned": 0, "freed_bytes": 0, "error": "no_stable"}
+            names = list(folders or [])
+            pruned = freed = 0
+            for i, name in enumerate(names):
+                if _eff():
+                    break
+                try:
+                    freed_this = prune_mod.prune_folder(songs / name, mode=mode,
+                                                        root=songs)
+                except Exception as exc:
+                    self.log.error("PRUNE_ERROR", folder=name, error=str(exc))
+                    freed_this = 0
+                if freed_this > 0:
+                    pruned += 1
+                    freed += freed_this
+                if progress:
+                    progress({"kind": "prune", "done": i + 1, "total": len(names),
+                              "name": name})
+            if pruned:
+                self.log.info("STABLE_PRUNED", pruned=pruned, freed_bytes=freed)
+            return {"pruned": pruned, "freed_bytes": freed}
+
+        def prune_apply(self, source: str, mode: str, keys, progress=None,
+                        cancel=None) -> dict:
+            """Apply a prune to the chosen sets of ``source``. Qt-free."""
+            if source == "stable":
+                return self.prune_stable(keys, progress=progress, cancel=cancel,
+                                         mode=mode)
+            if source == "lazer":
+                # Never reachable from the UI (the source is offered disabled),
+                # but fail loudly rather than silently doing nothing if it ever is.
+                return {"pruned": 0, "freed_bytes": 0, "error": "lazer_realm"}
+            return self.prune_library(names=list(keys or []), progress=progress,
+                                      cancel=cancel, mode=mode)
 
         def dedup_library_plan(self, progress=None) -> dict:
             """Preview which duplicate files dedup WOULD recycle — feeds the

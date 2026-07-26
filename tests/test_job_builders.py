@@ -156,6 +156,29 @@ def test_build_export_job_library(tmp_path):
     db.close()
 
 
+def test_build_prune_apply_job_runs_only_the_chosen_sets(tmp_path):
+    """v1.7.1: the Prune dialog has already previewed and taken a countdown
+    confirmation, so this job has NO gate — re-asking in the queue would be a
+    second confirmation for a decision the user already made."""
+    import zipfile
+    cfg, db, svc = _svc(tmp_path)
+    for bid in (1, 2):
+        with zipfile.ZipFile(cfg.library_path / f"{bid} A - B.osz", "w") as z:
+            z.writestr("map.osu", b"osu file format v14\n")
+            z.writestr("video.mp4", b"v" * 3000)
+    untouched = (cfg.library_path / "2 A - B.osz").read_bytes()
+
+    job = svc.build_prune_apply_job("library", "video_only", ["1 A - B.osz"], 3000)
+    assert _step_keys(job) == ["job_step_prune_remove"]
+    assert all(not s.gated for s in job.steps)
+    assert job.ctx["options"] == {"prune_source": "library", "mode": "video_only",
+                                  "sets": 1, "freed_estimate": 3000}
+    res = run_job_sync(job)
+    assert res == {"pruned": 1, "freed_bytes": 3000}
+    assert (cfg.library_path / "2 A - B.osz").read_bytes() == untouched
+    db.close()
+
+
 def test_build_export_job_records_its_destination(tmp_path):
     """v1.7.1: the UI needs to know where a queued/uploading export writes, so it
     can refuse a second export aimed at the same path instead of letting it

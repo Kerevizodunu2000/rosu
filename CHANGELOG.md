@@ -62,6 +62,27 @@ now describes the library it claims to describe.**
   like it lost sets from the totals. All reworded, and mismatched filenames are now listed.
 
 ### Added
+- **Prune is now a dialog, not a single button that decided for you.** The old button silently
+  used whatever `prune_mode` was set in Settings, ran over the whole Library, and reported only a
+  count and a total once it had already made its choices. It now asks, up front:
+  - **Where** — Rosu Library or osu!(stable). osu!lazer is listed but disabled, with the reason
+    stated plainly: lazer stores every file by content hash and **shares one copy between all sets
+    containing that asset**, so deleting files would break other sets and leave `client.realm`
+    pointing at something that no longer exists. Doing it safely means going through lazer's own
+    database, which arrives with the "remove maps from a client" feature. This is a technical
+    constraint, not a setting.
+  - **What** — video only · images only (backgrounds included) · video + images · smart clean-up
+    (the previous `heavy_assets` behaviour, unchanged, now with a tooltip saying what it keeps).
+  - **How many and in what order** — biggest-saving-first, smallest-first or by name, and a limit
+    ("prune the 200 that free the most"). Only sets that would actually free something are ever
+    counted, so the number in the button is the number of sets that really change.
+  - **A per-set preview** — name, current size and exactly how much it would free, from a
+    read-only scan (the zip's directory is read; nothing is decompressed or written), followed by
+    a 3-second countdown confirmation naming the source, the mode, the total, and how to undo it.
+- osu!(stable) can be pruned at all now: it stores beatmaps as loose files rather than archives,
+  so a folder-mode prune was written for it. It refuses any folder that resolves outside the
+  detected `Songs` directory, refuses folders with no `.osu` in them, never removes a `.osu`, and
+  sends what it does remove to the Recycle Bin.
 - Histogram bin mode: keep the data-driven ranges (which produce edges like 3.94–4.55) or switch
   to plain whole-star buckets (0–1, 1–2, 2–3 …). Empty buckets inside the range are kept so the
   axis reads continuously.
@@ -72,6 +93,13 @@ now describes the library it claims to describe.**
 - A test that resolves every literal `t("…")` key in the source against the string table. v1.7.0
   shipped ~15 strings written as `t(key, default="…")`; there is no such fallback, so they would
   have rendered as raw key names and nothing would have failed until someone opened that screen.
+
+### Changed
+- Settings' Prune Mode now offers all four modes (it had only two) and explains each on hover.
+  It is the default used by auto-prune and export-prune, which have no dialog to ask in.
+- `PruneDialog` cancels an in-flight scan when the source or mode changes and re-runs, discarding
+  the superseded result. Found while driving the real dialog: refusing to start the new scan left
+  the *previous* source's rows on screen, presented as the new source's.
 - Settings now names the Google Drive folder Rosu backs up into, as a link, and explains why a
   "Rosu" folder it did not create is invisible to it: Rosu asks for the narrow `drive.file`
   permission, which only ever exposes files this app created — so a folder made by hand, or one

@@ -561,8 +561,13 @@ class SettingsTab(QWidget):
         cur = self.cbo_prune_mode.currentData() or getattr(self.ctx.cfg, "prune_mode", "video_only")
         self.cbo_prune_mode.blockSignals(True)
         self.cbo_prune_mode.clear()
-        self.cbo_prune_mode.addItem(t("prune_mode_video_only"), "video_only")
-        self.cbo_prune_mode.addItem(t("prune_mode_heavy_assets"), "heavy_assets")
+        # Same four modes the Prune dialog offers — this one is the default for
+        # auto-prune / export-prune, which have no dialog to ask in.
+        for mode in config.PRUNE_MODES:
+            self.cbo_prune_mode.addItem(t(f"prune_mode_{mode}"), mode)
+            self.cbo_prune_mode.setItemData(self.cbo_prune_mode.count() - 1,
+                                            t(f"prune_mode_{mode}_tip"),
+                                            Qt.ToolTipRole)
         idx = self.cbo_prune_mode.findData(cur)
         self.cbo_prune_mode.setCurrentIndex(idx if idx >= 0 else 0)
         self.cbo_prune_mode.blockSignals(False)

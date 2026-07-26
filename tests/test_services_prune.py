@@ -158,3 +158,123 @@ def test_repair_maps_unknown_filename_fails(tmp_path):
     cfg, db, svc = _svc(tmp_path)
     res = svc.repair_maps(["nonexistent.osz"])
     assert res == {"repaired": 0, "failed": ["nonexistent.osz"]}
+
+
+# -- v1.7.1: source picker, scan preview and apply dispatch --------------------
+def test_prune_sources_always_reports_lazer_as_unavailable(tmp_path):
+    """Not a preference: lazer shares one content-addressed copy of an asset
+    between every set that contains it, so deleting files would break other sets
+    and leave client.realm pointing at nothing."""
+    cfg, db, svc = _svc(tmp_path)
+    _make_set(cfg, db, 1, {"map.osu": b"x", "video.mp4": b"z" * 1000})
+    by_key = {s["key"]: s for s in svc.prune_sources()}
+    assert set(by_key) == {"library", "stable", "lazer"}
+    assert by_key["library"]["available"] and by_key["library"]["sets"] == 1
+    assert by_key["lazer"]["available"] is False
+    assert by_key["lazer"]["reason"] == "lazer_realm"
+    db.close()
+
+
+def test_prune_scan_lists_only_sets_with_something_to_remove(tmp_path):
+    cfg, db, svc = _svc(tmp_path)
+    _make_set(cfg, db, 1, {"map.osu": b"x", "video.mp4": b"z" * 4000})
+    _make_set(cfg, db, 2, {"map.osu": b"x", "audio.mp3": b"a" * 4000})  # nothing
+    res = svc.prune_scan("library", "video_only")
+    assert res["scanned"] == 2
+    assert [s["key"] for s in res["sets"]] == ["1 A - B.osz"]
+    assert res["sets"][0]["freed"] == 4000
+    assert res["freed_bytes"] == 4000
+    assert res["total_bytes"] > 0
+    db.close()
+
+
+def test_prune_scan_excludes_already_pruned_sets(tmp_path):
+    cfg, db, svc = _svc(tmp_path)
+    tid = _make_set(cfg, db, 1, {"map.osu": b"x", "video.mp4": b"z" * 4000})
+    db.set_pruned_state(tid, True, 5000)
+    assert svc.prune_scan("library", "video_only")["sets"] == []
+    db.close()
+
+
+def test_prune_scan_reports_nothing_when_the_mode_matches_nothing(tmp_path):
+    cfg, db, svc = _svc(tmp_path)
+    _make_set(cfg, db, 1, {"map.osu": b"x", "video.mp4": b"z" * 4000})
+    res = svc.prune_scan("library", "images_only")   # no images in this set
+    assert res["sets"] == [] and res["freed_bytes"] == 0
+    db.close()
+
+
+def test_prune_scan_is_read_only(tmp_path):
+    cfg, db, svc = _svc(tmp_path)
+    _make_set(cfg, db, 1, {"map.osu": b"x", "video.mp4": b"z" * 4000})
+    p = cfg.library_path / "1 A - B.osz"
+    before = p.read_bytes()
+    svc.prune_scan("library", "video_only")
+    assert p.read_bytes() == before
+    assert db.all_tracks()[0]["is_pruned"] == 0
+    db.close()
+
+
+def test_prune_apply_library_prunes_only_the_named_sets(tmp_path):
+    cfg, db, svc = _svc(tmp_path)
+    _make_set(cfg, db, 1, {"map.osu": b"x", "video.mp4": b"z" * 4000})
+    _make_set(cfg, db, 2, {"map.osu": b"x", "video.mp4": b"z" * 4000})
+    untouched = (cfg.library_path / "2 A - B.osz").read_bytes()
+    res = svc.prune_apply("library", "video_only", ["1 A - B.osz"])
+    assert res["pruned"] == 1 and res["freed_bytes"] == 4000
+    assert (cfg.library_path / "2 A - B.osz").read_bytes() == untouched
+    flags = {r["filename"]: r["is_pruned"] for r in db.all_tracks()}
+    assert flags == {"1 A - B.osz": 1, "2 A - B.osz": 0}
+    db.close()
+
+
+def test_prune_apply_honours_the_chosen_mode_over_settings(tmp_path):
+    cfg, db, svc = _svc(tmp_path)
+    cfg.prune_mode = "video_only"        # Settings says video…
+    _make_set(cfg, db, 1, {"map.osu": b"x", "bg.jpg": b"b" * 3000,
+                           "video.mp4": b"z" * 4000})
+    res = svc.prune_apply("library", "images_only", ["1 A - B.osz"])  # …dialog says images
+    assert res["freed_bytes"] == 3000    # the image, not the video
+    with zipfile.ZipFile(cfg.library_path / "1 A - B.osz") as zf:
+        assert "video.mp4" in zf.namelist()
+    db.close()
+
+
+def test_prune_apply_refuses_lazer_loudly(tmp_path):
+    """Unreachable from the UI (the source is offered disabled), but it must fail
+    visibly rather than silently doing nothing if it ever is."""
+    cfg, db, svc = _svc(tmp_path)
+    assert svc.prune_apply("lazer", "video_only", ["x"]) == {
+        "pruned": 0, "freed_bytes": 0, "error": "lazer_realm"}
+    db.close()
+
+
+def test_prune_apply_stable_without_an_install_reports_it(tmp_path, monkeypatch):
+    cfg, db, svc = _svc(tmp_path)
+    monkeypatch.setattr("rosu.client_import.stable_songs_dir", lambda: None)
+    assert svc.prune_apply("stable", "video_only", ["x"])["error"] == "no_stable"
+    db.close()
+
+
+def test_prune_scan_stable_walks_the_songs_folders(tmp_path, monkeypatch):
+    cfg, db, svc = _svc(tmp_path)
+    songs = tmp_path / "Songs"
+    (songs / "1 A - B").mkdir(parents=True)
+    (songs / "1 A - B" / "map.osu").write_bytes(b"osu file format v14\n")
+    (songs / "1 A - B" / "video.mp4").write_bytes(b"v" * 6000)
+    (songs / "2 C - D").mkdir(parents=True)
+    (songs / "2 C - D" / "map.osu").write_bytes(b"osu file format v14\n")
+    monkeypatch.setattr("rosu.client_import.stable_songs_dir", lambda: songs)
+    res = svc.prune_scan("stable", "video_only")
+    assert res["scanned"] == 2
+    assert [s["key"] for s in res["sets"]] == ["1 A - B"]
+    assert res["sets"][0]["freed"] == 6000
+
+    trashed = []
+    monkeypatch.setattr("send2trash.send2trash",
+                        lambda p: (trashed.append(str(p)), __import__("os").remove(p)))
+    applied = svc.prune_apply("stable", "video_only", ["1 A - B"])
+    assert applied == {"pruned": 1, "freed_bytes": 6000}
+    assert (songs / "1 A - B" / "map.osu").exists()      # never the beatmap
+    assert len(trashed) == 1
+    db.close()

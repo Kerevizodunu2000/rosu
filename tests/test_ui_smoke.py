@@ -333,6 +333,149 @@ def test_health_dialog_shows_pruned_bucket_and_mismatched_files(qapp, tmp_path,
     ctx.db.close()
 
 
+def _prune_dialog(ctx, monkeypatch):
+    """A PruneDialog with the background scan stubbed out, so the table/plan logic
+    can be driven deterministically without a worker thread."""
+    from rosu.ui.prune_dialog import PruneDialog
+    monkeypatch.setattr(PruneDialog, "scan", lambda self: None)
+    return PruneDialog(ctx, None)
+
+
+def test_prune_dialog_offers_lazer_but_disabled_with_the_reason(qapp, tmp_path,
+                                                                monkeypatch):
+    """v1.7.1: lazer is listed so the user can see it exists and learn WHY it
+    cannot be pruned — hiding it would read as Rosu forgetting about it."""
+    from PySide6.QtCore import Qt
+    ctx = _ctx(tmp_path, monkeypatch)
+    dlg = _prune_dialog(ctx, monkeypatch)
+    i = dlg.cbo_source.findData("lazer")
+    assert i >= 0
+    assert not dlg.cbo_source.model().item(i).isEnabled()
+    assert dlg.cbo_source.itemData(i, Qt.ToolTipRole) == ctx.t("prune_why_lazer_realm")
+    assert dlg.cbo_source.currentData() == "library"   # first usable source picked
+    assert dlg.btn_prune.isEnabled() is False          # nothing scanned yet
+    dlg.close()
+    ctx.db.close()
+
+
+def test_prune_dialog_order_and_limit_reshape_the_preview(qapp, tmp_path,
+                                                          monkeypatch):
+    ctx = _ctx(tmp_path, monkeypatch)
+    dlg = _prune_dialog(ctx, monkeypatch)
+    dlg._on_scanned({"source": "library", "mode": "video_only", "scanned": 4,
+                     "total_bytes": 1000, "freed_bytes": 360,
+                     "sets": [{"key": "a", "name": "a", "size": 100, "freed": 10},
+                              {"key": "b", "name": "b", "size": 400, "freed": 300},
+                              {"key": "c", "name": "c", "size": 200, "freed": 50},
+                              {"key": "d", "name": "d", "size": 50, "freed": 0}]})
+    # "d" frees nothing, so it is never offered — the count must not overstate.
+    assert [s["key"] for s in dlg._shown] == ["b", "c", "a"]
+    assert dlg.table.rowCount() == 3
+    dlg.spin_limit.setValue(2)
+    assert [s["key"] for s in dlg._shown] == ["b", "c"]
+    dlg.cbo_sort.setCurrentIndex(dlg.cbo_sort.findData("smallest"))
+    assert [s["key"] for s in dlg._shown] == ["a", "c"]
+    dlg.spin_limit.setValue(0)                       # 0 = all of them
+    assert len(dlg._shown) == 3
+    assert dlg.btn_prune.isEnabled()
+    dlg.close()
+    ctx.db.close()
+
+
+def _scan_result(*keys):
+    return {"source": "library", "mode": "video_only", "scanned": len(keys),
+            "total_bytes": 100 * len(keys), "freed_bytes": 10 * len(keys),
+            "sets": [{"key": k, "name": k, "size": 100, "freed": 10}
+                     for k in keys]}
+
+
+def test_prune_dialog_drops_a_superseded_scan_result(qapp, tmp_path, monkeypatch):
+    """Changing source or mode mid-scan must not leave the previous source's
+    results on screen — found by driving the real dialog: the old code refused to
+    start the new scan while one was running, so the table silently kept lying."""
+    ctx = _ctx(tmp_path, monkeypatch)
+    dlg = _prune_dialog(ctx, monkeypatch)
+    dlg._on_scanned(_scan_result("a"), dlg._scan_seq)
+    assert [s["key"] for s in dlg._shown] == ["a"]
+
+    dlg._scan_seq += 1                                  # a newer scan started
+    dlg._on_scanned(_scan_result("stale"), dlg._scan_seq - 1)
+    assert [s["key"] for s in dlg._shown] == ["a"]      # stale result ignored
+    dlg._on_scanned(_scan_result("b"), dlg._scan_seq)
+    assert [s["key"] for s in dlg._shown] == ["b"]      # the current one wins
+    dlg.close()
+    ctx.db.close()
+
+
+def test_prune_dialog_queues_a_rescan_instead_of_dropping_it(qapp, tmp_path,
+                                                             monkeypatch):
+    """A scan requested while one is running must be QUEUED and the running one
+    cancelled — silently dropping it is what left the old source's rows on
+    screen. No real threads here: the Worker is stubbed."""
+    from rosu.ui import prune_dialog as pd
+    ctx = _ctx(tmp_path, monkeypatch)
+    started, cancelled = [], []
+
+    class _Sig:
+        def connect(self, *a, **k):
+            pass
+
+    class FakeWorker:
+        progressed = _Sig()
+        succeeded = _Sig()
+        failed = _Sig()
+        finished = _Sig()
+
+        def __init__(self, *a, **k):
+            started.append(a)
+
+        def isRunning(self):
+            return True
+
+        def start(self):
+            pass
+
+    monkeypatch.setattr(pd, "Worker", FakeWorker)
+    monkeypatch.setattr(ctx.services, "cancel_prune_scan",
+                        lambda: cancelled.append(1))
+
+    dlg = pd.PruneDialog(ctx, None)      # __init__ starts the first (fake) scan
+    assert len(started) == 1 and not cancelled
+
+    dlg.scan()                            # asked again while the first is running
+    assert len(started) == 1              # no second worker on top of the first
+    assert dlg._rescan_pending and cancelled == [1]
+
+    dlg._clear_worker()                   # the running scan's thread let go
+    assert len(started) == 2              # …and the queued rescan actually ran
+    assert not dlg._rescan_pending
+    ctx.db.close()
+
+
+def test_prune_dialog_builds_a_plan_only_after_the_countdown(qapp, tmp_path,
+                                                             monkeypatch):
+    from PySide6.QtWidgets import QDialog
+    from rosu.ui import prune_dialog as pd
+    ctx = _ctx(tmp_path, monkeypatch)
+    dlg = _prune_dialog(ctx, monkeypatch)
+    dlg._on_scanned({"source": "library", "mode": "video_only", "scanned": 1,
+                     "total_bytes": 400, "freed_bytes": 300,
+                     "sets": [{"key": "b.osz", "name": "b", "size": 400,
+                               "freed": 300}]})
+
+    monkeypatch.setattr(pd.CountdownConfirmDialog, "exec",
+                        lambda self: QDialog.Rejected)
+    dlg._confirm()
+    assert dlg.plan is None                    # declined → nothing to run
+
+    monkeypatch.setattr(pd.CountdownConfirmDialog, "exec",
+                        lambda self: QDialog.Accepted)
+    dlg._confirm()
+    assert dlg.plan == {"source": "library", "mode": "video_only",
+                        "keys": ["b.osz"], "freed_estimate": 300}
+    ctx.db.close()
+
+
 def test_health_dialog_builds_and_renders_report(qapp, tmp_path, monkeypatch):
     """The v1.1 Library Health dialog constructs and populates from a report."""
     from rosu.ui.health_dialog import HealthDialog

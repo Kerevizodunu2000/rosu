@@ -107,8 +107,15 @@ def _describe_job(job, t) -> str:
     elif job.kind == "unpack":
         bits.append(t("job_opt_only_new") if opts.get("skip_duplicates")
                     else t("job_opt_every_set"))
-    elif job.kind == "prune" and opts.get("mode"):
-        bits.append(t("job_opt_prune_mode", mode=opts["mode"]))
+    elif job.kind == "prune":
+        if opts.get("prune_source"):
+            bits.append(t(f"prune_source_{opts['prune_source']}"))
+        if opts.get("mode"):
+            bits.append(t(f"prune_mode_{opts['mode']}"))
+        if opts.get("sets"):
+            bits.append(t("prune_n_sets", n=opts["sets"]))
+        if opts.get("freed_estimate"):
+            bits.append(t("prune_frees", size=_fmt_size(opts["freed_estimate"])))
     if not bits:
         return ""
     line = "   ·   ".join(bits)
@@ -745,9 +752,21 @@ class ShortcutsTab(QWidget):
         self._enqueue(self.services.build_dedup_job(), ("dedup",))
 
     def on_prune(self) -> None:
-        """Queue a prune job: it scans first, then WAITS at a gate for the preview
-        confirmation before recycling anything."""
-        self._enqueue(self.services.build_prune_job(), ("prune",))
+        """Open the Prune dialog — source, mode, how many, in what order, and a
+        per-set preview — then queue only what the user confirmed there.
+
+        The old button silently used the Settings ``prune_mode`` over the whole
+        Library and showed nothing but a total after it had already decided.
+        """
+        from .prune_dialog import PruneDialog
+        dlg = PruneDialog(self.ctx, self)
+        if dlg.exec() != QDialog.Accepted or not dlg.plan:
+            return
+        plan = dlg.plan
+        job = self.services.build_prune_apply_job(
+            plan["source"], plan["mode"], plan["keys"], plan["freed_estimate"])
+        self._enqueue(job, ("prune", plan["source"], plan["mode"],
+                            tuple(plan["keys"])))
 
     # -- queue reactions -------------------------------------------------------
     def _refresh_queue(self) -> None:

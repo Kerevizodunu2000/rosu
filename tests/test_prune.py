@@ -203,3 +203,175 @@ def test_trash_copy_failure_leaves_original_untouched(tmp_path, monkeypatch):
     assert p.exists()
     assert p.read_bytes() == original_bytes
     assert list(tmp_path.iterdir()) == [p]
+
+
+# -- v1.7.1 modes: the choice is made at the point of use ---------------------
+def test_images_only_removes_images_keeps_video_and_audio(tmp_path):
+    p = tmp_path / "set.osz"
+    _make_osz(p, {
+        "map.osu": _OSU_TEXT.encode("utf-8"),
+        "audio.mp3": b"a" * 1000,
+        "bg.jpg": b"b" * 4000,          # the referenced background goes too
+        "sb/extra.png": b"c" * 2000,
+        "video.mp4": b"v" * 9000,       # kept: this mode is images only
+    })
+    freed = prune.prune_osz(p, mode="images_only")
+    assert freed == 6000
+    with zipfile.ZipFile(p) as zf:
+        assert set(zf.namelist()) == {"map.osu", "audio.mp3", "video.mp4"}
+
+
+def test_video_and_images_removes_both_keeps_audio_and_maps(tmp_path):
+    p = tmp_path / "set.osz"
+    _make_osz(p, {
+        "map.osu": _OSU_TEXT.encode("utf-8"),
+        "hard.osu": _OSU_TEXT.encode("utf-8"),
+        "audio.mp3": b"a" * 1000,
+        "bg.jpg": b"b" * 4000,
+        "video.mp4": b"v" * 9000,
+    })
+    freed = prune.prune_osz(p, mode="video_and_images")
+    assert freed == 13000
+    with zipfile.ZipFile(p) as zf:
+        assert set(zf.namelist()) == {"map.osu", "hard.osu", "audio.mp3"}
+
+
+def test_no_mode_ever_removes_a_dot_osu(tmp_path):
+    """Losing a .osu deletes a difficulty — that is not 'saving space'."""
+    for mode in prune.MODES:
+        p = tmp_path / f"{mode}.osz"
+        _make_osz(p, {"map.osu": _OSU_TEXT.encode("utf-8"),
+                      "audio.mp3": b"a" * 1000,
+                      "bg.jpg": b"b" * 1000,
+                      "video.mp4": b"v" * 9000})
+        prune.prune_osz(p, mode=mode)
+        with zipfile.ZipFile(p) as zf:
+            assert "map.osu" in zf.namelist(), mode
+
+
+# -- scan_osz: the preview must equal what pruning actually reports -----------
+def test_scan_matches_what_prune_then_frees(tmp_path):
+    for mode in prune.MODES:
+        p = tmp_path / f"scan-{mode}.osz"
+        _make_osz(p, {
+            "map.osu": _OSU_TEXT.encode("utf-8"),
+            "audio.mp3": b"a" * 1000,
+            "bg.jpg": b"b" * 1000,
+            "unused.png": b"c" * (600 * 1024),
+            "story.osb": b"d" * 9000,
+            "video.mp4": b"v" * 5000,
+        })
+        size, predicted = prune.scan_osz(p, mode)
+        assert size == p.stat().st_size
+        assert prune.prune_osz(p, mode=mode) == predicted, mode
+
+
+def test_scan_reads_nothing_from_a_bad_zip(tmp_path):
+    p = tmp_path / "bad.osz"
+    p.write_bytes(b"not a zip")
+    size, removable = prune.scan_osz(p, "video_only")
+    assert size == p.stat().st_size and removable == 0
+
+
+def test_scan_missing_file_is_zero(tmp_path):
+    assert prune.scan_osz(tmp_path / "nope.osz", "video_only") == (0, 0)
+
+
+# -- loose folders (osu!(stable)) --------------------------------------------
+def _make_folder(root, name, files):
+    d = root / name
+    d.mkdir(parents=True)
+    for fn, data in files.items():
+        p = d / fn
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(data)
+    return d
+
+
+def _fake_trash(monkeypatch):
+    trashed = []
+
+    def fake(path):
+        trashed.append(str(path))
+        import os
+        os.remove(path)
+    monkeypatch.setattr("send2trash.send2trash", fake)
+    return trashed
+
+
+def test_prune_folder_removes_video_keeps_maps(tmp_path, monkeypatch):
+    songs = tmp_path / "Songs"
+    songs.mkdir()
+    d = _make_folder(songs, "123 A - B", {
+        "map.osu": _OSU_TEXT.encode("utf-8"),
+        "audio.mp3": b"a" * 1000,
+        "bg.jpg": b"b" * 1000,
+        "video.mp4": b"v" * 7000,
+    })
+    trashed = _fake_trash(monkeypatch)
+    assert prune.prune_folder(d, mode="video_only", root=songs) == 7000
+    assert {p.name for p in d.iterdir()} == {"map.osu", "audio.mp3", "bg.jpg"}
+    assert len(trashed) == 1          # Recycle Bin, not unlink — still recoverable
+
+
+def test_prune_folder_refuses_a_path_outside_the_songs_root(tmp_path, monkeypatch):
+    songs = tmp_path / "Songs"
+    songs.mkdir()
+    outside = _make_folder(tmp_path, "elsewhere", {
+        "map.osu": _OSU_TEXT.encode("utf-8"), "video.mp4": b"v" * 7000})
+    trashed = _fake_trash(monkeypatch)
+    assert prune.prune_folder(outside, mode="video_only", root=songs) == 0
+    assert (outside / "video.mp4").exists()
+    assert trashed == []
+
+
+def test_prune_folder_ignores_a_folder_with_no_osu(tmp_path, monkeypatch):
+    songs = tmp_path / "Songs"
+    songs.mkdir()
+    d = _make_folder(songs, "not-a-beatmap", {"video.mp4": b"v" * 7000})
+    _fake_trash(monkeypatch)
+    assert prune.prune_folder(d, mode="video_only", root=songs) == 0
+    assert (d / "video.mp4").exists()
+
+
+def test_scan_folder_matches_prune_folder(tmp_path, monkeypatch):
+    songs = tmp_path / "Songs"
+    songs.mkdir()
+    d = _make_folder(songs, "1 A - B", {
+        "map.osu": _OSU_TEXT.encode("utf-8"),
+        "audio.mp3": b"a" * 1000,
+        "bg.jpg": b"b" * 2000,
+        "video.mp4": b"v" * 7000,
+    })
+    total, removable = prune.scan_folder(d, "video_and_images")
+    assert total == 10000 + len(_OSU_TEXT.encode("utf-8"))   # every file counted
+    assert removable == 9000                                  # bg.jpg + video.mp4
+    _fake_trash(monkeypatch)
+    assert prune.prune_folder(d, mode="video_and_images", root=songs) == removable
+
+
+# -- select_targets (pure) ---------------------------------------------------
+def _s(name, freed):
+    return {"key": name, "name": name, "size": freed * 2, "freed": freed}
+
+
+def test_select_targets_orders_and_limits():
+    sets = [_s("a", 10), _s("b", 300), _s("c", 50)]
+    assert [s["name"] for s in prune.select_targets(sets, "largest")] == ["b", "c", "a"]
+    assert [s["name"] for s in prune.select_targets(sets, "smallest")] == ["a", "c", "b"]
+    assert [s["name"] for s in prune.select_targets(sets, "name")] == ["a", "b", "c"]
+    assert [s["name"] for s in prune.select_targets(sets, "largest", 2)] == ["b", "c"]
+
+
+def test_select_targets_drops_sets_with_nothing_to_free():
+    """Offering to 'prune 200 sets' and then touching 40 would make the preview
+    a lie — only sets that actually free something are eligible."""
+    sets = [_s("a", 0), _s("b", 5)]
+    assert [s["name"] for s in prune.select_targets(sets)] == ["b"]
+    assert prune.select_targets([_s("a", 0)]) == []
+
+
+def test_select_targets_limit_zero_or_none_means_all():
+    sets = [_s("a", 1), _s("b", 2)]
+    assert len(prune.select_targets(sets, limit=None)) == 2
+    assert len(prune.select_targets(sets, limit=0)) == 2

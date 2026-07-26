@@ -1,5 +1,22 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Space-saving feature to strip heavy assets from mapsets."""
+"""Space-saving: strip heavy assets from mapsets.
+
+Two storage shapes are handled, because the two osu! clients store beatmaps
+differently:
+
+* **.osz archives** (Rosu's Library) — :func:`prune_osz` rewrites the zip without
+  the unwanted members, atomically.
+* **loose folders** (osu!(stable)'s ``Songs/<set>/``) — :func:`prune_folder`
+  recycles the unwanted files in place. Stable reads the folder from disk, so a
+  missing video simply means no video.
+
+**osu!lazer is deliberately absent.** Lazer stores every file content-addressed
+under ``files/<h>/<hh>/<hash>`` and references it from ``client.realm`` by hash,
+so (a) deleting a file leaves the Realm row pointing at nothing and (b) the same
+hash is shared by *every* set containing that byte-identical asset — removing one
+set's video can break other sets. Pruning lazer has to go through lazer's own
+model (the bundled Realm helper), never through the filesystem.
+"""
 import os
 import shutil
 import stat
@@ -33,6 +50,46 @@ def _discard(path) -> None:
 # this module can't assume the archive was already vetted — fail closed.
 _MAX_ENTRY_BYTES = 200 * 1024 * 1024
 
+VIDEO_EXTS = (".mp4", ".avi", ".flv", ".mpg", ".mpeg", ".wmv", ".mov", ".m4v")
+IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".bmp")
+_AUDIO_EXTS = (".wav", ".ogg", ".mp3")
+# heavy_assets keeps the exact extension list it shipped with, so upgrading
+# cannot silently change what an existing configuration removes.
+_HEAVY_IMAGE_EXTS = (".jpg", ".png", ".jpeg")
+_HEAVY_IMAGE_CAP = 500 * 1024
+_MAX_UNESSENTIAL_DEFAULT = 2 * 1024 * 1024
+
+# What each mode strips. `heavy_assets` is the original v1.7 behaviour and stays
+# bit-for-bit; the other three were added in v1.7.1 so the choice is made at the
+# point of use instead of being buried in Settings.
+MODES = ("video_only", "images_only", "video_and_images", "heavy_assets")
+
+# Modes that decide purely by extension need no .osu parse at all.
+_BY_EXTENSION = {
+    "video_only": VIDEO_EXTS,
+    "images_only": IMAGE_EXTS,
+    "video_and_images": VIDEO_EXTS + IMAGE_EXTS,
+}
+
+
+def _is_removable(name_lower: str, size: int, mode: str, essential: set[str],
+                  max_audio: int = _MAX_UNESSENTIAL_DEFAULT) -> bool:
+    """Should this member be stripped under ``mode``? A ``.osu`` never is —
+    losing one deletes a difficulty, which is not "saving space"."""
+    if name_lower.endswith(".osu"):
+        return False
+    exts = _BY_EXTENSION.get(mode)
+    if exts is not None:
+        return name_lower.endswith(exts)
+    # heavy_assets: keep what a .osu references, plus small audio/images.
+    if any(name_lower.endswith(asset) for asset in essential):
+        return False
+    if name_lower.endswith(_AUDIO_EXTS):
+        return size > max_audio
+    if name_lower.endswith(_HEAVY_IMAGE_EXTS):
+        return size > _HEAVY_IMAGE_CAP
+    return True
+
 
 def get_osu_assets(text: str) -> set[str]:
     """Parse an .osu file text to extract AudioFilename and Background image paths."""
@@ -58,67 +115,90 @@ def get_osu_assets(text: str) -> set[str]:
     return assets
 
 
-def prune_osz(osz_path: Path | str, mode: str = 'video_only', max_unessential_size: int = 2 * 1024 * 1024) -> int:
+def _essential_assets(zf, mode: str) -> set[str] | None:
+    """The asset filenames the .osu files reference, for ``heavy_assets``.
+
+    ``None`` means "refuse to prune this archive" (no .osu at all, or a
+    suspiciously large one). Extension-driven modes need no parse and get an
+    empty set.
     """
-    Remove non-essential files from an .osz to save space.
-    mode="video_only": Only removes .mp4, .avi, .flv, .mpg files.
-    mode="heavy_assets": Keeps only .osu, audio, backgrounds, and small hitsounds/images. Removes .osb and large images.
-    Returns bytes freed. If nothing was freed, returns 0.
+    if mode != "heavy_assets":
+        return set()
+    essential: set[str] = set()
+    found_osu = False
+    for info in zf.infolist():
+        if not info.filename.lower().endswith(".osu"):
+            continue
+        if info.file_size > _MAX_ENTRY_BYTES:
+            return None   # suspicious .osu size — fail closed, don't prune
+        found_osu = True
+        text = zf.read(info.filename).decode("utf-8", errors="replace")
+        for asset in get_osu_assets(text):
+            essential.add(asset.lower().replace("\\", "/"))
+    return essential if found_osu else None
+
+
+def scan_osz(osz_path: Path | str, mode: str = "video_only") -> tuple[int, int]:
+    """``(archive_size_on_disk, removable_bytes)`` — a *preview*, reading only the
+    zip's central directory so nothing is decompressed and nothing is written.
+
+    ``removable_bytes`` is the uncompressed size of the members that would go.
+    For the formats this actually targets (video, jpg/png) that is within a
+    rounding error of the disk saving, and it is the SAME number
+    :func:`prune_osz` reports afterwards, so the preview and the result agree.
+    """
+    p = Path(osz_path)
+    try:
+        total = p.stat().st_size
+    except OSError:
+        return (0, 0)
+    try:
+        with zipfile.ZipFile(p, "r") as zf:
+            essential = _essential_assets(zf, mode)
+            if essential is None:
+                return (total, 0)
+            removable = sum(info.file_size for info in zf.infolist()
+                            if _is_removable(info.filename.lower(), info.file_size,
+                                             mode, essential))
+    except (zipfile.BadZipFile, OSError):
+        return (total, 0)
+    return (total, removable)
+
+
+def prune_osz(osz_path: Path | str, mode: str = 'video_only', max_unessential_size: int = 2 * 1024 * 1024) -> int:
+    """Remove non-essential files from an .osz to save space.
+
+    ``mode`` is one of :data:`MODES` — ``video_only``, ``images_only``,
+    ``video_and_images`` (all three decide purely by extension) or
+    ``heavy_assets`` (keeps whatever a ``.osu`` references, plus small
+    audio/images, and drops the rest). A ``.osu`` is never removed.
+
+    Returns bytes freed; 0 when nothing was removed (and then the original file
+    is not rewritten at all).
     """
     p = Path(osz_path)
     if not p.exists():
         return 0
-    
-    essential_assets = set()
-    osu_files = []
-    
-    if mode == 'heavy_assets':
-        try:
-            with zipfile.ZipFile(p, 'r') as zf:
-                for info in zf.infolist():
-                    lower_name = info.filename.lower()
-                    if lower_name.endswith('.osu'):
-                        if info.file_size > _MAX_ENTRY_BYTES:
-                            return 0   # suspicious .osu size — fail closed, don't prune
-                        osu_files.append(info.filename)
-                        text = zf.read(info.filename).decode('utf-8', errors='replace')
-                        for asset in get_osu_assets(text):
-                            norm = asset.lower().replace("\\", "/")
-                            essential_assets.add(norm)
-        except (zipfile.BadZipFile, OSError):
-            return 0
-            
-        if not osu_files:
-            return 0
-        
+
+    try:
+        with zipfile.ZipFile(p, 'r') as zf:
+            essential_assets = _essential_assets(zf, mode)
+    except (zipfile.BadZipFile, OSError):
+        return 0
+    if essential_assets is None:
+        return 0
+
     freed = 0
     temp_fd, temp_path = tempfile.mkstemp(dir=p.parent, suffix=".osz")
     os.close(temp_fd)
-    
+
     try:
         with zipfile.ZipFile(p, 'r') as zf_in:
             with zipfile.ZipFile(temp_path, 'w', compression=zipfile.ZIP_DEFLATED) as zf_out:
                 for info in zf_in.infolist():
                     name_lower = info.filename.lower()
-
-                    is_essential = True
-                    if mode == 'video_only':
-                        if name_lower.endswith(('.mp4', '.avi', '.flv', '.mpg')):
-                            is_essential = False
-                    else: # heavy_assets
-                        is_essential = False
-                        if name_lower.endswith('.osu'):
-                            is_essential = True
-                        elif any(name_lower.endswith(asset) for asset in essential_assets):
-                            is_essential = True
-                        elif name_lower.endswith(('.wav', '.ogg', '.mp3')):
-                            if info.file_size <= max_unessential_size:
-                                is_essential = True
-                        elif name_lower.endswith(('.jpg', '.png', '.jpeg')):
-                            if info.file_size <= 500 * 1024:
-                                is_essential = True
-
-                    if is_essential:
+                    if not _is_removable(name_lower, info.file_size, mode,
+                                         essential_assets, max_unessential_size):
                         if info.file_size > _MAX_ENTRY_BYTES:
                             # Fail closed rather than inflate a suspiciously large
                             # member into memory (possible zip bomb). Raise (rather
@@ -162,3 +242,126 @@ def prune_osz(osz_path: Path | str, mode: str = 'video_only', max_unessential_si
     except Exception:
         _discard(temp_path)
         return 0
+
+
+# -- loose folders (osu!(stable)'s Songs/<set>/) ------------------------------
+def _folder_essentials(folder: Path, mode: str) -> set[str] | None:
+    """``heavy_assets``' referenced-asset set for a Songs folder, or ``None`` to
+    refuse (a folder with no ``.osu`` is not a beatmap folder — leave it alone)."""
+    osu_files = sorted(folder.rglob("*.osu"))
+    if not osu_files:
+        return None
+    if mode != "heavy_assets":
+        return set()
+    essential: set[str] = set()
+    for osu in osu_files:
+        try:
+            if osu.stat().st_size > _MAX_ENTRY_BYTES:
+                return None
+            text = osu.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            return None
+        for asset in get_osu_assets(text):
+            essential.add(asset.lower().replace("\\", "/"))
+    return essential
+
+
+def _folder_targets(folder: Path, mode: str) -> list[Path] | None:
+    """Files inside ``folder`` that ``mode`` would remove, or ``None`` to refuse."""
+    essential = _folder_essentials(folder, mode)
+    if essential is None:
+        return None
+    out: list[Path] = []
+    for p in folder.rglob("*"):
+        try:
+            if not p.is_file() or p.is_symlink():
+                continue          # never follow a link out of the set folder
+            size = p.stat().st_size
+        except OSError:
+            continue
+        if _is_removable(p.name.lower(), size, mode, essential):
+            out.append(p)
+    return out
+
+
+def scan_folder(folder: Path | str, mode: str = "video_only") -> tuple[int, int]:
+    """``(folder_size, removable_bytes)`` for a loose beatmap folder. Read-only."""
+    folder = Path(folder)
+    total = 0
+    for p in folder.rglob("*"):
+        try:
+            if p.is_file() and not p.is_symlink():
+                total += p.stat().st_size
+        except OSError:
+            pass
+    targets = _folder_targets(folder, mode)
+    if not targets:
+        return (total, 0)
+    removable = 0
+    for p in targets:
+        try:
+            removable += p.stat().st_size
+        except OSError:
+            pass
+    return (total, removable)
+
+
+def prune_folder(folder: Path | str, mode: str = "video_only",
+                 root: Path | str | None = None) -> int:
+    """Recycle the unwanted files inside a loose beatmap folder. Returns bytes freed.
+
+    Unlike :func:`prune_osz` there is no archive to rewrite — stable reads the
+    folder straight from disk, so removing a video just means the map has no
+    video. Three guards, because this deletes real files:
+
+    * ``root`` (the Songs directory) is enforced — a folder resolving outside it
+      is refused outright, so a stray symlink or a bad path cannot walk the disk;
+    * a folder with no ``.osu`` is not a beatmap folder and is left alone;
+    * files go to the **Recycle Bin**, never an unlink, so it stays undoable.
+    """
+    folder = Path(folder)
+    if not folder.is_dir():
+        return 0
+    if root is not None:
+        try:
+            folder.resolve().relative_to(Path(root).resolve())
+        except (ValueError, OSError):
+            return 0          # outside the configured Songs folder — refuse
+    targets = _folder_targets(folder, mode)
+    if not targets:
+        return 0
+    from send2trash import send2trash
+    freed = 0
+    for p in targets:
+        try:
+            size = p.stat().st_size
+            send2trash(str(p))
+            freed += size
+        except Exception:
+            continue          # one stubborn file must not abort the rest
+    return freed
+
+
+# -- choosing what to prune (pure) -------------------------------------------
+SORTS = ("largest", "smallest", "name")
+
+
+def select_targets(sets: list[dict], sort: str = "largest",
+                   limit: int | None = None) -> list[dict]:
+    """Order candidate sets and take the first ``limit``.
+
+    Only sets that would actually free something are eligible — offering to
+    "prune 200 sets" and then touching 40 of them would make the preview a lie.
+    ``sort`` is a :data:`SORTS` value; ``largest`` means most-freed-first, which
+    is what "get my disk space back" actually wants.
+    """
+    usable = [s for s in sets if s.get("freed", 0) > 0]
+    if sort == "smallest":
+        usable.sort(key=lambda s: (s.get("freed", 0), s.get("name", "")))
+    elif sort == "name":
+        usable.sort(key=lambda s: str(s.get("name", "")).lower())
+    else:
+        usable.sort(key=lambda s: (-s.get("freed", 0), str(s.get("name", ""))))
+    if limit is not None and limit > 0:
+        usable = usable[:limit]
+    return usable

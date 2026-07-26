@@ -35,6 +35,7 @@ class BaseServices:
             self._ratings_cancel = threading.Event()  # separate cancel for star-rating scan
             self._enrich_cancel = threading.Event()  # separate cancel for API enrichment
             self._msd_cancel = threading.Event()  # separate cancel for skillset (MSD) scan
+            self._prune_cancel = threading.Event()  # separate cancel for the prune scan
             self._rebuild_lock = threading.Lock()  # serialize tracking.xlsx writes
             self._reference_cache = None           # lazy osu! reference (invalidated on sync)
 
@@ -50,6 +51,7 @@ class BaseServices:
             self._ratings_cancel.set()
             self._enrich_cancel.set()
             self._msd_cancel.set()
+            self._prune_cancel.set()
 
         def rebuild(self) -> dict:
             # Serialize report writes so two workers (e.g. a Dashboard extract and a
