@@ -39,9 +39,11 @@ class MapDetailsDialog(QDialog):
     # set has no mania difficulty (key count is a mania-only concept).
     pass
 
-    def __init__(self, ctx, row: dict, parent=None):
+    def __init__(self, ctx, row: dict, parent=None, on_restore=None):
         super().__init__(parent)
         self.ctx = ctx
+        self._row = row
+        self._on_restore = on_restore
         t = ctx.t
         self.setWindowTitle(t("map_details_title"))
         self.setMinimumSize(640, 440)
@@ -65,6 +67,18 @@ class MapDetailsDialog(QDialog):
             sub.setWordWrap(True)
             sub.setText("   ·   ".join(bits))
             root.addWidget(sub)
+
+        # Pruned / missing banner. Before this, `is_pruned` showed up nowhere in
+        # the UI except as the hidden condition for a right-click menu entry, so a
+        # pruned set looked identical to a whole one and the way back was
+        # undiscoverable.
+        self.btn_restore = None
+        if row.get("is_pruned") or not row.get("in_library"):
+            banner = QLabel(objectName="status")
+            banner.setWordWrap(True)
+            banner.setText(t("map_details_pruned" if row.get("is_pruned")
+                             else "map_details_missing"))
+            root.addWidget(banner)
 
         # osu!-API enrichment block — what the API adds beyond the local parse.
         meta_bits = []
@@ -174,7 +188,21 @@ class MapDetailsDialog(QDialog):
         buttons = QDialogButtonBox(QDialogButtonBox.Close)
         buttons.rejected.connect(self.reject)
         buttons.accepted.connect(self.accept)
+        if on_restore is not None and row.get("filename") and (
+                row.get("is_pruned") or not row.get("in_library")):
+            # A first-class, visible way back — the caller owns the confirmation
+            # and the off-thread download (this dialog stays presentation-only).
+            self.btn_restore = buttons.addButton(t("btn_restore_map"),
+                                                 QDialogButtonBox.ActionRole)
+            self.btn_restore.setToolTip(t("tip_restore_map"))
+            self.btn_restore.clicked.connect(self._restore)
         root.addWidget(buttons)
+
+    def _restore(self) -> None:
+        fn = self._row.get("filename")
+        self.accept()
+        if fn and self._on_restore is not None:
+            self._on_restore(fn)
 
     def _on_diff_selected(self) -> None:
         items = self.table.selectedItems()

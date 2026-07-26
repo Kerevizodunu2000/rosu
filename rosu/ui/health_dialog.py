@@ -68,6 +68,11 @@ class HealthDialog(QDialog):
         self.verify_status = QLabel(objectName="status")
         self.verify_status.setWordWrap(True)
         root.addWidget(self.verify_status)
+        self.mismatch_label = QLabel(objectName="status")
+        self.mismatch_label.setWordWrap(True)
+        self.mismatch_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.mismatch_label.setVisible(False)
+        root.addWidget(self.mismatch_label)
         self.busy = QProgressBar()
         self.busy.setVisible(False)
         root.addWidget(self.busy)
@@ -150,10 +155,23 @@ class HealthDialog(QDialog):
             self.verify_status.setText(t("health_verify_cancelled",
                                          checked=res.get("checked", 0)))
             return
+        # Every bucket is named in plain language, including `pruned` — v1.7 moved
+        # pruned files out of `mismatch` into their own count, and leaving that
+        # count off screen made pruning look like it had lost sets from the totals.
         self.verify_status.setText(t(
             "health_verify_done", checked=res.get("checked", 0),
             ok=res.get("ok", 0), mismatch=res.get("mismatch", 0),
-            unhashed=res.get("unhashed", 0), missing=res.get("missing", 0)))
+            unhashed=res.get("unhashed", 0), missing=res.get("missing", 0),
+            pruned=res.get("pruned", 0)))
+        # "2 mismatches" is useless without knowing WHICH two.
+        names = res.get("mismatches") or []
+        if names:
+            self.mismatch_label.setText(
+                t("health_verify_mismatch_list", n=res.get("mismatch", 0))
+                + "\n" + "\n".join(f"• {n}" for n in names))
+            self.mismatch_label.setVisible(True)
+        else:
+            self.mismatch_label.setVisible(False)
 
     def _on_failed(self, msg: str) -> None:
         self.busy.setVisible(False)

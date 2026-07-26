@@ -184,6 +184,19 @@ STRINGS: dict[str, dict[str, str]] = {
     "search_none": {"en": "Not found in your memory.", "tr": "Hafızanızda bulunamadı."},
     "browse_all": {"en": "Showing all {n} tracks in your library.",
                    "tr": "Kütüphanendeki {n} müzik listeleniyor."},
+    "lib_status_pruned": {"en": "pruned ✂", "tr": "prune edildi ✂"},
+    "pruned_tip": {
+        "en": "Space-saving Prune removed this set's heavy files (video, and "
+              "depending on the mode large unused images). The beatmap itself, its "
+              "audio and its background are intact and it still plays. To get the "
+              "full set back, right-click the row → Repair, which re-downloads it "
+              "from an osu! mirror. List every pruned set with the search "
+              "pruned=yes .",
+        "tr": "Alan tasarrufu (Prune) bu setin ağır dosyalarını kaldırdı (video ve "
+              "moda göre kullanılmayan büyük görseller). Beatmap'in kendisi, sesi "
+              "ve arka planı yerinde; harita hâlâ oynanır. Setin tamamını geri "
+              "almak için satıra sağ tıkla → Onar; bir osu! aynasından yeniden "
+              "indirir. Tüm prune edilmiş setleri görmek için pruned=yes ara."},
     "search_truncated": {
         "en": "Showing {n} of {total} matches — narrow the query to see the rest.",
         "tr": "{total} eşleşmenin {n} tanesi listeleniyor — kalanı için aramayı "
@@ -285,6 +298,26 @@ STRINGS: dict[str, dict[str, str]] = {
     "map_details_plays": {"en": "{n} plays", "tr": "{n} oynanma"},
     "map_details_favs": {"en": "{n} favourites", "tr": "{n} favori"},
     "map_details_ranked_on": {"en": "ranked {d}", "tr": "ranked {d}"},
+    "map_details_pruned": {
+        "en": "✂ Pruned — the heavy files (video, and depending on the mode large "
+              "unused images) were removed to save space. The beatmap, its audio "
+              "and its background are intact and it still plays. Restore "
+              "re-downloads the complete set from an osu! mirror.",
+        "tr": "✂ Prune edildi — yer kazanmak için ağır dosyalar (video ve moda göre "
+              "kullanılmayan büyük görseller) kaldırıldı. Beatmap, sesi ve arka "
+              "planı yerinde; harita hâlâ oynanır. “Geri getir”, setin tamamını bir "
+              "osu! aynasından yeniden indirir."},
+    "map_details_missing": {
+        "en": "This set is in Rosu's memory but its file is not in the Library. "
+              "Restore re-downloads it from an osu! mirror.",
+        "tr": "Bu set Rosu'nun hafızasında var ama dosyası Library'de yok. “Geri "
+              "getir” onu bir osu! aynasından yeniden indirir."},
+    "btn_restore_map": {"en": "Restore (re-download)", "tr": "Geri getir (yeniden indir)"},
+    "tip_restore_map": {
+        "en": "Download the complete set again from a third-party osu! mirror and "
+              "replace the local file. You are asked to confirm first.",
+        "tr": "Setin tamamını üçüncü taraf bir osu! aynasından yeniden indirir ve "
+              "yerel dosyanın yerine koyar. Önce onayın istenir."},
     "map_details_no_enrich": {
         "en": "Ranked status, dates & play counts appear here once you run "
               "“Enrich from osu! API” in Settings.",
@@ -572,20 +605,38 @@ STRINGS: dict[str, dict[str, str]] = {
     "btn_compute_msd": {"en": "Compute Skillset Ratings (mania)",
                         "tr": "Beceri Puanlarını Hesapla (mania)"},
     "tip_compute_msd": {
-        "en": "Estimate each mania difficulty's Rosu Skillset Rating (stream, jack, "
-              "chordjack, stamina, tech…) locally for the whole Library. Pure, "
-              "offline — no engine or internet needed.",
-        "tr": "Kütüphanedeki her mania zorluğu için Rosu Beceri Puanını (stream, jack, "
-              "chordjack, stamina, tech…) yerel olarak tahmin et. Tamamen çevrimdışı — "
-              "motor veya internet gerekmez."},
+        "en": "Rates each MANIA difficulty on Etterna's 7 skillsets (stream, "
+              "jumpstream, handstream, stamina, jackspeed, chordjack, technical) "
+              "plus an overall — computed here, offline, no engine or internet. "
+              "This is what fills the Skill column in Search, the radar in Map "
+              "Details, and a pack's average radar. Sets with no mania difficulty "
+              "are visited but produce no rating: the rating is mania-only by "
+              "design. Already-scanned sets are skipped, so a second run is "
+              "normally a no-op.",
+        "tr": "Her MANIA zorluğunu Etterna'nın 7 beceri alanında (stream, "
+              "jumpstream, handstream, stamina, jackspeed, chordjack, technical) "
+              "ve bir genel puanla derecelendirir — burada, çevrimdışı, motor ya "
+              "da internet gerekmeden hesaplanır. Arama'daki Beceri sütununu, "
+              "Harita Detayları'ndaki radarı ve bir paketin ortalama radarını "
+              "besleyen şey budur. Mania zorluğu olmayan setler taranır ama puan "
+              "üretmez: bu derecelendirme tasarım gereği yalnızca mania içindir. "
+              "Daha önce taranmış setler atlanır, bu yüzden ikinci çalıştırma "
+              "normalde hiçbir şey yapmaz."},
     "msd_no_library": {
         "en": "Your Library is empty — add some beatmaps first.",
         "tr": "Kütüphanen boş — önce birkaç beatmap ekle."},
     "msd_done": {
-        "en": "Skillset ratings: {rated} mania sets rated, {scanned} scanned, "
-              "{remaining} remaining.",
-        "tr": "Beceri puanları: {rated} mania set derecelendirildi, {scanned} tarandı, "
-              "{remaining} kaldı."},
+        "en": "{scanned} set(s) scanned · {rated} had mania difficulties and were "
+              "rated · {remaining} left. Sets with no mania difficulty get no "
+              "skillset rating — that is by design, not a failure.",
+        "tr": "{scanned} set tarandı · {rated} tanesinde mania zorluğu vardı ve "
+              "derecelendirildi · {remaining} kaldı. Mania zorluğu olmayan setler "
+              "beceri puanı almaz — bu bir hata değil, tasarım gereği."},
+    "msd_nothing_new": {
+        "en": "Every Library set has already been scanned — nothing new to rate. "
+              "(Only mania difficulties get a skillset rating.)",
+        "tr": "Kütüphanedeki her set zaten taranmış — derecelendirilecek yeni bir "
+              "şey yok. (Beceri puanı yalnızca mania zorlukları için verilir.)"},
     # -- v1.5: star ratings (rosu-pp) + osu! API metadata enrichment ----------
     "btn_compute_ratings": {"en": "Compute Star Ratings",
                             "tr": "Yıldız Derecelerini Hesapla"},
@@ -700,18 +751,36 @@ STRINGS: dict[str, dict[str, str]] = {
                        "tr": "En büyük beatmap setleri (yer nereye gidiyor):"},
     "btn_verify": {"en": "Verify (SHA-256)", "tr": "Doğrula (SHA-256)"},
     "tip_verify": {
-        "en": "Re-hash each backed-up set and compare to the checksum stored when "
-              "it was backed up, flagging corruption or drift. Read-only.",
-        "tr": "Her yedeklenmiş seti yeniden özetler ve yedekleme sırasında saklanan "
-              "sağlama toplamıyla karşılaştırır; bozulma/kaymayı işaretler. Salt okunur."},
+        "en": "Re-reads every Library file and compares its SHA-256 to the "
+              "checksum recorded when that file was backed up to Drive, so you "
+              "can tell whether the bytes on disk have changed since. It only "
+              "REPORTS — it never repairs, moves or deletes anything.",
+        "tr": "Kütüphanedeki her dosyayı yeniden okur ve SHA-256'sını, o dosya "
+              "Drive'a yedeklenirken kaydedilen sağlama toplamıyla karşılaştırır; "
+              "böylece diskteki baytların o günden beri değişip değişmediğini "
+              "görürsün. Yalnızca RAPORLAR — hiçbir şeyi onarmaz, taşımaz, silmez."},
     "health_verifying": {"en": "Verifying…", "tr": "Doğrulanıyor…"},
     "health_verify_progress": {"en": "Verifying… {done}/{total}",
                                "tr": "Doğrulanıyor… {done}/{total}"},
     "health_verify_done": {
-        "en": "Verified {checked}: {ok} OK, {mismatch} mismatch, {unhashed} "
-              "un-backed-up, {missing} missing.",
-        "tr": "{checked} doğrulandı: {ok} sağlam, {mismatch} uyuşmazlık, {unhashed} "
-              "yedeksiz, {missing} eksik."},
+        "en": "Read-only check, nothing was changed. {checked} file(s) compared: "
+              "{ok} still match their backup · {mismatch} changed since the backup "
+              "(re-imported, refreshed, pruned — or corrupted) · {unhashed} were "
+              "never backed up to Drive, so there is nothing to compare them "
+              "against · {pruned} are pruned (their bytes changed on purpose) · "
+              "{missing} file(s) could not be read.",
+        "tr": "Salt-okunur kontrol, hiçbir şey değiştirilmedi. {checked} dosya "
+              "karşılaştırıldı: {ok} tanesi yedeğiyle hâlâ aynı · {mismatch} tanesi "
+              "yedeklendiğinden beri değişmiş (yeniden içe aktarma, yenileme, prune "
+              "— ya da bozulma) · {unhashed} tanesi Drive'a hiç yedeklenmemiş, yani "
+              "karşılaştırılacak bir şey yok · {pruned} tanesi prune edilmiş "
+              "(baytları bilerek değişti) · {missing} dosya okunamadı."},
+    "health_verify_mismatch_list": {
+        "en": "Changed since backup ({n}) — right-click one in Search to re-download "
+              "it, or back the Library up again to refresh the checksums:",
+        "tr": "Yedeklendiğinden beri değişenler ({n}) — Arama'da birine sağ tıklayıp "
+              "yeniden indirebilir ya da sağlama toplamlarını tazelemek için "
+              "kütüphaneyi tekrar yedekleyebilirsin:"},
     "health_verify_cancelled": {"en": "Verify cancelled after {checked}.",
                                 "tr": "Doğrulama {checked} sonra iptal edildi."},
 
@@ -943,6 +1012,26 @@ STRINGS: dict[str, dict[str, str]] = {
         "tr": "{count} set {archives} arşive aktarıldı."},
     "sc_export_empty": {"en": "Nothing to export from that source.",
                         "tr": "Bu kaynakta dışa aktarılacak bir şey yok."},
+    # -- v1.7.1: what every queued job actually chose ------------------------
+    "job_opt_all": {"en": "all sets", "tr": "tüm setler"},
+    "job_opt_random": {"en": "{n} at random", "tr": "rastgele {n}"},
+    "job_opt_stars": {"en": "★{lo}–{hi}", "tr": "★{lo}–{hi}"},
+    "job_opt_stars_min": {"en": "★{lo} and up", "tr": "★{lo} ve üstü"},
+    "job_opt_split": {"en": "split every {size}", "tr": "her {size}'ta böl"},
+    "job_opt_upload": {"en": "upload to Drive", "tr": "Drive'a yükle"},
+    "job_opt_share": {"en": "public link", "tr": "herkese açık link"},
+    "job_opt_dest": {"en": "→ {path}", "tr": "→ {path}"},
+    "job_opt_link": {"en": "Link: {url}", "tr": "Link: {url}"},
+    "job_opt_only_new": {"en": "only sets you don't have",
+                         "tr": "yalnızca sende olmayan setler"},
+    "job_opt_every_set": {"en": "every set, duplicates included",
+                          "tr": "kopyalar dahil her set"},
+    "job_opt_prune_mode": {"en": "mode: {mode}", "tr": "mod: {mode}"},
+    "sc_job_repeat_confirm": {
+        "en": "You just started this exact job — it is in the queue below. Start "
+              "it again anyway?",
+        "tr": "Bu işin tam aynısını az önce başlattın — aşağıdaki kuyrukta duruyor. "
+              "Yine de tekrar başlatılsın mı?"},
     "sc_export_link": {"en": "Shareable link(s):", "tr": "Paylaşılabilir link(ler):"},
     "sc_export_link_copied": {"en": "Link copied to the clipboard.",
                               "tr": "Link panoya kopyalandı."},

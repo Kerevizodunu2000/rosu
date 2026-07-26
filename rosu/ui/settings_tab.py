@@ -870,9 +870,15 @@ class SettingsTab(QWidget):
     def _msd_done(self, res) -> None:
         self._msd_running = False
         self.btn_msd.setText(self.ctx.t("btn_compute_msd"))
-        self.lbl_msd_status.setText(self.ctx.t(
-            "msd_done", rated=res["rated"], scanned=res["scanned"],
-            remaining=res["remaining"]))
+        if not (res["scanned"] or res["rated"] or res["remaining"]):
+            # Re-running after a completed scan legitimately reports 0/0/0 (already
+            # scanned sets are skipped). "0 rated, 0 scanned, 0 remaining" read as a
+            # failure, so say what actually happened instead.
+            self.lbl_msd_status.setText(self.ctx.t("msd_nothing_new"))
+        else:
+            self.lbl_msd_status.setText(self.ctx.t(
+                "msd_done", rated=res["rated"], scanned=res["scanned"],
+                remaining=res["remaining"]))
         self.mw.search.reload()
 
     def _msd_failed(self, msg) -> None:

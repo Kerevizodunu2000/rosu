@@ -215,6 +215,124 @@ def test_export_result_dialog_renders_a_live_link(qapp, tmp_path, monkeypatch):
     ctx.db.close()
 
 
+def test_job_row_detail_spells_out_every_export_choice(qapp, tmp_path, monkeypatch):
+    """v1.7.1: the row title carries only source + filename, so two exports that
+    differed in random-N / star range / split / upload rendered identically."""
+    from rosu.jobs import Job, new_id
+    from rosu.ui.shortcuts_tab import _describe_job
+    ctx = _ctx(tmp_path, monkeypatch)
+    job = Job(new_id(), "job_export", kind="export")
+    job.ctx["options"] = {
+        "source": "library", "archive_name": "rosu-export-library.zip",
+        "fmt": "7z", "split_bytes": 2_000_000_000, "upload": True, "share": True,
+        "limit": 10, "star_range": (3.5, 6.0), "dest": r"C:\out"}
+    line = _describe_job(job, ctx.t)
+    for expected in ("10", "3.50", "6.00", "7Z", "rosu-export-library.zip", r"C:\out"):
+        assert expected in line, f"{expected!r} missing from {line!r}"
+
+    # An open-ended star range must not print "inf".
+    job.ctx["options"]["star_range"] = (4.0, float("inf"))
+    assert "inf" not in _describe_job(job, ctx.t).lower()
+
+    # Once finished, the produced link is shown on the row too.
+    job.result = {"drive": {"files": [{"link": "https://drive.example/abc"}]}}
+    assert "https://drive.example/abc" in _describe_job(job, ctx.t)
+
+    # A job with no recorded options renders nothing rather than a stray separator.
+    assert _describe_job(Job(new_id(), "job_dedup", kind="dedup"), ctx.t) == ""
+    ctx.db.close()
+
+
+def test_consecutive_duplicate_job_asks_but_an_interleaved_one_does_not(
+        qapp, tmp_path, monkeypatch):
+    """The owner's rule: ask only when the SAME action is started twice in a row.
+    If something else was queued in between, repeating is deliberate — don't nag."""
+    from PySide6.QtWidgets import QMessageBox
+    from rosu.jobs import Job, new_id
+    from rosu.ui.main_window import MainWindow
+    ctx = _ctx(tmp_path, monkeypatch)
+    win = MainWindow(ctx, qapp)
+    tab = win.shortcuts
+    queued, asked = [], []
+    monkeypatch.setattr(tab.queue, "enqueue", queued.append)
+
+    def fake_question(*a, **k):
+        asked.append(1)
+        return QMessageBox.Yes
+    monkeypatch.setattr(QMessageBox, "question", fake_question)
+
+    sig_a, sig_b = ("export", "library", "zip"), ("dedup",)
+    assert tab._enqueue(Job(new_id(), "j", kind="export"), sig_a)
+    assert not asked                      # first time: straight through
+    assert tab._enqueue(Job(new_id(), "j", kind="export"), sig_a)
+    assert len(asked) == 1                # immediate repeat: asked
+    assert tab._enqueue(Job(new_id(), "j", kind="dedup"), sig_b)
+    assert len(asked) == 1                # different job: no question
+    assert tab._enqueue(Job(new_id(), "j", kind="export"), sig_a)
+    assert len(asked) == 1                # no longer consecutive: no question
+    assert len(queued) == 4
+
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.No)
+    assert not tab._enqueue(Job(new_id(), "j", kind="export"), sig_a)
+    assert len(queued) == 4               # declined → not queued
+    win.close()
+    ctx.db.close()
+
+
+def test_map_details_offers_restore_only_when_needed(qapp, tmp_path, monkeypatch):
+    """v1.7.1: a pruned set looked identical to a whole one, and the only way back
+    was a right-click context item the owner never found."""
+    from rosu.ui.map_details_dialog import MapDetailsDialog
+    ctx = _ctx(tmp_path, monkeypatch)
+    called = []
+
+    whole = {"display_name": "A - B", "filename": "1 A - B.osz", "in_library": 1,
+             "is_pruned": 0, "difficulties": []}
+    dlg = MapDetailsDialog(ctx, whole, None, on_restore=called.append)
+    assert dlg.btn_restore is None            # nothing to restore
+    dlg.close()
+
+    pruned = dict(whole, is_pruned=1)
+    dlg = MapDetailsDialog(ctx, pruned, None, on_restore=called.append)
+    assert dlg.btn_restore is not None
+    dlg.btn_restore.click()
+    assert called == ["1 A - B.osz"]          # hands the filename to the caller
+    dlg.close()
+
+    # No callback (e.g. opened from somewhere that can't repair) → no button.
+    dlg = MapDetailsDialog(ctx, pruned, None)
+    assert dlg.btn_restore is None
+    dlg.close()
+    ctx.db.close()
+
+
+def test_health_dialog_shows_pruned_bucket_and_mismatched_files(qapp, tmp_path,
+                                                                monkeypatch):
+    """v1.7.1: `pruned` got its own bucket in v1.7 but was never displayed, so
+    pruning looked like it lost sets from the totals; and "2 mismatch" was useless
+    without saying WHICH two."""
+    from rosu.ui.health_dialog import HealthDialog
+    ctx = _ctx(tmp_path, monkeypatch)
+    report = {"usage": {"files": 0, "total_bytes": 0},
+              "scrub": {"present": 0, "orphans": [], "dead_links": [], "memory": 0},
+              "biggest": []}
+    dlg = HealthDialog(ctx, report, None)
+    dlg._on_verified({"checked": 1922, "ok": 501, "mismatch": 2, "unhashed": 1419,
+                      "missing": 0, "pruned": 7,
+                      "mismatches": ["a.osz", "b.osz"]})
+    text = dlg.verify_status.text()
+    assert "7" in text and "1419" in text          # pruned + unhashed both named
+    # isHidden() reflects the explicit hidden flag without needing a shown window.
+    assert not dlg.mismatch_label.isHidden()
+    assert "a.osz" in dlg.mismatch_label.text()
+
+    dlg._on_verified({"checked": 3, "ok": 3, "mismatch": 0, "unhashed": 0,
+                      "missing": 0, "pruned": 0, "mismatches": []})
+    assert dlg.mismatch_label.isHidden()           # cleared on a clean re-run
+    dlg.close()
+    ctx.db.close()
+
+
 def test_health_dialog_builds_and_renders_report(qapp, tmp_path, monkeypatch):
     """The v1.1 Library Health dialog constructs and populates from a report."""
     from rosu.ui.health_dialog import HealthDialog

@@ -25,7 +25,15 @@ _ENUM_FIELDS = {"mode", "status"}
 # `artist=camellia` matches only the artist column (not tags/title). '=' means
 # "contains" here (case-insensitive substring).
 _TEXT_FIELDS = {"artist", "mapper", "creator", "name", "source", "title", "tags"}
-_ALL_FIELDS = _NUM_FIELDS | _INT_FIELDS | _ENUM_FIELDS | _TEXT_FIELDS
+# Yes/no flags on the track itself. `pruned=yes` is the only way to LIST the sets
+# Prune stripped — before this they were invisible in Search, which is why the
+# owner could not tell which maps had been pruned or find them to restore.
+_BOOL_FIELDS = {"pruned"}
+_ALL_FIELDS = (_NUM_FIELDS | _INT_FIELDS | _ENUM_FIELDS | _TEXT_FIELDS
+               | _BOOL_FIELDS)
+
+_TRUE_WORDS = {"yes", "true", "1", "on", "evet"}
+_FALSE_WORDS = {"no", "false", "0", "off", "hayır", "hayir"}
 
 # Accept the ways players name the four rulesets; normalize to MODE_NAMES vocab.
 _MODE_ALIASES = {
@@ -104,8 +112,15 @@ def _to_filter(m) -> Filter | None:
             return Filter("key", op, int(val))   # keycount is an integer column
         except ValueError:
             return None
-    # enum + text fields: only '=' is meaningful
+    # enum + bool + text fields: only '=' is meaningful
     if op != "=":
+        return None
+    if key in _BOOL_FIELDS:
+        low = val.lower()
+        if low in _TRUE_WORDS:
+            return Filter(key, "=", 1)
+        if low in _FALSE_WORDS:
+            return Filter(key, "=", 0)
         return None
     if key == "mode":
         mapped = _MODE_ALIASES.get(val.lower())

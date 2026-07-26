@@ -84,3 +84,26 @@ def test_length_accepts_mmss_and_seconds():
     assert query.parse("length=1:30").filters[0].value == 90.0
     # a bad mm:ss (seconds >= 60) is rejected → stays free text
     assert query.parse("length=1:75").filters == []
+
+
+# -- v1.7.1: pruned=yes/no, the only way to LIST pruned sets ------------------
+def test_pruned_filter_accepts_yes_no_forms():
+    assert _f(query.parse("pruned=yes")) == [("pruned", "=", 1)]
+    assert _f(query.parse("pruned=true")) == [("pruned", "=", 1)]
+    assert _f(query.parse("pruned=1")) == [("pruned", "=", 1)]
+    assert _f(query.parse("pruned=no")) == [("pruned", "=", 0)]
+    assert _f(query.parse("pruned=0")) == [("pruned", "=", 0)]
+
+
+def test_pruned_filter_with_a_bad_value_stays_free_text():
+    """Same contract as every other filter: an unparseable value is not silently
+    dropped, it falls through to the free text."""
+    p = query.parse("pruned=maybe")
+    assert p.filters == [] and p.free_text == "pruned=maybe"
+
+
+def test_pruned_filter_combines_with_others():
+    p = query.parse("pruned=yes star>4 camellia")
+    assert ("pruned", "=", 1) in _f(p)
+    assert ("star", ">", 4.0) in _f(p)
+    assert p.free_text == "camellia"

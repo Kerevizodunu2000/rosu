@@ -271,6 +271,12 @@ class SearchTab(QWidget):
                 status = row.get("library_status") or "-"
                 if status == "disappeared" and row.get("status_changed_at"):
                     status = f"disappeared @ {row['status_changed_at']}"
+                if row.get("is_pruned"):
+                    # `is_pruned` used to exist ONLY to decide whether the row got
+                    # a repair context-menu entry — invisible otherwise, so there
+                    # was no way to see which sets had been stripped, and the only
+                    # way back was a right-click nobody found.
+                    status = f"{status} · {self.ctx.t('lib_status_pruned')}"
                 bpm = row.get("bpm")
                 length = row.get("length_seconds")
                 attempts = row.get("copy_attempts", 0)
@@ -323,6 +329,8 @@ class SearchTab(QWidget):
                         item.setToolTip(star_tip)  # per-diff star + CS/AR/OD/HP
                     if c == 9 and skill_tip:
                         item.setToolTip(skill_tip)  # per-diff Rosu Skillset breakdown
+                    if c == 13 and row.get("is_pruned"):
+                        item.setToolTip(self.ctx.t("pruned_tip"))
                     if c == 14:
                         item.setToolTip(self.ctx.t("where_legend"))  # explain the icons
                     if c in (2, 3, 4, 7, 8, 9, 12):
@@ -393,7 +401,8 @@ class SearchTab(QWidget):
         if idx is None or idx >= len(self._last_rows):
             return
         from .map_details_dialog import MapDetailsDialog
-        MapDetailsDialog(self.ctx, self._last_rows[idx], self).exec()
+        MapDetailsDialog(self.ctx, self._last_rows[idx], self,
+                         on_restore=self._repair_map).exec()
 
     def _show_histogram(self) -> None:
         """Star distribution. If the Library has sets without a star yet, offer to

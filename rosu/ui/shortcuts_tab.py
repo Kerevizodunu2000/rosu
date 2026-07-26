@@ -11,6 +11,7 @@ several jobs can be queued at once.
 from __future__ import annotations
 
 import html
+import math
 import os
 import time
 from pathlib import Path
@@ -69,6 +70,56 @@ def _copy_to_clipboard(text: str) -> bool:
     return True
 
 
+def _describe_job(job, t) -> str:
+    """One line spelling out every choice behind a queued job.
+
+    The row title carries only a job's kind and (for exports) the archive name, so
+    two exports that differ in random-N, star range, split size or upload/share
+    rendered as identical rows — the user had no way to tell which was which, or
+    even that the second one had really been queued. Built from ``job.ctx["options"]``
+    (plain data written by the service layer) and translated here, so switching
+    language re-renders it correctly.
+    """
+    opts = job.ctx.get("options") or {}
+    if not opts:
+        return ""
+    bits: list[str] = []
+    if job.kind == "export":
+        bits.append(t(f"sc_source_{opts['source']}"))
+        bits.append((opts.get("fmt") or "zip").upper())
+        limit = opts.get("limit")
+        bits.append(t("job_opt_random", n=limit) if limit else t("job_opt_all"))
+        rng = opts.get("star_range")
+        if rng:
+            lo, hi = rng
+            bits.append(t("job_opt_stars_min", lo=f"{lo:.2f}") if math.isinf(hi)
+                        else t("job_opt_stars", lo=f"{lo:.2f}", hi=f"{hi:.2f}"))
+        if opts.get("split_bytes"):
+            bits.append(t("job_opt_split", size=_fmt_size(opts["split_bytes"])))
+        if opts.get("upload"):
+            bits.append(t("job_opt_upload"))
+        if opts.get("share"):
+            bits.append(t("job_opt_share"))
+        if opts.get("archive_name"):
+            bits.append(str(opts["archive_name"]))
+        if opts.get("dest"):
+            bits.append(t("job_opt_dest", path=opts["dest"]))
+    elif job.kind == "unpack":
+        bits.append(t("job_opt_only_new") if opts.get("skip_duplicates")
+                    else t("job_opt_every_set"))
+    elif job.kind == "prune" and opts.get("mode"):
+        bits.append(t("job_opt_prune_mode", mode=opts["mode"]))
+    if not bits:
+        return ""
+    line = "   ·   ".join(bits)
+    # Once it has finished, show the link it actually produced.
+    drive = (job.result or {}).get("drive") or {}
+    links = [f["link"] for f in drive.get("files", []) if f.get("link")]
+    if links:
+        line += "\n" + t("job_opt_link", url=links[0])
+    return line
+
+
 class JobRowWidget(QFrame):
     """One row in the İş Kuyruğu list: title + state chip + cancel, and a line
     per sub-step with a glyph and (for the active step) a thin progress bar.
@@ -96,6 +147,13 @@ class JobRowWidget(QFrame):
         head.addWidget(self.lbl_state)
         head.addWidget(self.btn_cancel)
         lay.addLayout(head)
+
+        self.lbl_detail = QLabel(objectName="status")
+        self.lbl_detail.setWordWrap(True)
+        self.lbl_detail.setContentsMargins(16, 0, 0, 0)
+        self.lbl_detail.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.lbl_detail.setVisible(False)
+        lay.addWidget(self.lbl_detail)
 
         self.step_rows: list = []
         for step in job.steps:
@@ -126,6 +184,9 @@ class JobRowWidget(QFrame):
         self.lbl_state.setText(t(_STATE_KEY.get(self.job.state, "job_state_pending")))
         self.btn_cancel.setVisible(self.job.state in (State.PENDING, State.RUNNING))
         self.setToolTip(self.job.error or self.job.tooltip or "")
+        detail = _describe_job(self.job, t)
+        self.lbl_detail.setText(detail)
+        self.lbl_detail.setVisible(bool(detail))
         for step, lbl, bar, skip in self.step_rows:
             # The label is rich text (for the strikethrough), and label_kwargs can
             # carry a user-chosen filename — escape it so an '&' or '<' in the name
@@ -156,6 +217,7 @@ class ShortcutsTab(QWidget):
         self._status_key: str | None = "ready"   # remembered so a language change
         self._status_kwargs: dict = {}            # can re-render the status message
         self._rows: dict = {}                     # job.id -> JobRowWidget
+        self._last_signature = None               # guards a CONSECUTIVE repeat only
 
         self.queue = JobQueueController(self)
         self.queue.changed.connect(self._refresh_queue)
@@ -536,12 +598,12 @@ class ShortcutsTab(QWidget):
         if not target_exe or not Path(target_exe).exists():
             QMessageBox.warning(self, t("app_title"), t("sc_no_target_exe"))
             return
-        self.queue.enqueue(self.services.build_transfer_job(source, target))
-        self._set_status("job_added")
+        self._enqueue(self.services.build_transfer_job(source, target),
+                      ("transfer", source, target))
 
     def on_save(self, sources) -> None:
-        self.queue.enqueue(self.services.build_save_job(sources))
-        self._set_status("job_added")
+        self._enqueue(self.services.build_save_job(sources),
+                      ("save", tuple(sources)))
 
     def on_unpack(self, targets) -> None:
         t = self.ctx.t
@@ -557,8 +619,8 @@ class ShortcutsTab(QWidget):
         if clicked is None or box.buttonRole(clicked) == QMessageBox.RejectRole:
             return
         skip = clicked is only_new   # "Only new" skips sets already in the target
-        self.queue.enqueue(self.services.build_unpack_job(targets, skip))
-        self._set_status("job_added")
+        self._enqueue(self.services.build_unpack_job(targets, skip),
+                      ("unpack", tuple(targets), skip))
 
     def on_export(self) -> None:
         t = self.ctx.t
@@ -606,8 +668,31 @@ class ShortcutsTab(QWidget):
         for st in job.steps:
             if st.key == "job_step_gather":
                 st.label_kwargs["source"] = src_label       # ...and in the gather step
+        # Signature deliberately EXCLUDES the destination: it now carries a
+        # timestamp, so two otherwise-identical exports would never match.
+        self._enqueue(job, ("export", source, fmt, split, upload, share, limit,
+                            star_range))
+
+    def _enqueue(self, job, signature=None) -> bool:
+        """Queue a job — but if this is the IDENTICAL action the user just queued,
+        ask first.
+
+        Only a *consecutive* repeat is questioned. If anything else was queued in
+        between, repeating an action is almost certainly deliberate (export ten
+        different ranges in a row) and must not nag. Comparing against the last
+        enqueued signature alone keeps that rule exact and stateless.
+        """
+        if signature is not None and signature == self._last_signature:
+            t = self.ctx.t
+            if QMessageBox.question(
+                    self, t("app_title"), t("sc_job_repeat_confirm"),
+                    QMessageBox.Yes | QMessageBox.No,
+                    QMessageBox.No) != QMessageBox.Yes:
+                return False
+        self._last_signature = signature
         self.queue.enqueue(job)
         self._set_status("job_added")
+        return True
 
     def _dest_in_use(self, dest_base: Path) -> bool:
         """Is another export job — queued, running or uploading — already writing
@@ -657,14 +742,12 @@ class ShortcutsTab(QWidget):
     def on_dedup(self) -> None:
         """Queue a dedup job: it scans first, then WAITS at a gate for the preview
         confirmation before recycling anything (240-file safety)."""
-        self.queue.enqueue(self.services.build_dedup_job())
-        self._set_status("job_added")
+        self._enqueue(self.services.build_dedup_job(), ("dedup",))
 
     def on_prune(self) -> None:
         """Queue a prune job: it scans first, then WAITS at a gate for the preview
         confirmation before recycling anything."""
-        self.queue.enqueue(self.services.build_prune_job())
-        self._set_status("job_added")
+        self._enqueue(self.services.build_prune_job(), ("prune",))
 
     # -- queue reactions -------------------------------------------------------
     def _refresh_queue(self) -> None:

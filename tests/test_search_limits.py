@@ -165,3 +165,29 @@ def test_histogram_empty_library_is_safe(tmp_path):
     data = svc.star_histogram_data()
     assert data == {"bins": [], "difficulties": 0, "sets": 0}
     db.close()
+
+
+# -- 3.5 pruned sets must be findable ----------------------------------------
+def test_pruned_filter_selects_only_pruned_sets():
+    """Before this the pruned flag existed only as the hidden condition for a
+    right-click menu entry — there was no way to LIST what Prune had stripped."""
+    db = _db()
+    plain = _track(db, 1, name="Whole")
+    cut = _track(db, 2, name="Stripped")
+    db.set_pruned_state(cut, True, 5_000_000)
+    got = db.filtered_tracks([Filter("pruned", "=", 1)])
+    assert [r["display_name"] for r in got] == ["Artist - Stripped"]
+    assert db.count_filtered_tracks([Filter("pruned", "=", 1)]) == 1
+    rest = db.filtered_tracks([Filter("pruned", "=", 0)])
+    assert [r["id"] for r in rest] == [plain]   # NULL/0 both count as not pruned
+    db.close()
+
+
+def test_pruned_filter_round_trips_through_search():
+    db = _db()
+    _track(db, 1, name="Whole")
+    cut = _track(db, 2, name="Stripped")
+    db.set_pruned_state(cut, True, 5_000_000)
+    rows = search.search(db, "pruned=yes")
+    assert [r["display_name"] for r in rows] == ["Artist - Stripped"]
+    db.close()

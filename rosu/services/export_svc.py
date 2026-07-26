@@ -203,7 +203,9 @@ class ExportMixin:
             title = ("job_unpack_both" if len(targets) > 1
                      else f"job_unpack_{targets[0]}")
             job = jobs.Job(jobs.new_id(), title, kind="unpack")
-    
+            # "Only new" vs "All" is invisible in the title — surface it as data.
+            job.ctx["options"] = {"skip_duplicates": bool(skip_duplicates)}
+
             def s_prescan(ctx, progress, cancel):
                 plans = self.prescan_all(progress)
                 ctx["approved"] = [(Path(p.zip_path), p.parsed)
@@ -336,6 +338,17 @@ class ExportMixin:
             # aimed at the same destination — otherwise job 2's archive overwrites
             # job 1's *while job 1 is uploading it* (the lanes overlap by design).
             job.ctx["dest_base"] = str(dest_base)
+            # Every choice behind this job, as data. Two exports differing only in
+            # random-N or star range used to render as identical queue rows (the
+            # title carries just source + filename), so the user could not tell
+            # them apart. The UI turns this into a translated detail line — the
+            # service layer stays Qt- and i18n-free.
+            job.ctx["options"] = {
+                "source": source, "archive_name": name, "fmt": fmt,
+                "split_bytes": split_bytes, "upload": upload, "share": share,
+                "limit": limit, "star_range": star_range,
+                "dest": str(dest_base.parent),
+            }
             job.on_cleanup.append(lambda: shutil.rmtree(stage, ignore_errors=True))
     
             def s_gather(ctx, progress, cancel):
@@ -415,7 +428,10 @@ class ExportMixin:
             """Library prune as a job: scan (preview) -> GATED remove. The remove step
             waits for an explicit UI confirmation."""
             job = jobs.Job(jobs.new_id(), "job_prune", kind="prune")
-    
+            # Which prune mode this run will use — it comes from Settings, so the
+            # queue row is the only place the user can see what was actually picked.
+            job.ctx["options"] = {"mode": getattr(self.cfg, "prune_mode", "") or ""}
+
             def s_scan(ctx, progress, cancel):
                 ctx["plan"] = self.prune_library_plan()
     

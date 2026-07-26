@@ -842,6 +842,10 @@ class Database:
         """
         track_cols = {"bpm": "bpm", "status": "ranked_status",
                       "length": "length_seconds"}
+        # `pruned=yes/no` — the parser has already reduced the value to 1/0.
+        # COALESCE covers rows written before schema v9 added the column, where
+        # NULL means "not pruned".
+        bool_cols = {"pruned": "is_pruned"}
         diff_cols = {"star": "star_rating", "mode": "mode", "key": "keycount",
                      "keys": "keycount", "cs": "cs", "ar": "ar", "od": "od", "hp": "hp"}
         text_cols = {"artist": "artist", "creator": "creator", "title": "title",
@@ -857,6 +861,9 @@ class Database:
                 params.append(f"%{f.value}%")
             elif f.op not in cmp_ops:
                 continue
+            elif f.field in bool_cols:
+                frags.append(f"COALESCE(tracks.{bool_cols[f.field]}, 0) = ?")
+                params.append(1 if f.value else 0)
             elif f.field in track_cols:
                 frags.append(f"tracks.{track_cols[f.field]} {f.op} ?")
                 params.append(f.value)

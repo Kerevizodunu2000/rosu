@@ -45,10 +45,33 @@ now describes the library it claims to describe.**
   behaviour), copies the link to the clipboard as soon as it opens, and offers a Copy button
   that does not close the dialog.
 
+- **Pruned sets were invisible.** `is_pruned` existed in the UI only as the hidden condition for a
+  right-click menu entry, so a pruned set looked identical to a whole one and the only way back was
+  a context item that was never found. Pruned sets now say so in the Library column (with a tooltip
+  explaining what was removed and that the map still plays), are listable with a `pruned=yes`
+  search, and Map Details shows a banner plus a first-class **Restore (re-download)** button.
+- **Two different exports could render as the same queue row.** The row title carries only the
+  source and archive name, so exports differing in random-N, star range, split size or
+  upload/share were indistinguishable. Each row now spells out every choice that was made — and
+  once a job finishes, the share link it produced.
+- **The skillset scan and Library verify results were misleading.** "707 rated, 1922 scanned"
+  never said that the rating is mania-only by design; re-running reported "0, 0, 0" because
+  already-scanned sets are skipped, which read as a failure. Verify listed "mismatch" and
+  "un-backed-up" without saying what either meant, never said it is read-only, never showed
+  *which* files mismatched, and omitted the `pruned` bucket v1.7 introduced — so pruning looked
+  like it lost sets from the totals. All reworded, and mismatched filenames are now listed.
+
 ### Added
 - Histogram bin mode: keep the data-driven ranges (which produce edges like 3.94–4.55) or switch
   to plain whole-star buckets (0–1, 1–2, 2–3 …). Empty buckets inside the range are kept so the
   axis reads continuously.
+- `pruned=yes` / `pruned=no` search filter.
+- Queueing the **identical** action twice in a row now asks whether you meant to. Only a
+  consecutive repeat is questioned — if another job was queued in between, repeating is
+  deliberate and goes straight through.
+- A test that resolves every literal `t("…")` key in the source against the string table. v1.7.0
+  shipped ~15 strings written as `t(key, default="…")`; there is no such fallback, so they would
+  have rendered as raw key names and nothing would have failed until someone opened that screen.
 - Settings now names the Google Drive folder Rosu backs up into, as a link, and explains why a
   "Rosu" folder it did not create is invisible to it: Rosu asks for the narrow `drive.file`
   permission, which only ever exposes files this app created — so a folder made by hand, or one
