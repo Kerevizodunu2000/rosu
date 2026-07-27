@@ -10,6 +10,10 @@ the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.7.1] - 2026-07-27
+
+> **First published release of the v1.7 line.** v1.7.0 was tagged in the changelog but never released, so this build carries both: the v1.7.0 work below and everything in this section. Upgrading from v1.6.3 gets all of it at once.
+
 **Live-test correctness batch: search no longer hides results, and the star histogram
 now describes the library it claims to describe.**
 
@@ -1049,7 +1053,15 @@ Initial release. The core archive-management pipeline.
 - **EN/TR** localization; English-only code/logs.
 - Single-file **PyInstaller** build (`osu-archiver.spec`) + GitHub Actions build workflow.
 
-[Unreleased]: https://github.com/Kerevizodunu2000/rosu/compare/v1.3.3...HEAD
+[Unreleased]: https://github.com/Kerevizodunu2000/rosu/compare/v1.7.1...HEAD
+[1.7.1]: https://github.com/Kerevizodunu2000/rosu/compare/v1.6.3...v1.7.1
+[1.6.3]: https://github.com/Kerevizodunu2000/rosu/compare/v1.6.2...v1.6.3
+[1.6.2]: https://github.com/Kerevizodunu2000/rosu/compare/v1.6.0...v1.6.2
+[1.6.0]: https://github.com/Kerevizodunu2000/rosu/compare/v1.5.0...v1.6.0
+[1.5.0]: https://github.com/Kerevizodunu2000/rosu/compare/v1.4.2...v1.5.0
+[1.4.2]: https://github.com/Kerevizodunu2000/rosu/compare/v1.4.1...v1.4.2
+[1.4.1]: https://github.com/Kerevizodunu2000/rosu/compare/v1.4.0...v1.4.1
+[1.4.0]: https://github.com/Kerevizodunu2000/rosu/compare/v1.3.3...v1.4.0
 [1.3.3]: https://github.com/Kerevizodunu2000/rosu/compare/v1.3.2...v1.3.3
 [1.3.2]: https://github.com/Kerevizodunu2000/rosu/compare/v1.3.1...v1.3.2
 [1.3.1]: https://github.com/Kerevizodunu2000/rosu/compare/v1.3.0...v1.3.1
