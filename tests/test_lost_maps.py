@@ -102,6 +102,14 @@ def _svc(tmp_path):
     return cfg, db, Services(cfg, db, DummyLog())
 
 
+def _lib_track(db, bid):
+    t = ParsedTrack(beatmapset_id=bid, filename=f"{bid} A - B.osz", artist="A",
+                    title="T", display_name="A - T", size_bytes=1)
+    tid, _ = db.upsert_track(t, "when")
+    db.set_library_state(tid, True, "present", "when")
+    return tid
+
+
 def test_reference_synced_flag(tmp_path):
     cfg, db, svc = _svc(tmp_path)
     assert svc.reference_synced() is False      # no reference fetched yet
@@ -128,7 +136,8 @@ def test_scan_lost_maps_records_gone(tmp_path, monkeypatch):
     monkeypatch.setattr(osu_api, "beatmapset_availability",
                         lambda *a, **k: {201: "available", 202: "gone"})
     res = svc.scan_lost_maps()
-    assert res == {"checked": 2, "gone": 1, "total": 2, "remaining": 0}
+    assert res == {"checked": 2, "gone": 1, "total": 2, "remaining": 0,
+                   "cancelled": False}
     assert db.lost_map_count() == 1
     db.close()
 
@@ -162,3 +171,42 @@ def test_scan_lost_maps_unchecked_first_and_remaining(tmp_path, monkeypatch):
     assert res["total"] == 3
     assert res["remaining"] == 1           # one never-checked set still left
     db.close()
+
+
+# -- v1.7.1: the scan walks the whole library and is stoppable ----------------
+def test_scan_lost_maps_has_no_per_run_cap(monkeypatch, tmp_path):
+    """The old 500-per-run cap meant a 1922-set library needed four manual runs
+    to finish once, which read as the scan giving up. It now goes all the way and
+    is cancellable instead."""
+    from rosu import osu_api
+    seen = {}
+
+    def fake_avail(ids, cid, secret, progress=None, max_calls=None, cancel=None):
+        seen["max_calls"] = max_calls
+        return {i: "available" for i in ids}
+
+    cfg, db, svc = _svc(tmp_path)
+    cfg.osu_client_id, cfg.osu_client_secret = "id", "secret"
+    for bid in range(1, 30):
+        _lib_track(db, bid)
+    monkeypatch.setattr(osu_api, "beatmapset_availability", fake_avail)
+    res = svc.scan_lost_maps()
+    assert seen["max_calls"] is None          # no cap passed through
+    assert res["checked"] == 29 and res["remaining"] == 0
+
+
+def test_scan_lost_maps_reports_cancellation(monkeypatch, tmp_path):
+    from rosu import osu_api
+    cfg, db, svc = _svc(tmp_path)
+    cfg.osu_client_id, cfg.osu_client_secret = "id", "secret"
+    for bid in (1, 2, 3):
+        _lib_track(db, bid)
+
+    def fake_avail(ids, cid, secret, progress=None, max_calls=None, cancel=None):
+        svc.cancel_lost_scan()               # the user pressed Cancel mid-run
+        return {list(ids)[0]: "available"}
+
+    monkeypatch.setattr(osu_api, "beatmapset_availability", fake_avail)
+    res = svc.scan_lost_maps()
+    assert res["cancelled"] is True
+    assert res["checked"] == 1 and res["remaining"] == 2

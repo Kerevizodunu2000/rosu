@@ -111,7 +111,8 @@ def copy_to_library(output_dir: Path, library_dir: Path, db, when: str,
                         original_size_before = target.stat().st_size
                         freed = prune_osz(target, mode=prune_mode)
                         if freed > 0:
-                            db.set_pruned_state(track_id, True, original_size_before)
+                            db.set_pruned_state(track_id, True, original_size_before,
+                                                when=when, mode=prune_mode)
             db.set_library_state(track_id, True, "present", when)
             # A byte-identical file already in Library is an existing copy even if the
             # DB row wasn't flagged yet (manual/restored files) — don't count it new.

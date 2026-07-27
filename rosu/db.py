@@ -18,7 +18,7 @@ from pathlib import Path
 
 from .models import ParsedPack, ParsedTrack
 
-SCHEMA_VERSION = 9
+SCHEMA_VERSION = 10
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta (
@@ -142,6 +142,11 @@ _MIGRATIONS = {
         # -- v1.7 Prune & Schema v9 -------------------------------------------
         "is_pruned": "INTEGER DEFAULT 0",
         "original_size": "INTEGER",
+        # -- v1.7.1 (schema v10): WHEN a set was pruned and with WHICH mode, so
+        # "which of my maps lost their video, and how do I get them back" is
+        # answerable from the data rather than only from the log file.
+        "pruned_at": "TEXT",
+        "prune_mode": "TEXT",
     },
     # -- v1.6 Mania MSD: per-diff skillset ratings (mania-only; NULL elsewhere).
     # Additive ALTERs onto the v1.5 `difficulties` table — same mechanism as tracks.
@@ -700,12 +705,33 @@ class Database:
                 (status, beatmapset_id))
             self._conn.commit()
 
-    def set_pruned_state(self, track_id: int, is_pruned: bool, original_size: int) -> None:
+    def set_pruned_state(self, track_id: int, is_pruned: bool, original_size: int,
+                         when: str | None = None, mode: str | None = None) -> None:
+        """Record (or clear) a set's pruned state.
+
+        ``when``/``mode`` are stored so the app can answer "which maps lost their
+        video, when, and under which mode" from the database — clearing the flag
+        clears them too, so a restored set carries no stale prune record.
+        """
         with self._lock:
-            self._conn.execute(
-                "UPDATE tracks SET is_pruned=?, original_size=? WHERE id=?",
-                (1 if is_pruned else 0, original_size, track_id))
+            if is_pruned:
+                self._conn.execute(
+                    "UPDATE tracks SET is_pruned=1, original_size=?, pruned_at=?, "
+                    "prune_mode=? WHERE id=?",
+                    (original_size, when, mode, track_id))
+            else:
+                self._conn.execute(
+                    "UPDATE tracks SET is_pruned=0, original_size=?, pruned_at=NULL, "
+                    "prune_mode=NULL WHERE id=?", (original_size, track_id))
             self._conn.commit()
+
+    def pruned_filenames(self) -> list[str]:
+        """Every still-present Library set that prune has stripped — the input for
+        a bulk restore."""
+        with self._lock:
+            return [r["filename"] for r in self._conn.execute(
+                "SELECT filename FROM tracks WHERE is_pruned=1 AND filename IS NOT NULL "
+                "ORDER BY filename")]
 
     def unpruned_library_filenames(self) -> list[str]:
         """Filenames of every physically-present Library track not yet pruned."""

@@ -330,3 +330,42 @@ def test_installed_summary_reports_enabled(tmp_path, monkeypatch):
     assert s["lazer"]["enabled"] is True
     assert s["stable"]["enabled"] is False
     db.close()
+
+
+# -- v1.7.1: bulk restore of pruned maps -------------------------------------
+def test_build_restore_pruned_job_redownloads_every_pruned_set(tmp_path, monkeypatch):
+    """"How do I get my videos back?" — the bulk undo. Prune's Recycle-Bin copy
+    is the instant undo, but only until the bin is emptied."""
+    import zipfile
+    from rosu.models import ParsedTrack
+    cfg, db, svc = _svc(tmp_path)
+    for bid in (11, 12):
+        fn = f"{bid} A - B.osz"
+        with zipfile.ZipFile(cfg.library_path / fn, "w") as z:
+            z.writestr("map.osu", b"osu file format v14\n")
+        tid, _ = db.upsert_track(
+            ParsedTrack(beatmapset_id=bid, filename=fn, artist="A", title="B",
+                        display_name="A - B", size_bytes=1), "when")
+        db.set_library_state(tid, True, "present", "when")
+        if bid == 11:
+            db.set_pruned_state(tid, True, 5000, when="w", mode="video_only")
+
+    asked = []
+    monkeypatch.setattr("rosu.api_mirror.download_osz",
+                        lambda bid, dest: asked.append(bid) or True)
+    job = svc.build_restore_pruned_job()
+    assert _step_keys(job) == ["job_step_restore"]
+    assert job.ctx["options"] == {"restore_sets": 1}     # only the pruned one
+    res = run_job_sync(job)
+    assert res["repaired"] == 1 and res["failed"] == []
+    assert asked == [11]                                 # #12 was never pruned
+    assert db.pruned_filenames() == []
+    db.close()
+
+
+def test_build_restore_pruned_job_with_nothing_pruned_is_a_clean_noop(tmp_path):
+    cfg, db, svc = _svc(tmp_path)
+    job = svc.build_restore_pruned_job()
+    assert job.ctx["options"] == {"restore_sets": 0}
+    assert run_job_sync(job) == {"repaired": 0, "failed": []}
+    db.close()

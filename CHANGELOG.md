@@ -94,12 +94,38 @@ now describes the library it claims to describe.**
   shipped ~15 strings written as `t(key, default="…")`; there is no such fallback, so they would
   have rendered as raw key names and nothing would have failed until someone opened that screen.
 
+- **Undoing a prune.** "How do I get my videos back?" had no answer beyond a per-map right-click.
+  Shortcuts → **Restore pruned maps** re-downloads every pruned set at full size, and prune's own
+  Recycle Bin copy is now named after the set (`Artist - Title.osz.orig`) instead of a tempfile
+  name, so restoring it by hand gives back something identifiable rather than `tmpab12cd.osz.orig`.
+- **Which maps were pruned, when, and how** is now recorded (schema v10: `pruned_at`,
+  `prune_mode`) and logged one line per set, instead of only a run total.
+- **Slim down osu!lazer** (Shortcuts) — a guided round-trip that gets lazer's space back without
+  the unsafe file deletion: save everything into the Library → you delete the beatmaps in lazer's
+  own Maintenance screen → Rosu measures lazer's file store to confirm it really emptied → prune
+  the Library (optional) → send it all back. Every step is explained before it runs and confirmed
+  before it acts, and Rosu never claims lazer was emptied when the store says otherwise (it offers
+  an explicit override, since only the user can see lazer's screen).
+- The star histogram's selection now says how many **sets** searching that range will list, not
+  just how many difficulties the bars hold — "2727 difficulties" followed by "1509 matches" read
+  as a bug. Both bin modes also explain themselves on hover.
+
 ### Changed
+- **The lost-map scan has no per-run cap.** It stopped after 500 API calls, so a 1922-set library
+  needed four manual runs to finish once — which read as the scan giving up. It now walks the
+  whole library and the button doubles as Cancel, so the length is the user's choice.
+- **The pack-reference sync can be cancelled** (the button doubles as Cancel). A cancelled sync is
+  deliberately *not* saved: a half-fetched reference would mark real packs as missing.
 - Settings' Prune Mode now offers all four modes (it had only two) and explains each on hover.
   It is the default used by auto-prune and export-prune, which have no dialog to ask in.
 - `PruneDialog` cancels an in-flight scan when the source or mode changes and re-runs, discarding
   the superseded result. Found while driving the real dialog: refusing to start the new scan left
   the *previous* source's rows on screen, presented as the new source's.
+- The job queue's cancel (×) and per-step skip buttons rendered as **empty boxes**: the shared
+  button style pads 16px on each side, so a 30px fixed-width button had no room left for its
+  label. They now use a dedicated `#iconbtn` style with near-zero padding.
+- The prune job is no longer titled "Prune Library" — it prunes osu!(stable) too, and the row's
+  detail line names the source.
 - Settings now names the Google Drive folder Rosu backs up into, as a link, and explains why a
   "Rosu" folder it did not create is invisible to it: Rosu asks for the narrow `drive.file`
   permission, which only ever exposes files this app created — so a folder made by hand, or one

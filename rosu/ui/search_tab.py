@@ -109,6 +109,7 @@ class SearchTab(QWidget):
         self._last_rows: list[dict] = []   # current results (row → Map Details)
         self._pending_histogram = False    # open the histogram once results refresh
         self._hist_mode = "auto"           # star-histogram binning, remembered
+        self._hist_pairs: list = []        # (track_id, star) behind the bars
 
         root = QVBoxLayout(self)
         root.setContentsMargins(18, 18, 18, 18)
@@ -462,6 +463,7 @@ class SearchTab(QWidget):
         """
         t = self.ctx.t
         data = self.ctx.services.star_histogram_data(mode=self._hist_mode)
+        self._hist_pairs = data["pairs"]   # (track_id, star) — for the set count
         if not data["bins"]:
             QMessageBox.information(self, t("app_title"), t("star_dist_empty"))
             return
@@ -476,10 +478,15 @@ class SearchTab(QWidget):
         # Bin mode: the data-driven split gives edges like 3.94–4.55, which is
         # unreadable as "how many 5★ maps do I have"; plain 1★ buckets answer that.
         mode_row = QHBoxLayout()
-        mode_row.addWidget(QLabel(t("star_dist_bins")))
+        mode_lbl = QLabel(t("star_dist_bins"))
+        mode_lbl.setToolTip(t("star_dist_bins_tip"))
+        mode_row.addWidget(mode_lbl)
         mode_box = QComboBox()
+        mode_box.setToolTip(t("star_dist_bins_tip"))
         mode_box.addItem(t("star_dist_bins_auto"), "auto")
+        mode_box.setItemData(0, t("star_dist_bins_auto_tip"), Qt.ToolTipRole)
         mode_box.addItem(t("star_dist_bins_integer"), "integer")
+        mode_box.setItemData(1, t("star_dist_bins_integer_tip"), Qt.ToolTipRole)
         idx = mode_box.findData(self._hist_mode)
         mode_box.setCurrentIndex(idx if idx >= 0 else 0)
         mode_row.addWidget(mode_box)
@@ -509,8 +516,12 @@ class SearchTab(QWidget):
         lay.addWidget(buttons)
 
         def on_sel(lo, hi, count, pct):
+            # Say the SET count too, and say it before the user clicks Search.
+            # The bar counts difficulties; the search lists the sets holding them,
+            # so "2727 difficulties" followed by "1509 matches" looked like a bug.
+            sets = len({tid for tid, star in self._hist_pairs if lo <= star < hi})
             sel.setText(t("star_dist_selected", lo=f"{lo:.2f}", hi=f"{hi:.2f}",
-                          count=count, pct=f"{pct:.1f}"))
+                          count=count, pct=f"{pct:.1f}", sets=sets))
             btn_search.setVisible(True)
             btn_export.setVisible(True)
 
@@ -533,6 +544,7 @@ class SearchTab(QWidget):
         def on_mode(_i=None):
             self._hist_mode = mode_box.currentData() or "auto"
             fresh = self.ctx.services.star_histogram_data(mode=self._hist_mode)
+            self._hist_pairs = fresh["pairs"]
             hist.set_bins(fresh["bins"])      # also clears the selection
             head.setText(t("star_dist_head", n=fresh["difficulties"],
                            sets=fresh["sets"]))

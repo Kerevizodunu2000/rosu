@@ -476,6 +476,98 @@ def test_prune_dialog_builds_a_plan_only_after_the_countdown(qapp, tmp_path,
     ctx.db.close()
 
 
+def test_small_icon_buttons_have_room_for_their_glyph(qapp, tmp_path, monkeypatch):
+    """The base QPushButton rule pads 16px each side, so a 30px fixed-width
+    button had negative room for its label and drew as an empty box. These must
+    use #iconbtn, whose rule pads ~0."""
+    from rosu.jobs import Job, new_id
+    from rosu.ui.main_window import MainWindow
+    from rosu.ui.shortcuts_tab import JobRowWidget
+    ctx = _ctx(tmp_path, monkeypatch)
+    win = MainWindow(ctx, qapp)
+    job = Job(new_id(), "job_prune", kind="prune")
+    from rosu.jobs import Lane, Step
+    job.steps = [Step("job_step_prune_remove", Lane.DISK, lambda *a: None)]
+    row = JobRowWidget(job, win.shortcuts.queue, ctx)
+    assert row.btn_cancel.objectName() == "iconbtn"
+    assert row.btn_cancel.text() == "×"
+    assert row.step_rows[0][3].objectName() == "iconbtn"
+    assert win.shortcuts.btn_refresh.objectName() == "iconbtn"
+    row.deleteLater()
+    win.close()
+    ctx.db.close()
+
+
+def test_icon_button_style_exists_in_every_theme():
+    """The style has to be in the sheet itself, not just the object name."""
+    from rosu import theming
+    for name in theming.PALETTES:
+        qss = theming.stylesheet_for(name)
+        assert "QPushButton#iconbtn" in qss, name
+        assert "padding: 2px 0px" in qss, name      # room for the glyph
+
+
+def test_lazer_slim_wizard_walks_the_steps(qapp, tmp_path, monkeypatch):
+    """The lazer round-trip: save → you delete in lazer → verify → prune → send.
+    Rosu must never claim lazer was emptied when its file store says otherwise."""
+    from PySide6.QtWidgets import QMessageBox
+    from rosu.ui.lazer_slim_dialog import LazerSlimDialog
+    ctx = _ctx(tmp_path, monkeypatch)
+    dlg = LazerSlimDialog(ctx, None)
+    assert dlg.step == "intro"
+
+    # Step 1 result lands us on "delete" and remembers the store size.
+    dlg._before = None
+    monkeypatch.setattr(ctx.services, "lazer_store_stats",
+                        lambda: {"found": True, "path": "p", "files": 100,
+                                 "bytes": 10_000_000})
+    dlg._on_saved({"found": True, "new": 12, "total": 12})
+    assert dlg.step == "delete" and dlg._before["bytes"] == 10_000_000
+
+    # Still full → refuses to advance unless the user insists.
+    monkeypatch.setattr(ctx.services, "lazer_store_stats",
+                        lambda: {"found": True, "path": "p", "files": 99,
+                                 "bytes": 9_900_000})
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.No)
+    dlg._check_deleted()
+    assert dlg.step == "delete"                    # not advanced
+
+    # Emptied → advances without asking anything.
+    monkeypatch.setattr(ctx.services, "lazer_store_stats",
+                        lambda: {"found": True, "path": "p", "files": 3,
+                                 "bytes": 40_000})
+    dlg._check_deleted()
+    assert dlg.step == "prune"
+
+    dlg._skip()                                     # prune is optional
+    assert dlg.step == "send"
+    dlg._on_sent({"sent": 12})
+    assert dlg.step == "done"
+    dlg.close()
+    ctx.db.close()
+
+
+def test_lazer_slim_wizard_lets_the_user_override_the_check(qapp, tmp_path,
+                                                            monkeypatch):
+    """Only the user can see lazer's screen, so an unconfirmed check must be
+    overridable — but never silently."""
+    from PySide6.QtWidgets import QMessageBox
+    from rosu.ui.lazer_slim_dialog import LazerSlimDialog
+    ctx = _ctx(tmp_path, monkeypatch)
+    dlg = LazerSlimDialog(ctx, None)
+    dlg.step = "delete"
+    dlg._before = {"found": True, "bytes": 10_000_000}
+    monkeypatch.setattr(ctx.services, "lazer_store_stats",
+                        lambda: {"found": True, "bytes": 9_000_000})
+    asked = []
+    monkeypatch.setattr(QMessageBox, "question",
+                        lambda *a, **k: asked.append(1) or QMessageBox.Yes)
+    dlg._check_deleted()
+    assert asked == [1] and dlg.step == "prune"
+    dlg.close()
+    ctx.db.close()
+
+
 def test_health_dialog_builds_and_renders_report(qapp, tmp_path, monkeypatch):
     """The v1.1 Library Health dialog constructs and populates from a report."""
     from rosu.ui.health_dialog import HealthDialog

@@ -424,6 +424,30 @@ class ExportMixin:
                 "result", {"removed": 0, "freed_bytes": 0, "groups": 0})
             return job
 
+        def pruned_count(self) -> int:
+            """How many Library sets are currently pruned (for the restore flow)."""
+            return len(self.db.pruned_filenames())
+
+        def build_restore_pruned_job(self, filenames=None) -> jobs.Job:
+            """Undo prune in bulk: re-download every pruned set at full size.
+
+            Prune's own Recycle-Bin copy is the *local* undo, but it only survives
+            until the bin is emptied and only covers the Library. This re-fetches
+            the complete set from an osu! mirror, which works however long ago the
+            prune happened. Cancellable — it is a lot of downloading.
+            """
+            names = list(filenames) if filenames is not None else self.db.pruned_filenames()
+            job = jobs.Job(jobs.new_id(), "job_restore_pruned", kind="restore")
+            job.ctx["options"] = {"restore_sets": len(names)}
+
+            def s_restore(ctx, progress, cancel):
+                ctx["result"] = self.repair_maps(names, progress=progress,
+                                                 cancel=cancel)
+
+            job.steps = [jobs.Step("job_step_restore", jobs.Lane.DISK, s_restore)]
+            job.finalize = lambda ctx: ctx.get("result", {"repaired": 0, "failed": []})
+            return job
+
         def build_prune_apply_job(self, source: str, mode: str, keys,
                                   freed_estimate: int = 0) -> jobs.Job:
             """Apply an ALREADY-PREVIEWED prune (the v1.7.1 Prune dialog).

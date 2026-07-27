@@ -116,6 +116,8 @@ def _describe_job(job, t) -> str:
             bits.append(t("prune_n_sets", n=opts["sets"]))
         if opts.get("freed_estimate"):
             bits.append(t("prune_frees", size=_fmt_size(opts["freed_estimate"])))
+    elif job.kind == "restore" and opts.get("restore_sets"):
+        bits.append(t("prune_n_sets", n=opts["restore_sets"]))
     if not bits:
         return ""
     line = "   ·   ".join(bits)
@@ -146,8 +148,11 @@ class JobRowWidget(QFrame):
         head = QHBoxLayout()
         self.lbl_title = QLabel(objectName="status")
         self.lbl_state = QLabel(objectName="status")
-        self.btn_cancel = QPushButton("×", objectName="secondary")
-        self.btn_cancel.setFixedWidth(30)
+        # #iconbtn, not #secondary: the base QPushButton rule has 16px side
+        # padding, so a 30px-wide button had no room left for its label and
+        # drew as an empty box.
+        self.btn_cancel = QPushButton("×", objectName="iconbtn")
+        self.btn_cancel.setFixedSize(30, 26)
         self.btn_cancel.setToolTip(ctx.t("job_cancel_tip"))
         self.btn_cancel.clicked.connect(lambda: self.controller.cancel_job(self.job))
         head.addWidget(self.lbl_title, 1)
@@ -172,8 +177,8 @@ class JobRowWidget(QFrame):
             bar.setMaximumHeight(8)
             bar.setTextVisible(False)
             bar.setVisible(False)
-            skip = QPushButton("×", objectName="secondary")
-            skip.setFixedWidth(24)
+            skip = QPushButton("×", objectName="iconbtn")
+            skip.setFixedSize(26, 22)
             skip.setToolTip(ctx.t("job_step_skip"))
             skip.clicked.connect(
                 lambda _=False, s=step: self.controller.skip_step(self.job, s))
@@ -241,8 +246,8 @@ class ShortcutsTab(QWidget):
         header.addWidget(self.title, 1)
         # Manual summary refresh — the only way to update the counts when the
         # "auto-refresh a tab on entry" setting is turned off and no job has run.
-        self.btn_refresh = QPushButton("⟳", objectName="secondary")
-        self.btn_refresh.setFixedWidth(36)
+        self.btn_refresh = QPushButton("⟳", objectName="iconbtn")
+        self.btn_refresh.setFixedSize(36, 30)
         self.btn_refresh.clicked.connect(self.on_shown)
         header.addWidget(self.btn_refresh)
         root.addLayout(header)
@@ -356,6 +361,18 @@ class ShortcutsTab(QWidget):
         self.btn_prune = QPushButton(objectName="secondary")
         self.btn_prune.clicked.connect(self.on_prune)
         drow.addWidget(self.btn_prune)
+
+        # Undo prune in bulk. Prune's Recycle-Bin copy is the local undo, but it
+        # only lasts until the bin is emptied — this re-downloads the full sets.
+        self.btn_restore = QPushButton(objectName="secondary")
+        self.btn_restore.clicked.connect(self.on_restore_pruned)
+        drow.addWidget(self.btn_restore)
+
+        # Guided lazer round-trip (save → you delete in lazer → verify → prune →
+        # send back), since lazer itself cannot be pruned in place.
+        self.btn_lazer_flow = QPushButton(objectName="secondary")
+        self.btn_lazer_flow.clicked.connect(self.on_lazer_slim)
+        drow.addWidget(self.btn_lazer_flow)
         drow.addStretch(1)
         root.addLayout(drow)
 
@@ -424,6 +441,10 @@ class ShortcutsTab(QWidget):
         self.btn_dedup.setToolTip(t("tip_dedup"))
         self.btn_prune.setText(t("btn_prune"))
         self.btn_prune.setToolTip(t("tip_prune"))
+        self.btn_restore.setText(t("btn_restore_pruned"))
+        self.btn_restore.setToolTip(t("tip_restore_pruned"))
+        self.btn_lazer_flow.setText(t("btn_lazer_slim"))
+        self.btn_lazer_flow.setToolTip(t("tip_lazer_slim"))
         self.jobqueue_box.setTitle(t("sc_jobqueue_title"))
         self.btn_clear_finished.setText(t("job_clear_finished"))
         self.queue_empty.setText(t("queue_empty"))
@@ -680,6 +701,26 @@ class ShortcutsTab(QWidget):
         self._enqueue(job, ("export", source, fmt, split, upload, share, limit,
                             star_range))
 
+    def on_restore_pruned(self) -> None:
+        """Bulk-undo prune: re-download every pruned set at full size."""
+        t = self.ctx.t
+        n = self.services.pruned_count()
+        if n == 0:
+            QMessageBox.information(self, t("app_title"), t("sc_restore_none"))
+            return
+        if QMessageBox.question(
+                self, t("app_title"), t("sc_restore_confirm", n=n),
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No) != QMessageBox.Yes:
+            return
+        self._enqueue(self.services.build_restore_pruned_job(), ("restore", n))
+
+    def on_lazer_slim(self) -> None:
+        """The guided osu!lazer round-trip (see :mod:`rosu.ui.lazer_slim_dialog`)."""
+        from .lazer_slim_dialog import LazerSlimDialog
+        LazerSlimDialog(self.ctx, self).exec()
+        self.on_shown()
+
     def _enqueue(self, job, signature=None) -> bool:
         """Queue a job — but if this is the IDENTICAL action the user just queued,
         ask first.
@@ -838,6 +879,7 @@ class ShortcutsTab(QWidget):
             "unpack": self._present_unpack, "export": self._present_export,
             "dedup": self._present_dedup,
             "prune": self._present_prune,
+            "restore": self._present_restore,
         }.get(job.kind)
         if presenter is not None:
             presenter(res)
@@ -975,6 +1017,17 @@ class ShortcutsTab(QWidget):
         else:
             self._set_status("sc_dedup_done", removed=res["removed"],
                              freed=_fmt_size(res["freed_bytes"]))
+
+    def _present_restore(self, res) -> None:
+        repaired = res.get("repaired", 0)
+        failed = len(res.get("failed", []))
+        if repaired and not failed:
+            self._set_status("sc_restore_done", n=repaired)
+        elif repaired:
+            self._set_status("sc_restore_partial", n=repaired, failed=failed)
+        else:
+            self._set_status("sc_restore_failed", failed=failed)
+        self.mw.search.reload()
 
     def _present_prune(self, res) -> None:
         if res.get("pruned", 0) == 0:

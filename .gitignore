@@ -113,3 +113,8 @@ docs/
 
 # --- graphify knowledge-graph output (local index, never commit) ---------------
 graphify-out/
+
+# --- Test/scratch exports written into the repo root by the Shortcuts export
+#     flow (its default destination is wherever the app was launched from).
+rosu-export-*.zip
+rosu-export-*.7z

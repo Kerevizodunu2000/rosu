@@ -145,19 +145,27 @@ class MetadataMixin:
             (a set's hardest diff only — so a 2★+5★ set landed solely in the 5★
             bucket yet still matched a ``star>=2 star<2.5`` search).
 
-            Returns ``{"bins", "difficulties", "sets"}``: the bin tuples, how many
-            rated difficulties were counted, and how many distinct sets they live in
-            — the caller must state which unit it is showing, since N difficulties
-            can come from fewer than N sets. Synchronous: binning a few thousand
-            floats is microseconds. ``scope`` is ``"library"`` or ``"all"``;
-            ``mode`` is a :data:`rosu.stats.MODES` value.
+            Returns ``{"bins", "difficulties", "sets", "pairs"}``: the bin tuples,
+            how many rated difficulties were counted, how many distinct sets they
+            live in, and the raw ``(track_id, star)`` pairs.
+
+            ``pairs`` is what lets the caller answer "and how many SETS will
+            searching this range list?" for an arbitrary dragged selection — that
+            number is NOT the sum of the bars (one set spans several bars), and
+            recomputing it in SQL on every drag event would hammer the DB. A few
+            thousand tuples is nothing to hold.
+
+            Synchronous: binning a few thousand floats is microseconds. ``scope``
+            is ``"library"`` or ``"all"``; ``mode`` is a :data:`rosu.stats.MODES`
+            value.
             """
             from .. import stats
             pairs = self.db.difficulty_stars(scope)
             values = [star for _tid, star in pairs]
             return {"bins": stats.histogram_bins(values, bins, mode),
                     "difficulties": len(values),
-                    "sets": len({tid for tid, _star in pairs})}
+                    "sets": len({tid for tid, _star in pairs}),
+                    "pairs": pairs}
 
         def compute_msd(self, progress=None, max_files: int | None = None) -> dict:
             """Compute the in-house Rosu Skillset Rating for every Library set's mania
@@ -296,26 +304,41 @@ class MetadataMixin:
             return bool(self._reference())
 
         def update_reference(self, progress=None) -> dict:
+            """Re-fetch the osu! pack reference. Cancellable, and a cancelled run
+            is NOT saved — a half-fetched reference would silently turn real packs
+            into "missing" reds on the Dashboard."""
+            self._reference_cancel.clear()   # own token: never collides with other ops
             ref = osu_api.fetch_reference(
                 self.cfg.osu_client_id, self.cfg.osu_client_secret,
-                progress=(lambda s: progress(s)) if progress else None)
+                progress=(lambda s: progress(s)) if progress else None,
+                cancel=self._reference_cancel.is_set)
+            if ref.get("cancelled"):
+                self.log.info("REFERENCE_SYNC", packs=ref.get("count", 0),
+                              cancelled=True, saved=False)
+                return ref
             osu_api.save_reference(ref, self.cfg.reference_path)
             self._reference_cache = None   # force a reload of the freshly-written reference
             self.log.info("REFERENCE_SYNC", packs=ref.get("count", 0))
             return ref
 
-        def scan_lost_maps(self, progress=None, max_calls: int = 500) -> dict:
+        def cancel_reference_sync(self) -> None:
+            """Cancel only an in-progress reference sync (leaves other ops alone)."""
+            self._reference_cancel.set()
+
+        def scan_lost_maps(self, progress=None, max_calls: int | None = None) -> dict:
             """Flag owned beatmapsets that no longer exist on osu! (item F, v1.0).
     
             Needs osu! API credentials (returns ``{"error": "no_api"}`` otherwise).
             Asks the osu! API about each Library beatmapset id (HTTP 200 = still
-            live, 404 = deleted/taken down), capped at ``max_calls`` per run so a
-            huge library never hammers the API in one go. **Never-checked sets go
-            first**, then previously-checked ones (oldest knowledge re-verified), so
-            repeated runs walk the whole library instead of re-checking the same
-            first batch (v1.4). Stores each result and returns ``{"checked",
-            "gone", "total", "remaining"}`` — ``remaining`` = never-checked sets
-            still left after this run (run again to continue).
+            live, 404 = deleted/taken down). It walks the WHOLE library by default
+            — the old 500-per-run cap meant a 1922-set library needed four manual
+            runs to finish once, which read as the scan giving up. The run is
+            gentle (paced + 429 backoff) and cancellable at any moment, so length
+            is the user's choice rather than an arbitrary batch size; pass
+            ``max_calls`` to cap it deliberately. **Never-checked sets go first**,
+            then previously-checked ones (oldest knowledge re-verified). Stores
+            each result and returns ``{"checked", "gone", "total", "remaining",
+            "cancelled"}`` — ``remaining`` = never-checked sets still left.
             """
             if not (self.cfg.osu_client_id and self.cfg.osu_client_secret):
                 return {"error": "no_api"}
@@ -338,10 +361,15 @@ class MetadataMixin:
                     gone += 1
             total = len(unchecked) + len(known)
             remaining = max(0, len(unchecked) - len(result))
+            cancelled = self._lostmap_cancel.is_set()
             self.log.info("LOST_MAP_SCAN", checked=len(result), gone=gone,
-                          total=total, remaining=remaining)
-            return {"checked": len(result), "gone": gone,
-                    "total": total, "remaining": remaining}
+                          total=total, remaining=remaining, cancelled=cancelled)
+            return {"checked": len(result), "gone": gone, "total": total,
+                    "remaining": remaining, "cancelled": cancelled}
+
+        def cancel_lost_scan(self) -> None:
+            """Cancel only an in-progress lost-map scan (leaves other ops alone)."""
+            self._lostmap_cancel.set()
 
         def lost_map_count(self) -> int:
             return self.db.lost_map_count()

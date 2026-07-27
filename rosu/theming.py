@@ -131,6 +131,15 @@ QPushButton:hover {{ background-color: {accent_hover}; }}
 QPushButton:disabled {{ background-color: {border}; color: {muted}; }}
 QPushButton#secondary {{ background-color: {secondary}; color: {secondary_text}; }}
 QPushButton#secondary:hover {{ background-color: {header_bg}; }}
+/* Small square buttons (a job's cancel ×, a step's skip ×, ⟳ refresh). The
+   base rule's 16px side padding needs 32px of width before a single character
+   fits, so a 24-30px fixed-width button clipped its label away entirely and
+   rendered as an empty box. These get their own near-zero padding. */
+QPushButton#iconbtn {{ background-color: {secondary}; color: {secondary_text};
+    border: none; border-radius: 6px; padding: 2px 0px; font-weight: 700;
+    font-size: 14px; }}
+QPushButton#iconbtn:hover {{ background-color: {header_bg}; }}
+QPushButton#iconbtn:disabled {{ background-color: {border}; color: {muted}; }}
 
 QLineEdit, QComboBox, QTextEdit, QPlainTextEdit {{
     background-color: {surface}; border: 1px solid {border};

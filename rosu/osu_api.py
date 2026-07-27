@@ -118,23 +118,25 @@ def _interruptible_sleep(seconds: float, cancel=None) -> None:
 
 
 def beatmapset_availability(ids, client_id: str, client_secret: str,
-                            progress=None, max_calls: int = 500,
+                            progress=None, max_calls: int | None = None,
                             cancel=None) -> dict[int, str]:
     """Check whether each owned beatmapset still exists on osu! (item F, v1.0).
 
     Returns ``{beatmapset_id: 'available' | 'gone' | 'unknown'}`` — 200 means the
     set is live, 404 means it was taken down / deleted (unrecoverable from osu!).
-    Capped at ``max_calls`` per run and gentle (small delay + 429 backoff) so a
-    large library never hammers the API. ``cancel`` is polled between ids.
+    Gentle (small delay + 429 backoff) so a large library never hammers the API,
+    and ``cancel`` is polled between ids — so a run can simply go through the
+    whole library and be stopped whenever the user wants, instead of being cut
+    off at an arbitrary batch size. ``max_calls=None`` means no cap.
     """
     unique = [i for i in dict.fromkeys(ids) if i]
     token = _token(client_id, client_secret)
     out: dict[int, str] = {}
-    total = min(len(unique), max_calls)
+    total = len(unique) if max_calls is None else min(len(unique), max_calls)
     for bid in unique:
         if cancel is not None and cancel():
             break
-        if len(out) >= max_calls:
+        if max_calls is not None and len(out) >= max_calls:
             break
         url = f"{API_BASE}/beatmapsets/{bid}"
         retries = 0
@@ -246,14 +248,28 @@ def _normalize_beatmapset_details(data: dict) -> dict:
     }
 
 
-def fetch_reference(client_id: str, client_secret: str, progress=None) -> dict:
-    """Fetch every pack across all types. Returns a reference dict."""
+def fetch_reference(client_id: str, client_secret: str, progress=None,
+                    cancel=None) -> dict:
+    """Fetch every pack across all types. Returns a reference dict.
+
+    ``cancel`` is polled between pages and between pack types, so a sync that is
+    taking too long can be stopped. A cancelled run returns what it managed to
+    fetch with ``"cancelled": True`` — the caller decides whether a partial
+    reference is worth saving (it is not, so the service discards it).
+    """
     token = _token(client_id, client_secret)
     packs: list[dict] = []
+    cancelled = False
     for pack_type in PACK_TYPES:
+        if cancel is not None and cancel():
+            cancelled = True
+            break
         cursor = None
         retries = 0
         while True:
+            if cancel is not None and cancel():
+                cancelled = True
+                break
             query = {"type": pack_type}
             if cursor:
                 query["cursor_string"] = cursor
@@ -284,10 +300,13 @@ def fetch_reference(client_id: str, client_secret: str, progress=None) -> dict:
             if not cursor:
                 break
             time.sleep(_MIN_INTERVAL)   # pace pagination under the API rate guidance
+        if cancelled:
+            break
     return {
         "fetched_at": _dt.datetime.now().replace(microsecond=0).isoformat(),
         "count": len(packs),
         "packs": packs,
+        "cancelled": cancelled,
     }
 
 

@@ -278,3 +278,45 @@ def test_prune_scan_stable_walks_the_songs_folders(tmp_path, monkeypatch):
     assert (songs / "1 A - B" / "map.osu").exists()      # never the beatmap
     assert len(trashed) == 1
     db.close()
+
+
+def test_prune_records_when_and_with_which_mode(tmp_path):
+    """"Which of my maps lost their video, and how?" must be answerable from the
+    data, not only from the log file."""
+    cfg, db, svc = _svc(tmp_path)
+    _make_set(cfg, db, 1, {"map.osu": b"x", "video.mp4": b"z" * 4000})
+    svc.prune_apply("library", "video_only", ["1 A - B.osz"])
+    row = db.all_tracks()[0]
+    assert row["is_pruned"] == 1
+    assert row["prune_mode"] == "video_only"
+    assert row["pruned_at"]                       # timestamped
+    assert row["original_size"] > 0
+    assert db.pruned_filenames() == ["1 A - B.osz"]
+    db.close()
+
+
+def test_restoring_a_map_clears_its_prune_record(tmp_path, monkeypatch):
+    """A restored set must carry no stale prune record — otherwise it keeps
+    claiming to be pruned and shows up in the next bulk restore."""
+    cfg, db, svc = _svc(tmp_path)
+    tid = _make_set(cfg, db, 7, {"map.osu": b"x", "video.mp4": b"z" * 4000})
+    db.set_pruned_state(tid, True, 9999, when="2026-07-27T00:00:00",
+                        mode="video_only")
+    assert db.pruned_filenames() == ["7 A - B.osz"]
+    monkeypatch.setattr("rosu.api_mirror.download_osz", lambda bid, dest: True)
+    res = svc.repair_maps(["7 A - B.osz"])
+    assert res["repaired"] == 1
+    row = db.all_tracks()[0]
+    assert row["is_pruned"] == 0
+    assert row["prune_mode"] is None and row["pruned_at"] is None
+    assert db.pruned_filenames() == []
+    db.close()
+
+
+def test_pruned_count_feeds_the_restore_flow(tmp_path):
+    cfg, db, svc = _svc(tmp_path)
+    assert svc.pruned_count() == 0
+    tid = _make_set(cfg, db, 1, {"map.osu": b"x"})
+    db.set_pruned_state(tid, True, 100)
+    assert svc.pruned_count() == 1
+    db.close()

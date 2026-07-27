@@ -115,6 +115,24 @@ def get_osu_assets(text: str) -> set[str]:
     return assets
 
 
+def _aside_name(p: Path) -> Path:
+    """Where to put the pre-prune copy that goes to the Recycle Bin.
+
+    It used to be a ``tempfile.mkstemp`` name (``tmpab12cd.osz.orig``), which made
+    the Recycle Bin entry unidentifiable — restoring it gave back a file nobody
+    could match to a beatmap. Naming it after the set is the difference between a
+    recoverable original and a mystery blob.
+    """
+    base = p.with_name(p.name + ".orig")
+    if not base.exists():
+        return base
+    for i in range(2, 1000):
+        cand = p.with_name(f"{p.name}.{i}.orig")
+        if not cand.exists():
+            return cand
+    return base
+
+
 def _essential_assets(zf, mode: str) -> set[str] | None:
     """The asset filenames the .osu files reference, for ``heavy_assets``.
 
@@ -221,8 +239,7 @@ def prune_osz(osz_path: Path | str, mode: str = 'video_only', max_unessential_si
         # sequence (which a crash or a second I/O failure mid-recovery could
         # leave stuck with `p` absent and the real file stranded under a
         # temp name). Only trash the copy last, once the swap is done.
-        trash_fd, trash_copy = tempfile.mkstemp(dir=p.parent, suffix=".osz.orig")
-        os.close(trash_fd)
+        trash_copy = str(_aside_name(p))
         try:
             shutil.copy2(str(p), trash_copy)
         except Exception:

@@ -25,7 +25,8 @@ _drive_hidden = (
     # Dialogs opened by a function-level import (so the module is only paid for
     # when the user actually opens them) are invisible to PyInstaller's static
     # analysis — a miss would surface as a crash the moment the button is clicked.
-    + ['rosu.ui.prune_dialog', 'rosu.ui.map_details_dialog',
+    + ['rosu.ui.prune_dialog', 'rosu.ui.lazer_slim_dialog',
+       'rosu.ui.map_details_dialog',
        'rosu.ui.pack_skillset_dialog', 'rosu.ui.health_dialog',
        'rosu.ui.about_dialog', 'rosu.ui.report_dialog', 'rosu.ui.backup_dialog']
     + collect_submodules('rosu.services')

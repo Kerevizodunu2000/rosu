@@ -163,7 +163,26 @@ def test_histogram_covers_the_whole_library_not_one_page(tmp_path):
 def test_histogram_empty_library_is_safe(tmp_path):
     db, svc = _svc(tmp_path)
     data = svc.star_histogram_data()
-    assert data == {"bins": [], "difficulties": 0, "sets": 0}
+    assert data == {"bins": [], "difficulties": 0, "sets": 0, "pairs": []}
+    db.close()
+
+
+def test_histogram_pairs_answer_how_many_sets_a_range_lists(tmp_path):
+    """The bars count difficulties; searching a range lists SETS. "2727
+    difficulties" followed by "1509 matches" read as a bug, so the selection
+    label now states both — computed from these pairs, since one set can span
+    several bars and the per-bar set counts do not add up."""
+    db, svc = _svc(tmp_path)
+    a = _track(db, 1, name="Spread")
+    b = _track(db, 2, name="Single")
+    db.upsert_difficulties(a, [_diff("x.osu"), _diff("y.osu")],
+                           {"x.osu": 2.5, "y.osu": 2.9}, "when")
+    db.upsert_difficulties(b, [_diff("z.osu")], {"z.osu": 2.7}, "when")
+    pairs = svc.star_histogram_data()["pairs"]
+    in_range = [(t, s) for t, s in pairs if 2.0 <= s < 3.0]
+    assert len(in_range) == 3                       # three difficulties…
+    assert len({t for t, _s in in_range}) == 2      # …but only two sets listed
+    assert {t for t, _s in in_range} == {a, b}
     db.close()
 
 

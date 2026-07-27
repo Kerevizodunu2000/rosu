@@ -315,6 +315,65 @@ class ImportMixin:
                           "count": self.db.drive_count()},
             }
 
+        def lazer_store_stats(self) -> dict:
+            """Size of osu!lazer's content-addressed file store (``files/``).
+
+            This is the only signal Rosu has that a "Delete ALL beatmaps" inside
+            lazer really happened: lazer's set list lives in a Realm database Rosu
+            cannot read, so it cannot count sets — but the store it keeps them in
+            is plain files on disk, and emptying the collection shrinks it
+            dramatically. Read-only. ``{"found", "path", "files", "bytes"}``.
+            """
+            from .. import client_import
+            data = client_import.lazer_data_dir()
+            if data is None:
+                return {"found": False, "path": "", "files": 0, "bytes": 0}
+            store = Path(data) / "files"
+            n = total = 0
+            if store.is_dir():
+                for p in store.rglob("*"):
+                    try:
+                        if p.is_file():
+                            n += 1
+                            total += p.stat().st_size
+                    except OSError:
+                        pass
+            return {"found": True, "path": str(store), "files": n, "bytes": total}
+
+        def send_library_to_client(self, target: str = "lazer", progress=None,
+                                   cancel=None, skip_existing: bool = True) -> dict:
+            """Import Library sets into an osu! client — the return leg of the
+            lazer round-trip (save → delete in lazer → prune → send back).
+
+            ``skip_existing`` leaves out sets Rosu has recorded as already in that
+            client, so re-running does not pointlessly re-send everything.
+            """
+            if not self.client_enabled(target):
+                return {"target": target, "sent": 0, "skipped": 0,
+                        "disabled": True, "cancelled": False}
+            lib = self.cfg.library_path
+            skip = self._client_set_ids(target) if skip_existing else set()
+            files, skipped = [], 0
+            for r in self.db.library_tracks():
+                fn = r.get("filename")
+                if not fn:
+                    continue
+                bid = r.get("beatmapset_id")
+                if bid and bid in skip:
+                    skipped += 1
+                    continue
+                p = lib / fn
+                if p.exists():
+                    files.append(p)
+            if not files:
+                return {"target": target, "sent": 0, "skipped": skipped,
+                        "cancelled": False}
+            res = self._dispatch_to_client(target, files, progress, cancel=cancel)
+            self.log.info("LIBRARY_TO_CLIENT", client=target,
+                          sent=res.get("sent", 0), skipped=skipped)
+            return {"target": target, "sent": res.get("sent", 0),
+                    "skipped": skipped, "cancelled": res.get("cancelled", False)}
+
         def unpack_and_import(self, targets, skip_duplicates: bool = True,
                               progress=None) -> dict:
             """Shortcut ⑤: unpack every NEW pack in Packs/ into Output, then import the

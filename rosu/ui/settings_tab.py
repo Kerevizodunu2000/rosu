@@ -699,11 +699,18 @@ class SettingsTab(QWidget):
 
     # -- reference sync ------------------------------------------------------
     def _update_reference(self) -> None:
+        # The button doubles as Cancel while a sync runs — a network sync that
+        # cannot be stopped just leaves the user staring at a disabled button.
+        if getattr(self, "_ref_syncing", False):
+            self.ctx.services.cancel_reference_sync()
+            self.lbl_ref_status.setText(self.ctx.t("cancelling"))
+            return
         if not self._commit_api_creds():
             QMessageBox.information(self, self.ctx.t("app_title"),
                                     self.ctx.t("reference_help"))
             return
-        self.btn_reference.setEnabled(False)
+        self._ref_syncing = True
+        self.btn_reference.setText(self.ctx.t("btn_cancel"))
         self.lbl_ref_status.setText(self.ctx.t("working"))
         w = Worker(lambda progress=None: self.ctx.services.update_reference(progress))
         self._threads.append(w)
@@ -713,14 +720,23 @@ class SettingsTab(QWidget):
         w.finished.connect(lambda: self._threads.remove(w) if w in self._threads else None)
         w.start()
 
+    def _reference_idle(self) -> None:
+        self._ref_syncing = False
+        self.btn_reference.setText(self.ctx.t("btn_update_reference"))
+
     def _reference_done(self, ref) -> None:
-        self.btn_reference.setEnabled(True)
+        self._reference_idle()
+        if ref.get("cancelled"):
+            # Deliberately NOT saved: a half-fetched reference would turn real
+            # packs into "missing" reds. Say so instead of implying success.
+            self.lbl_ref_status.setText(self.ctx.t("reference_cancelled"))
+            return
         self.lbl_ref_status.setText(self.ctx.t("reference_done", n=ref.get("count", 0)))
         self.mw.dashboard._update_banner()
         self.mw.packs.reload()
 
     def _reference_failed(self, msg) -> None:
-        self.btn_reference.setEnabled(True)
+        self._reference_idle()
         self._refresh_reference_status()
         QMessageBox.critical(self, self.ctx.t("app_title"), msg)
 
@@ -730,11 +746,18 @@ class SettingsTab(QWidget):
         self.lbl_lost_status.setText(self.ctx.t("lost_maps_count", n=n) if n else "")
 
     def _scan_lost_maps(self) -> None:
+        # Doubles as Cancel: the scan now walks the WHOLE library (no 500-per-run
+        # cap), so being able to stop it is what makes that safe.
+        if getattr(self, "_lost_scanning", False):
+            self.ctx.services.cancel_lost_scan()
+            self.lbl_lost_status.setText(self.ctx.t("cancelling"))
+            return
         if not self._commit_api_creds():
             QMessageBox.information(self, self.ctx.t("app_title"),
                                     self.ctx.t("lost_maps_needs_api"))
             return
-        self.btn_lost.setEnabled(False)
+        self._lost_scanning = True
+        self.btn_lost.setText(self.ctx.t("btn_cancel"))
         self.lbl_lost_status.setText(self.ctx.t("working"))
         w = Worker(lambda progress=None: self.ctx.services.scan_lost_maps(progress))
         self._threads.append(w)
@@ -748,8 +771,12 @@ class SettingsTab(QWidget):
         if isinstance(msg, dict) and msg.get("kind") == "lostmap":
             self.lbl_lost_status.setText(f"{msg['done']}/{msg['total']}")
 
+    def _lost_idle(self) -> None:
+        self._lost_scanning = False
+        self.btn_lost.setText(self.ctx.t("btn_scan_lost"))
+
     def _lost_done(self, res) -> None:
-        self.btn_lost.setEnabled(True)
+        self._lost_idle()
         if res.get("error") == "no_api":
             self.lbl_lost_status.setText(self.ctx.t("lost_maps_needs_api"))
             return
@@ -757,6 +784,7 @@ class SettingsTab(QWidget):
         # checked this run, and how many have never been checked yet (the scan
         # goes in batches — run again to continue).
         if res.get("remaining"):
+            # Only reachable now by cancelling — the scan no longer stops on its own.
             self.lbl_lost_status.setText(self.ctx.t(
                 "lost_maps_result_more", checked=res["checked"], gone=res["gone"],
                 remaining=res["remaining"]))
@@ -767,7 +795,7 @@ class SettingsTab(QWidget):
         self.mw.search.reload()
 
     def _lost_failed(self, msg) -> None:
-        self.btn_lost.setEnabled(True)
+        self._lost_idle()
         self._refresh_lost_status()
         QMessageBox.critical(self, self.ctx.t("app_title"), msg)
 

@@ -429,6 +429,11 @@ STRINGS: dict[str, dict[str, str]] = {
                          "tr": "Referans: {n} paket ({when})"},
     "reference_none": {"en": "Reference: not synced (only Standard gaps shown)",
                        "tr": "Referans: yok (yalnız Standard boşlukları gösterilir)"},
+    "reference_cancelled": {
+        "en": "Reference sync cancelled — nothing was saved (a half-fetched "
+              "reference would mark real packs as missing).",
+        "tr": "Referans eşitlemesi iptal edildi — hiçbir şey kaydedilmedi (yarım "
+              "çekilmiş bir referans gerçek paketleri eksik gösterirdi)."},
     "reference_done": {"en": "Reference updated: {n} packs.",
                        "tr": "Referans güncellendi: {n} paket."},
     "btn_scan_lost": {"en": "Scan for lost maps", "tr": "Kayıp haritaları tara"},
@@ -704,20 +709,41 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "{n} rated difficulties in {sets} Library sets",
         "tr": "Kütüphanedeki {sets} sette {n} derecelendirilmiş zorluk"},
     "star_dist_bins": {"en": "Ranges:", "tr": "Aralıklar:"},
+    "star_dist_bins_tip": {
+        "en": "How the bars are split up. “Fit to the data” uses the full width "
+              "of your Library; “Whole stars” uses plain 1★ buckets.",
+        "tr": "Çubukların nasıl bölüneceği. “Veriye göre” kütüphanenin tüm "
+              "genişliğini kullanır; “Tam yıldız” düz 1★'lık kutular kullanır."},
     "star_dist_bins_auto": {"en": "Fit to the data",
                             "tr": "Veriye göre"},
+    "star_dist_bins_auto_tip": {
+        "en": "Splits the range between your easiest and hardest difficulty into "
+              "20 equal bars. It uses the whole chart, but the edges land on odd "
+              "numbers like 3.94–4.55 because they follow your actual maps.",
+        "tr": "En kolay ve en zor zorluğun arasını 20 eşit çubuğa böler. Grafiğin "
+              "tamamını kullanır ama kenarlar senin gerçek haritalarına göre "
+              "hesaplandığı için 3.94–4.55 gibi tuhaf sayılara denk gelir."},
     "star_dist_bins_integer": {"en": "Whole stars (0–1, 1–2, …)",
                                "tr": "Tam yıldız (0–1, 1–2, …)"},
+    "star_dist_bins_integer_tip": {
+        "en": "One bar per whole star: 0–1, 1–2, 2–3 … Easier to read and to act "
+              "on (“how many 5★ maps do I have?”). Empty stars are still shown so "
+              "the axis reads continuously.",
+        "tr": "Her tam yıldız için bir çubuk: 0–1, 1–2, 2–3 … Okuması ve "
+              "kullanması daha kolay (“kaç tane 5★ haritam var?”). Boş yıldızlar "
+              "da gösterilir, böylece eksen kesintisiz okunur."},
     "star_dist_hint": {
         "en": "Click a bar to select it (drag across bars for a range); "
               "double-click a bar to search that range.",
         "tr": "Bir çubuğa tıklayıp seç (aralık için çubuklar üzerinde sürükle); "
               "bir çubuğa çift tıklayınca o aralık aratılır."},
     "star_dist_selected": {
-        "en": "{lo}★–{hi}★ · {count} difficulties ({pct}% of the Library). "
-              "Searching this range lists the SETS that contain them.",
-        "tr": "{lo}★–{hi}★ · {count} zorluk (kütüphanenin %{pct}'i). Bu aralığı "
-              "aramak, bu zorlukları içeren SETLERİ listeler."},
+        "en": "{lo}★–{hi}★ · {count} difficulties ({pct}% of the Library), living "
+              "in {sets} set(s). Searching this range will therefore list "
+              "{sets} result(s) — one per set, not per difficulty.",
+        "tr": "{lo}★–{hi}★ · {count} zorluk (kütüphanenin %{pct}'i), {sets} sette "
+              "bulunuyor. Bu aralığı aradığında {sets} sonuç listelenecek — set "
+              "başına bir tane, zorluk başına değil."},
     "star_dist_search": {"en": "Search this range", "tr": "Bu aralığı ara"},
     "star_dist_export": {"en": "Export this range", "tr": "Bu aralığı dışa aktar"},
     "star_dist_empty": {
@@ -1058,6 +1084,217 @@ STRINGS: dict[str, dict[str, str]] = {
               "ama Rosu linki alamadı. Paylaşımı gözden geçirmek veya iptal etmek "
               "için Google Drive'ı aç."},
 
+    # -- v1.7.1: undoing a prune -------------------------------------------
+    "btn_restore_pruned": {"en": "Restore pruned maps",
+                           "tr": "Kırpılmışları geri getir"},
+    "tip_restore_pruned": {
+        "en": "Re-downloads every pruned set at full size (video and all) from a "
+              "third-party osu! mirror. Use this when you want your videos back. "
+              "Prune also puts each original in the Recycle Bin as "
+              "“<name>.osz.orig” — that is the instant undo, but only until the "
+              "bin is emptied, and only for the Library.",
+        "tr": "Kırpılmış her seti tam boyutuyla (videosuyla birlikte) üçüncü taraf "
+              "bir osu! aynasından yeniden indirir. Videolarını geri istediğinde "
+              "bunu kullan. Prune ayrıca her orijinali Geri Dönüşüm Kutusu'na "
+              "“<ad>.osz.orig” olarak koyar — anında geri alma yolu odur ama "
+              "yalnızca kutu boşaltılana kadar ve yalnızca Kütüphane için."},
+    "sc_restore_none": {
+        "en": "No pruned sets — there is nothing to restore.",
+        "tr": "Kırpılmış set yok — geri getirilecek bir şey yok."},
+    "sc_restore_confirm": {
+        "en": "Re-download {n} pruned set(s) at full size from a third-party osu! "
+              "mirror (not the official osu! servers)? This replaces the pruned "
+              "file in your Library with the complete set, and can take a while "
+              "and a lot of bandwidth. You can cancel it from the queue.",
+        "tr": "{n} kırpılmış set, üçüncü taraf bir osu! aynasından (resmî osu! "
+              "sunucularından değil) tam boyutuyla yeniden indirilsin mi? Bu, "
+              "Kütüphanendeki kırpılmış dosyanın yerine setin tamamını koyar; "
+              "uzun sürebilir ve çok veri harcayabilir. Kuyruktan iptal edebilirsin."},
+    "sc_restore_done": {"en": "Restored {n} set(s) at full size.",
+                        "tr": "{n} set tam boyutuyla geri getirildi."},
+    "sc_restore_partial": {
+        "en": "Restored {n} set(s); {failed} could not be downloaded (the mirror "
+              "may not have them).",
+        "tr": "{n} set geri getirildi; {failed} tanesi indirilemedi (aynada "
+              "bulunmuyor olabilir)."},
+    "sc_restore_failed": {
+        "en": "Nothing could be restored ({failed} attempted). The mirror may be "
+              "down, or those sets may no longer exist on osu!.",
+        "tr": "Hiçbir şey geri getirilemedi ({failed} denendi). Ayna kapalı "
+              "olabilir ya da bu setler artık osu!'da bulunmuyor olabilir."},
+
+    # -- v1.7.1: guided osu!lazer slim-down ---------------------------------
+    "btn_lazer_slim": {"en": "Slim down osu!lazer…", "tr": "osu!lazer'ı inceltet…"},
+    "tip_lazer_slim": {
+        "en": "osu!lazer cannot be pruned in place, so this walks you through the "
+              "round-trip that does the same job safely: save everything into the "
+              "Library, delete the beatmaps inside lazer yourself, prune the "
+              "Library, then send it all back. Every step is explained and "
+              "confirmed before it runs.",
+        "tr": "osu!lazer yerinde kırpılamaz; bu yüzden bu sihirbaz aynı işi güvenle "
+              "yapan gidiş-dönüş yolunu adım adım anlatır: her şeyi Kütüphaneye "
+              "kaydet, lazer içindeki haritaları kendin sil, Kütüphaneyi kırp, "
+              "sonra hepsini geri gönder. Her adım çalışmadan önce açıklanır ve "
+              "onaylanır."},
+    "lazer_slim_title": {"en": "Slim down osu!lazer", "tr": "osu!lazer'ı incelt"},
+    "lazer_slim_skip": {"en": "Skip this step", "tr": "Bu adımı atla"},
+    "lazer_slim_finish": {"en": "Finish", "tr": "Bitir"},
+
+    "lazer_slim_h_intro": {"en": "What is about to happen",
+                           "tr": "Neler olacak"},
+    "lazer_slim_b_intro": {
+        "en": "osu!lazer stores every file under a content hash and shares ONE "
+              "copy between all sets that contain the same asset, so Rosu cannot "
+              "simply delete videos out of it — that would break other sets and "
+              "leave lazer's database pointing at files that no longer exist.\n\n"
+              "So this does it the safe way instead:\n\n"
+              "1.  Save every beatmap in lazer into your Rosu Library.\n"
+              "2.  You delete the beatmaps inside lazer (only lazer's own code may "
+              "touch its database — Rosu will tell you exactly where the button is).\n"
+              "3.  Rosu checks that lazer's files really went.\n"
+              "4.  Prune the Library — strip video and/or images. Optional.\n"
+              "5.  Send the slimmed Library back into lazer.\n\n"
+              "Nothing happens until you press the button on each step, and your "
+              "Library keeps a full copy the whole time.",
+        "tr": "osu!lazer her dosyayı içerik özetine göre saklar ve aynı dosyayı "
+              "içeren TÜM setler arasında TEK bir kopyayı paylaşır. Bu yüzden Rosu "
+              "onun içinden öylece video silemez — bu, başka setleri bozar ve "
+              "lazer'in veritabanı artık var olmayan dosyaları göstermeye devam eder."
+              "\n\nBu yüzden güvenli yoldan yapıyoruz:\n\n"
+              "1.  lazer'daki her beatmap'i Rosu Kütüphanene kaydet.\n"
+              "2.  lazer içindeki haritaları sen sil (veritabanına yalnızca "
+              "lazer'in kendi kodu dokunabilir — Rosu tuşun tam olarak nerede "
+              "olduğunu söyleyecek).\n"
+              "3.  Rosu lazer'in dosyalarının gerçekten gittiğini kontrol eder.\n"
+              "4.  Kütüphaneyi kırp — video ve/veya görselleri at. İsteğe bağlı.\n"
+              "5.  İncelen Kütüphaneyi lazer'a geri gönder.\n\n"
+              "Her adımda tuşa basmadan hiçbir şey olmaz ve Kütüphanen bu süre "
+              "boyunca tam kopyayı korur."},
+    "lazer_slim_btn_intro": {"en": "Start — save lazer into the Library",
+                             "tr": "Başla — lazer'ı Kütüphaneye kaydet"},
+
+    "lazer_slim_h_save": {"en": "Step 1 — saving lazer into your Library",
+                          "tr": "Adım 1 — lazer Kütüphaneye kaydediliyor"},
+    "lazer_slim_b_save": {
+        "en": "Rosu is re-exporting every beatmap set out of lazer and adding the "
+              "ones you don't already have to your Library. Nothing in lazer is "
+              "modified. This can take a while on a big collection.",
+        "tr": "Rosu, lazer'daki her beatmap setini yeniden dışa aktarıp sende "
+              "olmayanları Kütüphanene ekliyor. lazer'da hiçbir şey değiştirilmez. "
+              "Büyük bir koleksiyonda bu biraz sürebilir."},
+    "lazer_slim_btn_save": {"en": "Retry", "tr": "Tekrar dene"},
+    "lazer_slim_saving": {"en": "Reading osu!lazer…", "tr": "osu!lazer okunuyor…"},
+    "lazer_slim_saved": {
+        "en": "✓ Saved. {new} new set(s) added to the Library. lazer's file store "
+              "is currently {size} — remember that number for the next step.",
+        "tr": "✓ Kaydedildi. Kütüphaneye {new} yeni set eklendi. lazer'in dosya "
+              "deposu şu an {size} — sonraki adım için bu sayıyı aklında tut."},
+    "lazer_slim_not_found": {
+        "en": "osu!lazer was not found on this computer.",
+        "tr": "Bu bilgisayarda osu!lazer bulunamadı."},
+    "lazer_slim_disabled": {
+        "en": "osu!lazer is turned off in Settings — turn it on first.",
+        "tr": "osu!lazer Ayarlar'da kapalı — önce açman gerekiyor."},
+    "lazer_slim_save_failed": {
+        "en": "Could not read osu!lazer. Close lazer completely and try again.",
+        "tr": "osu!lazer okunamadı. lazer'ı tamamen kapatıp tekrar dene."},
+
+    "lazer_slim_h_delete": {"en": "Step 2 — now delete them inside lazer",
+                            "tr": "Adım 2 — şimdi lazer içinden sil"},
+    "lazer_slim_b_delete": {
+        "en": "Your maps are safe in the Library now. Delete them from lazer "
+              "yourself — Rosu deliberately does not touch lazer's database:\n\n"
+              "1.  Open osu!lazer.\n"
+              "2.  Settings  →  Maintenance.\n"
+              "3.  Press “Delete ALL beatmaps” and confirm.\n"
+              "4.  Close osu!lazer completely.\n\n"
+              "Then come back here and press Check. Rosu will measure lazer's file "
+              "store and tell you whether it really emptied.",
+        "tr": "Haritaların artık Kütüphanede güvende. lazer'dan silmeyi sen yap — "
+              "Rosu, lazer'in veritabanına bilerek dokunmuyor:\n\n"
+              "1.  osu!lazer'ı aç.\n"
+              "2.  Settings (Ayarlar)  →  Maintenance (Bakım).\n"
+              "3.  “Delete ALL beatmaps” tuşuna bas ve onayla.\n"
+              "4.  osu!lazer'ı tamamen kapat.\n\n"
+              "Sonra buraya dön ve Kontrol et'e bas. Rosu lazer'in dosya deposunu "
+              "ölçüp gerçekten boşalıp boşalmadığını söyleyecek."},
+    "lazer_slim_btn_delete": {"en": "Check — did they go?",
+                              "tr": "Kontrol et — gitti mi?"},
+    "lazer_slim_emptied": {
+        "en": "✓ lazer's file store went from {before} to {after}. Looks done.",
+        "tr": "✓ lazer'in dosya deposu {before} → {after} oldu. Görünüşe göre oldu."},
+    "lazer_slim_still_there": {
+        "en": "lazer's file store is still {after} (it was {before}). It does not "
+              "look like the beatmaps were deleted — or lazer has not finished "
+              "cleaning up yet. Close lazer completely and check again.",
+        "tr": "lazer'in dosya deposu hâlâ {after} (önce {before} idi). Haritalar "
+              "silinmiş görünmüyor — ya da lazer temizliği henüz bitirmedi. "
+              "lazer'ı tamamen kapatıp tekrar kontrol et."},
+    "lazer_slim_force_continue": {
+        "en": "Rosu could not confirm the beatmaps were deleted. Only you can see "
+              "lazer's screen — continue anyway?",
+        "tr": "Rosu haritaların silindiğini doğrulayamadı. lazer'in ekranını "
+              "yalnızca sen görüyorsun — yine de devam edilsin mi?"},
+
+    "lazer_slim_h_prune": {"en": "Step 3 — prune the Library (optional)",
+                           "tr": "Adım 3 — Kütüphaneyi kırp (isteğe bağlı)"},
+    "lazer_slim_b_prune": {
+        "en": "This is the actual space saving. Opening Prune lets you choose what "
+              "to strip (video only, images only, or both) and how many sets, with "
+              "a preview of exactly what would go. Whatever you strip here is what "
+              "lazer gets back in the last step.\n\n"
+              "You can skip this and simply put everything back unchanged.",
+        "tr": "Asıl yer kazancı burada. Prune'u açtığında neyin çıkarılacağını "
+              "(sadece video, sadece görsel ya da ikisi) ve kaç set olacağını, tam "
+              "olarak neyin gideceğinin önizlemesiyle seçersin. Burada ne "
+              "çıkarırsan son adımda lazer'a o gider.\n\n"
+              "Bu adımı atlayıp her şeyi olduğu gibi geri koyabilirsin de."},
+    "lazer_slim_btn_prune": {"en": "Open Prune…", "tr": "Prune'u aç…"},
+    "lazer_slim_prune_queued": {
+        "en": "Prune queued for {n} set(s) — let it finish in the job queue before "
+              "sending everything back.",
+        "tr": "{n} set için kırpma kuyruğa alındı — her şeyi geri göndermeden önce "
+              "iş kuyruğunda bitmesini bekle."},
+    "lazer_slim_prune_skipped": {"en": "Prune skipped — nothing was stripped.",
+                                 "tr": "Kırpma atlandı — hiçbir şey çıkarılmadı."},
+
+    "lazer_slim_h_send": {"en": "Step 4 — send the Library back to lazer",
+                          "tr": "Adım 4 — Kütüphaneyi lazer'a geri gönder"},
+    "lazer_slim_b_send": {
+        "en": "Rosu will hand every Library set to osu!lazer to import. lazer opens "
+              "and does the importing itself, so give it time — and let it finish "
+              "before you start playing.\n\n"
+              "If you queued a prune in the previous step, wait for it to finish "
+              "first, otherwise lazer gets the un-pruned files.",
+        "tr": "Rosu, Kütüphanedeki her seti içe aktarması için osu!lazer'a verecek. "
+              "İçe aktarmayı lazer kendisi yapar, o yüzden ona zaman tanı — ve "
+              "oynamaya başlamadan önce bitmesini bekle.\n\n"
+              "Önceki adımda kırpma kuyruğa aldıysan önce onun bitmesini bekle, "
+              "yoksa lazer'a kırpılmamış dosyalar gider."},
+    "lazer_slim_btn_send": {"en": "Send everything to lazer",
+                            "tr": "Her şeyi lazer'a gönder"},
+    "lazer_slim_send_confirm": {
+        "en": "Hand your whole Library to osu!lazer to import? lazer will open and "
+              "import in batches; this can take a long time on a big Library.",
+        "tr": "Tüm Kütüphanen içe aktarılmak üzere osu!lazer'a verilsin mi? lazer "
+              "açılıp parti parti içe aktaracak; büyük bir Kütüphanede bu uzun sürebilir."},
+    "lazer_slim_sending": {"en": "Handing sets to osu!lazer…",
+                           "tr": "Setler osu!lazer'a veriliyor…"},
+    "lazer_slim_sent": {"en": "✓ {sent} set(s) handed to osu!lazer.",
+                        "tr": "✓ {sent} set osu!lazer'a verildi."},
+
+    "lazer_slim_h_done": {"en": "Done", "tr": "Bitti"},
+    "lazer_slim_b_done": {
+        "en": "osu!lazer is importing the sets you sent. Once it finishes, your "
+              "collection is back — minus whatever you chose to strip.\n\n"
+              "Changed your mind about the videos? Shortcuts → “Restore pruned "
+              "maps” re-downloads every pruned set at full size.",
+        "tr": "osu!lazer gönderdiğin setleri içe aktarıyor. Bitince koleksiyonun "
+              "geri gelmiş olacak — çıkarmayı seçtiğin şeyler hariç.\n\n"
+              "Videolar konusunda fikrin mi değişti? Kısayollar → “Kırpılmışları "
+              "geri getir” her kırpılmış seti tam boyutuyla yeniden indirir."},
+    "lazer_slim_btn_done": {"en": "Finish", "tr": "Bitir"},
+
     "btn_dedup": {"en": "Dedupe Library", "tr": "Kütüphaneyi tekilleştir"},
     "tip_dedup": {
         "en": "Recycle redundant duplicate .osz in your Library (the same set "
@@ -1103,7 +1340,13 @@ STRINGS: dict[str, dict[str, str]] = {
               "edilsin mi?"},
     "sc_prune_done": {"en": "Pruned {pruned} map(s), freed {freed}.",
                       "tr": "{pruned} harita kırpıldı. {freed} alan açıldı."},
-    "job_prune": {"en": "Prune Library", "tr": "Kütüphaneyi Kırp"},
+    # Not "Prune Library" any more — the same job also prunes osu!(stable), and
+    # the row's detail line names the source.
+    "job_prune": {"en": "Space saving (Prune)", "tr": "Alan Tasarrufu (Prune)"},
+    "job_restore_pruned": {"en": "Restore pruned maps",
+                           "tr": "Kırpılmış haritaları geri getir"},
+    "job_step_restore": {"en": "Re-download from an osu! mirror",
+                         "tr": "osu! aynasından yeniden indir"},
     "job_step_prune_scan": {"en": "Scan for heavy assets", "tr": "Ağır dosyaları tara"},
     "job_step_prune_remove": {"en": "Trim heavy assets", "tr": "Ağır dosyaları kırp"},
 

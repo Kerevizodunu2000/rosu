@@ -123,6 +123,8 @@ class HealthMixin:
                 if download_osz(beatmapset_id, dest):
                     repaired += 1
                     self.db.set_pruned_state(track_id, False, None)
+                    self.log.info("RESTORED", file=filename,
+                                  beatmapset_id=beatmapset_id)
                     # A repaired-from-missing map is physically back in the
                     # Library — without this, "missing" rows stayed missing in
                     # Search until an unrelated Refresh reconciled them.

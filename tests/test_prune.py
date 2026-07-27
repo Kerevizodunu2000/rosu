@@ -375,3 +375,30 @@ def test_select_targets_limit_zero_or_none_means_all():
     sets = [_s("a", 1), _s("b", 2)]
     assert len(prune.select_targets(sets, limit=None)) == 2
     assert len(prune.select_targets(sets, limit=0)) == 2
+
+
+def test_recycle_bin_copy_is_named_after_the_set(tmp_path, monkeypatch):
+    """The pre-prune copy used to be a tempfile (tmpab12cd.osz.orig), so
+    recovering it from the Recycle Bin handed back a file nobody could identify.
+    It must carry the set's own name."""
+    trashed = []
+    monkeypatch.setattr("send2trash.send2trash", lambda p: trashed.append(str(p)))
+    p = tmp_path / "123 Artist - Title.osz"
+    _make_osz(p, {"map.osu": _OSU_TEXT.encode("utf-8"), "video.mp4": b"v" * 5000})
+    assert prune.prune_osz(p, mode="video_only") == 5000
+    assert len(trashed) == 1
+    import os
+    assert os.path.basename(trashed[0]) == "123 Artist - Title.osz.orig"
+
+
+def test_recycle_bin_copy_never_overwrites_an_existing_one(tmp_path, monkeypatch):
+    trashed = []
+    monkeypatch.setattr("send2trash.send2trash", lambda p: trashed.append(str(p)))
+    p = tmp_path / "set.osz"
+    stale = tmp_path / "set.osz.orig"
+    stale.write_bytes(b"an earlier prune's copy nobody emptied yet")
+    _make_osz(p, {"map.osu": _OSU_TEXT.encode("utf-8"), "video.mp4": b"v" * 5000})
+    prune.prune_osz(p, mode="video_only")
+    import os
+    assert os.path.basename(trashed[0]) == "set.osz.2.orig"
+    assert stale.read_bytes().startswith(b"an earlier")   # untouched

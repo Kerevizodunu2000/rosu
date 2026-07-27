@@ -189,10 +189,18 @@ class LibraryMixin:
                         if freed_this > 0:
                             pruned_count += 1
                             freed += freed_this
-                            # update db
                             row = self.db.find_track_row(None, name)
                             if row:
-                                self.db.set_pruned_state(row["id"], True, original_size)
+                                # Tag WHEN and with WHICH mode, so "which maps lost
+                                # their video?" is answerable from the data.
+                                self.db.set_pruned_state(row["id"], True,
+                                                         original_size,
+                                                         when=now_iso(), mode=mode)
+                            # One line per set: a summary total cannot tell the
+                            # owner *which* of their maps was stripped.
+                            self.log.info("PRUNED", source="library", file=name,
+                                          mode=mode, freed_bytes=freed_this,
+                                          original_size=original_size)
                     except Exception as e:
                         self.log.error("PRUNE_ERROR", file=name, error=str(e))
                 if progress:
@@ -334,6 +342,8 @@ class LibraryMixin:
                 if freed_this > 0:
                     pruned += 1
                     freed += freed_this
+                    self.log.info("PRUNED", source="stable", folder=name,
+                                  mode=mode, freed_bytes=freed_this)
                 if progress:
                     progress({"kind": "prune", "done": i + 1, "total": len(names),
                               "name": name})
