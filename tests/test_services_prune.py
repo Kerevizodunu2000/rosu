@@ -320,3 +320,65 @@ def test_pruned_count_feeds_the_restore_flow(tmp_path):
     db.set_pruned_state(tid, True, 100)
     assert svc.pruned_count() == 1
     db.close()
+
+
+# -- v1.7.1: prune is per-LOCATION, and the badge must not over-claim ----------
+def test_stable_prune_does_not_mark_the_library_copy_as_pruned(tmp_path, monkeypatch):
+    """A row saying "pruned" while its Library file is whole (and its lazer copy
+    untouched) claims more than happened — and would make the Library prune scan
+    skip a file it never touched."""
+    from rosu import client_import
+    cfg, db, svc = _svc(tmp_path)
+    tid = _make_set(cfg, db, 55, {"map.osu": b"x", "video.mp4": b"z" * 4000})
+    songs = tmp_path / "Songs"
+    (songs / "55 A - B").mkdir(parents=True)
+    (songs / "55 A - B" / "map.osu").write_bytes(b"osu file format v14\n")
+    (songs / "55 A - B" / "video.mp4").write_bytes(b"v" * 6000)
+    monkeypatch.setattr(client_import, "stable_songs_dir", lambda: songs)
+    monkeypatch.setattr("send2trash.send2trash",
+                        lambda p: __import__("os").remove(p))
+
+    svc.prune_apply("stable", "video_only", ["55 A - B"])
+    row = db.all_tracks()[0]
+    assert row["is_pruned"] == 0                  # the Library copy is untouched
+    assert row["pruned_sources"] == "stable"      # …but we know where it happened
+    assert db.pruned_filenames() == []            # nothing for the bulk restore
+    # and the Library prune scan still offers it, because it really is unpruned
+    assert [s["key"] for s in svc.prune_scan("library", "video_only")["sets"]] == [
+        "55 A - B.osz"]
+    db.close()
+
+
+def test_pruning_both_places_lists_both(tmp_path, monkeypatch):
+    from rosu import client_import
+    cfg, db, svc = _svc(tmp_path)
+    _make_set(cfg, db, 55, {"map.osu": b"x", "video.mp4": b"z" * 4000})
+    songs = tmp_path / "Songs"
+    (songs / "55 A - B").mkdir(parents=True)
+    (songs / "55 A - B" / "map.osu").write_bytes(b"osu file format v14\n")
+    (songs / "55 A - B" / "video.mp4").write_bytes(b"v" * 6000)
+    monkeypatch.setattr(client_import, "stable_songs_dir", lambda: songs)
+    monkeypatch.setattr("send2trash.send2trash",
+                        lambda p: __import__("os").remove(p))
+
+    svc.prune_apply("stable", "video_only", ["55 A - B"])
+    svc.prune_apply("library", "video_only", ["55 A - B.osz"])
+    row = db.all_tracks()[0]
+    assert row["is_pruned"] == 1
+    assert row["pruned_sources"] == "library,stable"
+    db.close()
+
+
+def test_restoring_clears_only_the_library_source(tmp_path, monkeypatch):
+    cfg, db, svc = _svc(tmp_path)
+    tid = _make_set(cfg, db, 7, {"map.osu": b"x"})
+    db.set_pruned_state(tid, True, 9999, when="w", mode="video_only")
+    db.note_pruned_source(tid, "stable")
+    assert db.all_tracks()[0]["pruned_sources"] == "library,stable"
+    monkeypatch.setattr("rosu.api_mirror.download_osz", lambda bid, dest: True)
+    svc.repair_maps(["7 A - B.osz"])
+    row = db.all_tracks()[0]
+    # The download replaced the LIBRARY copy; stable's is still stripped, so
+    # dropping that note too would be a lie in the other direction.
+    assert row["is_pruned"] == 0 and row["pruned_sources"] == "stable"
+    db.close()

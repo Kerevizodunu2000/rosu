@@ -18,7 +18,7 @@ from pathlib import Path
 
 from .models import ParsedPack, ParsedTrack
 
-SCHEMA_VERSION = 10
+SCHEMA_VERSION = 11
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta (
@@ -147,6 +147,11 @@ _MIGRATIONS = {
         # answerable from the data rather than only from the log file.
         "pruned_at": "TEXT",
         "prune_mode": "TEXT",
+        # -- v1.7.1 (schema v11): WHERE the prune happened, comma-joined
+        # ("library", "stable", …). `is_pruned` alone made a row read as though
+        # every copy of the set had been stripped, when in fact only the copies
+        # in the listed places were.
+        "pruned_sources": "TEXT",
     },
     # -- v1.6 Mania MSD: per-diff skillset ratings (mania-only; NULL elsewhere).
     # Additive ALTERs onto the v1.5 `difficulties` table — same mechanism as tracks.
@@ -705,24 +710,62 @@ class Database:
                 (status, beatmapset_id))
             self._conn.commit()
 
+    @staticmethod
+    def _merge_sources(current: str | None, add: str | None = None,
+                       remove: str | None = None) -> str | None:
+        parts = {p for p in (current or "").split(",") if p}
+        if add:
+            parts.add(add)
+        if remove:
+            parts.discard(remove)
+        return ",".join(sorted(parts)) or None
+
     def set_pruned_state(self, track_id: int, is_pruned: bool, original_size: int,
                          when: str | None = None, mode: str | None = None) -> None:
-        """Record (or clear) a set's pruned state.
+        """Record (or clear) the pruned state of the **Library** copy.
+
+        ``is_pruned`` is Library-only on purpose: it gates the Library prune scan
+        and the bulk restore, so letting a client-side prune set it would make
+        Rosu skip a Library file that was never touched. Where a prune happened
+        is tracked separately in ``pruned_sources`` (see :meth:`note_pruned_source`).
 
         ``when``/``mode`` are stored so the app can answer "which maps lost their
         video, when, and under which mode" from the database — clearing the flag
         clears them too, so a restored set carries no stale prune record.
         """
         with self._lock:
+            row = self._conn.execute(
+                "SELECT pruned_sources FROM tracks WHERE id=?", (track_id,)).fetchone()
+            current = row["pruned_sources"] if row else None
             if is_pruned:
                 self._conn.execute(
                     "UPDATE tracks SET is_pruned=1, original_size=?, pruned_at=?, "
-                    "prune_mode=? WHERE id=?",
-                    (original_size, when, mode, track_id))
+                    "prune_mode=?, pruned_sources=? WHERE id=?",
+                    (original_size, when, mode,
+                     self._merge_sources(current, add="library"), track_id))
             else:
                 self._conn.execute(
                     "UPDATE tracks SET is_pruned=0, original_size=?, pruned_at=NULL, "
-                    "prune_mode=NULL WHERE id=?", (original_size, track_id))
+                    "prune_mode=NULL, pruned_sources=? WHERE id=?",
+                    (original_size, self._merge_sources(current, remove="library"),
+                     track_id))
+            self._conn.commit()
+
+    def note_pruned_source(self, track_id: int, source: str,
+                           when: str | None = None, mode: str | None = None) -> None:
+        """Record that a prune happened to this set's copy in ``source`` (e.g.
+        ``"stable"``) WITHOUT touching ``is_pruned`` — that flag belongs to the
+        Library copy alone, and a client-side prune leaves the Library file whole."""
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT pruned_sources FROM tracks WHERE id=?", (track_id,)).fetchone()
+            if row is None:
+                return
+            self._conn.execute(
+                "UPDATE tracks SET pruned_sources=?, pruned_at=COALESCE(?, pruned_at), "
+                "prune_mode=COALESCE(?, prune_mode) WHERE id=?",
+                (self._merge_sources(row["pruned_sources"], add=source), when, mode,
+                 track_id))
             self._conn.commit()
 
     def pruned_filenames(self) -> list[str]:

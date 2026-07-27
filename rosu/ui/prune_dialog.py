@@ -73,19 +73,28 @@ class PruneDialog(QDialog):
                 label += f"  ({t('prune_n_sets', n=info.get('sets', 0))})"
             self.cbo_source.addItem(label, key)
             idx = self.cbo_source.count() - 1
+            reason = info.get("reason") or "no_stable"
             if not info.get("available"):
-                # Disabled, not hidden: the user can see the option exists and
-                # hover it to learn exactly why it is unavailable.
-                self.cbo_source.model().item(idx).setEnabled(False)
-                self.cbo_source.setItemData(
-                    idx, t(f"prune_why_{info.get('reason') or 'no_stable'}"),
-                    Qt.ToolTipRole)
+                self.cbo_source.setItemData(idx, t(f"prune_why_{reason}"),
+                                            Qt.ToolTipRole)
+                # lazer stays SELECTABLE even though it cannot be pruned here:
+                # picking it is how the user gets sent to the steps that DO prune
+                # it. A source with genuinely nothing behind it (stable not
+                # installed) is disabled, because there is nowhere to send them.
+                if reason != "lazer_realm":
+                    self.cbo_source.model().item(idx).setEnabled(False)
         src_row.addWidget(self.cbo_source, 1)
         root.addLayout(src_row)
 
         self.lbl_source_note = QLabel(objectName="status")
         self.lbl_source_note.setWordWrap(True)
         root.addWidget(self.lbl_source_note)
+
+        # Shown only for lazer: the way to actually prune it.
+        self.btn_lazer_steps = QPushButton(t("prune_open_lazer_steps"))
+        self.btn_lazer_steps.setVisible(False)
+        self.btn_lazer_steps.clicked.connect(self._open_lazer_steps)
+        root.addWidget(self.btn_lazer_steps)
 
         # -- mode ------------------------------------------------------------
         mode_row = QHBoxLayout()
@@ -175,10 +184,21 @@ class PruneDialog(QDialog):
         t = self.ctx.t
         key = self.cbo_source.currentData()
         info = self._sources.get(key) or {}
+        reason = info.get("reason") or "no_stable"
         self.lbl_source_note.setText(
-            "" if info.get("available")
-            else t(f"prune_why_{info.get('reason') or 'no_stable'}"))
+            "" if info.get("available") else t(f"prune_why_{reason}"))
+        is_lazer = (not info.get("available")) and reason == "lazer_realm"
+        if hasattr(self, "btn_lazer_steps"):
+            self.btn_lazer_steps.setVisible(is_lazer)
         self.lbl_mode_note.setText(t(f"prune_mode_{self.cbo_mode.currentData()}_tip"))
+
+    def _open_lazer_steps(self) -> None:
+        """Picking osu!lazer sends the user to the steps that really prune it —
+        refusing and stopping there would leave them with no way forward."""
+        from .lazer_slim_dialog import LazerSlimDialog
+        self._stop_scan()
+        LazerSlimDialog(self.ctx, self.parent()).exec()
+        self.reject()
 
     def _select_first_available(self) -> None:
         for i in range(self.cbo_source.count()):

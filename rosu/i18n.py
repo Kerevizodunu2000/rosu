@@ -186,17 +186,20 @@ STRINGS: dict[str, dict[str, str]] = {
                    "tr": "Kütüphanendeki {n} müzik listeleniyor."},
     "lib_status_pruned": {"en": "pruned ✂", "tr": "prune edildi ✂"},
     "pruned_tip": {
-        "en": "Space-saving Prune removed this set's heavy files (video, and "
-              "depending on the mode large unused images). The beatmap itself, its "
-              "audio and its background are intact and it still plays. To get the "
-              "full set back, right-click the row → Repair, which re-downloads it "
-              "from an osu! mirror. List every pruned set with the search "
-              "pruned=yes .",
-        "tr": "Alan tasarrufu (Prune) bu setin ağır dosyalarını kaldırdı (video ve "
-              "moda göre kullanılmayan büyük görseller). Beatmap'in kendisi, sesi "
-              "ve arka planı yerinde; harita hâlâ oynanır. Setin tamamını geri "
-              "almak için satıra sağ tıkla → Onar; bir osu! aynasından yeniden "
-              "indirir. Tüm prune edilmiş setleri görmek için pruned=yes ara."},
+        "en": "Pruned in: {where}. Copies of this set anywhere else — including "
+              "osu!lazer — were NOT touched.\n\nPrune removed the heavy files "
+              "(video, and depending on the mode large unused images). The "
+              "beatmap itself, its audio and its background are intact and it "
+              "still plays. To get the full set back: Shortcuts → “Restore pruned "
+              "maps”, or right-click this row → Repair. List every pruned set "
+              "with the search pruned=yes .",
+        "tr": "Şurada kırpıldı: {where}. Bu setin başka yerlerdeki kopyalarına — "
+              "osu!lazer dahil — DOKUNULMADI.\n\nPrune ağır dosyaları kaldırdı "
+              "(video ve moda göre kullanılmayan büyük görseller). Beatmap'in "
+              "kendisi, sesi ve arka planı yerinde; harita hâlâ oynanır. Setin "
+              "tamamını geri almak için: Kısayollar → “Kırpılmışları geri getir”, "
+              "ya da bu satıra sağ tıkla → Onar. Tüm kırpılmış setleri görmek için "
+              "pruned=yes ara."},
     "search_truncated": {
         "en": "Showing {n} of {total} matches — narrow the query to see the rest.",
         "tr": "{total} eşleşmenin {n} tanesi listeleniyor — kalanı için aramayı "
@@ -1098,6 +1101,66 @@ STRINGS: dict[str, dict[str, str]] = {
               "bunu kullan. Prune ayrıca her orijinali Geri Dönüşüm Kutusu'na "
               "“<ad>.osz.orig” olarak koyar — anında geri alma yolu odur ama "
               "yalnızca kutu boşaltılana kadar ve yalnızca Kütüphane için."},
+    "restore_title": {"en": "Restore pruned maps — from where?",
+                      "tr": "Kırpılmışları geri getir — nereden?"},
+    "restore_head": {
+        "en": "{n} set(s) are pruned. Where should the missing files come back from?",
+        "tr": "{n} set kırpılmış. Eksik dosyalar nereden geri gelsin?"},
+    "restore_opt_recycle": {"en": "From the Recycle Bin (free, exact, instant)",
+                            "tr": "Geri Dönüşüm Kutusu'ndan (bedava, birebir, anında)"},
+    "restore_opt_recycle_note": {
+        "en": "Prune put every original in the Recycle Bin — Library sets as "
+              "“<name>.osz.orig”, and osu!(stable) files under their own names "
+              "with their original folder shown. Restoring from there is free and "
+              "byte-identical, as long as you have not emptied the bin. Rosu opens "
+              "the bin and tells you what to look for; it does not reach into it "
+              "for you.",
+        "tr": "Prune her orijinali Geri Dönüşüm Kutusu'na koydu — Kütüphane setleri "
+              "“<ad>.osz.orig” olarak, osu!(stable) dosyaları ise kendi adlarıyla ve "
+              "orijinal klasörleri görünecek şekilde. Kutuyu boşaltmadıysan oradan "
+              "geri almak bedava ve birebir aynı. Rosu kutuyu açar ve neye "
+              "bakacağını söyler; senin yerine içine uzanmaz."},
+    "restore_opt_mirror": {"en": "Download again from an osu! mirror ({url})",
+                           "tr": "Bir osu! aynasından yeniden indir ({url})"},
+    "restore_opt_mirror_note": {
+        "en": "Re-downloads the complete set from {url} — a THIRD-PARTY mirror, "
+              "not run by osu!'s developers. Works however long ago the prune "
+              "happened, but it costs bandwidth and a set the mirror does not "
+              "have will fail.",
+        "tr": "Setin tamamını {url} üzerinden yeniden indirir — bu ÜÇÜNCÜ TARAF bir "
+              "ayna, osu! geliştiricileri tarafından işletilmiyor. Kırpma ne kadar "
+              "önce olursa olsun çalışır ama veri harcar ve aynada olmayan bir set "
+              "için başarısız olur."},
+    "restore_why_not_official": {
+        "en": "Why not the official osu! servers? Downloading beatmaps there needs "
+              "a signed-in osu! account, and the public osu! API has no download "
+              "endpoint — so Rosu cannot fetch from them on your behalf.",
+        "tr": "Neden resmî osu! sunucuları değil? Oradan beatmap indirmek oturum "
+              "açmış bir osu! hesabı gerektiriyor ve herkese açık osu! API'sinde "
+              "indirme uç noktası yok — bu yüzden Rosu senin adına oradan çekemiyor."},
+    "restore_go": {"en": "Continue", "tr": "Devam et"},
+    "restore_recycle_how": {
+        "en": "The Recycle Bin is open. Sort by “Date deleted” to find the prune "
+              "run, then select the files and press Restore — they go straight "
+              "back where they came from.\n\nLibrary originals are named "
+              "“<set>.osz.orig”: restore them, then remove the “.orig” from the "
+              "end of the name so Rosu sees them again. (Sets pruned before this "
+              "version may appear as “tmp…….osz.orig”; the Original Location "
+              "column still shows they came from your Library.)",
+        "tr": "Geri Dönüşüm Kutusu açıldı. Kırpma çalıştırmasını bulmak için "
+              "“Silinme tarihi”ne göre sırala, dosyaları seç ve Geri Yükle'ye bas — "
+              "geldikleri yere geri dönerler.\n\nKütüphane orijinalleri "
+              "“<set>.osz.orig” adıyla duruyor: geri yükledikten sonra adın "
+              "sonundaki “.orig” kısmını sil ki Rosu onları yeniden görsün. (Bu "
+              "sürümden önce kırpılan setler “tmp…….osz.orig” olarak görünebilir; "
+              "Orijinal Konum sütunu yine de Kütüphaneden geldiklerini gösterir.)"},
+    "restore_recycle_manual": {
+        "en": "Rosu could not open the Recycle Bin on this system — open it "
+              "yourself and restore the files from there. Library originals are "
+              "named “<set>.osz.orig”; remove the “.orig” after restoring.",
+        "tr": "Rosu bu sistemde Geri Dönüşüm Kutusu'nu açamadı — kendin açıp "
+              "dosyaları oradan geri yükle. Kütüphane orijinalleri “<set>.osz.orig” "
+              "adıyla duruyor; geri yükledikten sonra “.orig” kısmını sil."},
     "sc_restore_none": {
         "en": "No pruned sets — there is nothing to restore.",
         "tr": "Kırpılmış set yok — geri getirilecek bir şey yok."},
@@ -1124,7 +1187,7 @@ STRINGS: dict[str, dict[str, str]] = {
               "olabilir ya da bu setler artık osu!'da bulunmuyor olabilir."},
 
     # -- v1.7.1: guided osu!lazer slim-down ---------------------------------
-    "btn_lazer_slim": {"en": "Slim down osu!lazer…", "tr": "osu!lazer'ı inceltet…"},
+    "btn_lazer_slim": {"en": "Prune osu!lazer…", "tr": "osu!lazer'ı kırp…"},
     "tip_lazer_slim": {
         "en": "osu!lazer cannot be pruned in place, so this walks you through the "
               "round-trip that does the same job safely: save everything into the "
@@ -1136,18 +1199,19 @@ STRINGS: dict[str, dict[str, str]] = {
               "kaydet, lazer içindeki haritaları kendin sil, Kütüphaneyi kırp, "
               "sonra hepsini geri gönder. Her adım çalışmadan önce açıklanır ve "
               "onaylanır."},
-    "lazer_slim_title": {"en": "Slim down osu!lazer", "tr": "osu!lazer'ı incelt"},
+    "lazer_slim_title": {"en": "Prune osu!lazer", "tr": "osu!lazer'ı kırp"},
     "lazer_slim_skip": {"en": "Skip this step", "tr": "Bu adımı atla"},
     "lazer_slim_finish": {"en": "Finish", "tr": "Bitir"},
 
-    "lazer_slim_h_intro": {"en": "What is about to happen",
-                           "tr": "Neler olacak"},
+    "lazer_slim_h_intro": {"en": "How pruning osu!lazer works",
+                           "tr": "osu!lazer'ı kırpmak nasıl oluyor"},
     "lazer_slim_b_intro": {
         "en": "osu!lazer stores every file under a content hash and shares ONE "
               "copy between all sets that contain the same asset, so Rosu cannot "
               "simply delete videos out of it — that would break other sets and "
               "leave lazer's database pointing at files that no longer exist.\n\n"
-              "So this does it the safe way instead:\n\n"
+              "So pruning lazer means going the long way round — these steps ARE "
+              "the prune:\n\n"
               "1.  Save every beatmap in lazer into your Rosu Library.\n"
               "2.  You delete the beatmaps inside lazer (only lazer's own code may "
               "touch its database — Rosu will tell you exactly where the button is).\n"
@@ -1160,7 +1224,8 @@ STRINGS: dict[str, dict[str, str]] = {
               "içeren TÜM setler arasında TEK bir kopyayı paylaşır. Bu yüzden Rosu "
               "onun içinden öylece video silemez — bu, başka setleri bozar ve "
               "lazer'in veritabanı artık var olmayan dosyaları göstermeye devam eder."
-              "\n\nBu yüzden güvenli yoldan yapıyoruz:\n\n"
+              "\n\nBu yüzden lazer'ı kırpmak uzun yoldan geçmek demek — bu adımlar "
+              "kırpma işleminin TA KENDİSİ:\n\n"
               "1.  lazer'daki her beatmap'i Rosu Kütüphanene kaydet.\n"
               "2.  lazer içindeki haritaları sen sil (veritabanına yalnızca "
               "lazer'in kendi kodu dokunabilir — Rosu tuşun tam olarak nerede "
@@ -1185,10 +1250,22 @@ STRINGS: dict[str, dict[str, str]] = {
     "lazer_slim_btn_save": {"en": "Retry", "tr": "Tekrar dene"},
     "lazer_slim_saving": {"en": "Reading osu!lazer…", "tr": "osu!lazer okunuyor…"},
     "lazer_slim_saved": {
-        "en": "✓ Saved. {new} new set(s) added to the Library. lazer's file store "
-              "is currently {size} — remember that number for the next step.",
-        "tr": "✓ Kaydedildi. Kütüphaneye {new} yeni set eklendi. lazer'in dosya "
-              "deposu şu an {size} — sonraki adım için bu sayıyı aklında tut."},
+        "en": "✓ All {total} set(s) from lazer are confirmed in your Library "
+              "({new} of them new). lazer's file store is currently {size} — "
+              "remember that number for the next step.",
+        "tr": "✓ lazer'daki {total} setin tamamının Kütüphanende olduğu doğrulandı "
+              "({new} tanesi yeni). lazer'in dosya deposu şu an {size} — sonraki "
+              "adım için bu sayıyı aklında tut."},
+    "lazer_slim_not_all_saved": {
+        "en": "STOP — {n} set(s) from lazer did NOT reach your Library "
+              "({names}). Do not delete anything in lazer yet: they would be "
+              "lost. Close lazer completely and press Retry.",
+        "tr": "DUR — lazer'daki {n} set Kütüphanene ULAŞMADI ({names}). lazer'da "
+              "henüz hiçbir şey silme: onlar kaybolur. lazer'ı tamamen kapat ve "
+              "Tekrar dene'ye bas."},
+    "lazer_slim_nothing_there": {
+        "en": "osu!lazer has no beatmaps to save — there is nothing to prune here.",
+        "tr": "osu!lazer'da kaydedilecek beatmap yok — burada kırpılacak bir şey yok."},
     "lazer_slim_not_found": {
         "en": "osu!lazer was not found on this computer.",
         "tr": "Bu bilgisayarda osu!lazer bulunamadı."},
@@ -1388,20 +1465,24 @@ STRINGS: dict[str, dict[str, str]] = {
         "tr": "osu!(stable) bulunamadı (ya da Ayarlar'da kapalı), bu yüzden burada "
               "kırpılacak bir şey yok."},
     "prune_why_lazer_realm": {
-        "en": "osu!lazer cannot be pruned by deleting files, and this is not a "
-              "setting: lazer stores every file by content hash and SHARES one "
-              "copy between all sets that contain the same asset, so removing one "
-              "set's video would break other sets and leave lazer's database "
-              "pointing at a file that no longer exists. Doing it safely means "
-              "going through lazer's own database, which arrives together with "
-              "the “remove maps from a client” feature.",
-        "tr": "osu!lazer dosya silerek kırpılamaz ve bu bir tercih değil: lazer her "
-              "dosyayı içerik özetine göre saklar ve aynı dosyayı içeren TÜM setler "
+        "en": "osu!lazer cannot be pruned from here, and that is not a setting: it "
+              "stores every file by content hash and SHARES one copy between all "
+              "sets containing the same asset, so removing one set's video would "
+              "break other sets and leave lazer's database pointing at a file "
+              "that no longer exists.\n\nIt CAN still be pruned — just the long "
+              "way round: save it into the Library, delete the beatmaps inside "
+              "lazer, prune the Library, send it back. Those steps are right "
+              "here.",
+        "tr": "osu!lazer buradan kırpılamaz ve bu bir tercih değil: her dosyayı "
+              "içerik özetine göre saklar ve aynı dosyayı içeren TÜM setler "
               "arasında tek bir kopyayı PAYLAŞIR. Yani bir setin videosunu silmek "
               "başka setleri bozar ve lazer'in veritabanı artık var olmayan bir "
-              "dosyayı göstermeye devam eder. Bunu güvenle yapmak lazer'in kendi "
-              "veritabanı üzerinden geçmeyi gerektiriyor; o da “istemciden harita "
-              "kaldırma” özelliğiyle birlikte gelecek."},
+              "dosyayı göstermeye devam eder.\n\nYine de kırpılabilir — sadece uzun "
+              "yoldan: Kütüphaneye kaydet, lazer içindeki haritaları sil, "
+              "Kütüphaneyi kırp, geri gönder. O adımlar tam burada."},
+    "prune_open_lazer_steps": {
+        "en": "Open the osu!lazer prune steps…",
+        "tr": "osu!lazer kırpma adımlarını aç…"},
     "prune_mode": {"en": "Remove:", "tr": "Kaldırılacak:"},
     "prune_mode_video_only": {"en": "Video only (safe)", "tr": "Sadece video (güvenli)"},
     "prune_mode_video_only_tip": {

@@ -342,6 +342,15 @@ class LibraryMixin:
                 if freed_this > 0:
                     pruned += 1
                     freed += freed_this
+                    # Note WHERE it happened, but never set `is_pruned` — that
+                    # flag means "the Library copy is stripped", and this one
+                    # isn't. Without the distinction a row claimed every copy of
+                    # the set had been pruned when only stable's had.
+                    bid = client_import.beatmapset_id_for_folder(songs / name)
+                    row = self.db.find_track_row(bid, None) if bid else None
+                    if row:
+                        self.db.note_pruned_source(row["id"], "stable",
+                                                   when=now_iso(), mode=mode)
                     self.log.info("PRUNED", source="stable", folder=name,
                                   mode=mode, freed_bytes=freed_this)
                 if progress:

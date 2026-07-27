@@ -341,19 +341,24 @@ def _prune_dialog(ctx, monkeypatch):
     return PruneDialog(ctx, None)
 
 
-def test_prune_dialog_offers_lazer_but_disabled_with_the_reason(qapp, tmp_path,
-                                                                monkeypatch):
-    """v1.7.1: lazer is listed so the user can see it exists and learn WHY it
-    cannot be pruned — hiding it would read as Rosu forgetting about it."""
+def test_prune_dialog_routes_lazer_to_its_own_steps(qapp, tmp_path, monkeypatch):
+    """lazer cannot be pruned from this dialog, but picking it must lead
+    somewhere — refusing and stopping would leave the user with no way forward.
+    It stays SELECTABLE and reveals the steps that do prune it."""
     from PySide6.QtCore import Qt
     ctx = _ctx(tmp_path, monkeypatch)
     dlg = _prune_dialog(ctx, monkeypatch)
     i = dlg.cbo_source.findData("lazer")
     assert i >= 0
-    assert not dlg.cbo_source.model().item(i).isEnabled()
+    assert dlg.cbo_source.model().item(i).isEnabled()      # selectable…
     assert dlg.cbo_source.itemData(i, Qt.ToolTipRole) == ctx.t("prune_why_lazer_realm")
-    assert dlg.cbo_source.currentData() == "library"   # first usable source picked
-    assert dlg.btn_prune.isEnabled() is False          # nothing scanned yet
+    assert dlg.cbo_source.currentData() == "library"       # …but not the default
+    assert not dlg.btn_lazer_steps.isVisible() or dlg.btn_lazer_steps.isHidden()
+
+    dlg.cbo_source.setCurrentIndex(i)
+    assert not dlg.btn_lazer_steps.isHidden()              # the way forward appears
+    assert ctx.t("prune_why_lazer_realm") in dlg.lbl_source_note.text()
+    assert dlg.btn_prune.isEnabled() is False              # nothing to prune here
     dlg.close()
     ctx.db.close()
 
@@ -521,7 +526,12 @@ def test_lazer_slim_wizard_walks_the_steps(qapp, tmp_path, monkeypatch):
     monkeypatch.setattr(ctx.services, "lazer_store_stats",
                         lambda: {"found": True, "path": "p", "files": 100,
                                  "bytes": 10_000_000})
-    dlg._on_saved({"found": True, "new": 12, "total": 12})
+    # A save that did not fully land must NOT unlock the delete step — that step
+    # tells the user to delete their beatmaps out of lazer.
+    dlg._on_saved({"found": True, "new": 11, "exported": 12,
+                   "missing": ["9 X - Y.osz"]})
+    assert dlg.step == "intro"
+    dlg._on_saved({"found": True, "new": 12, "exported": 12, "missing": []})
     assert dlg.step == "delete" and dlg._before["bytes"] == 10_000_000
 
     # Still full → refuses to advance unless the user insists.
@@ -564,6 +574,43 @@ def test_lazer_slim_wizard_lets_the_user_override_the_check(qapp, tmp_path,
                         lambda *a, **k: asked.append(1) or QMessageBox.Yes)
     dlg._check_deleted()
     assert asked == [1] and dlg.step == "prune"
+    dlg.close()
+    ctx.db.close()
+
+
+def test_pruned_badge_names_where_it_happened(qapp, tmp_path, monkeypatch):
+    """A bare "pruned" badge on a set that also lives in osu!lazer claimed the
+    lazer copy had been stripped too. It has to name the places."""
+    from rosu.ui.search_tab import _pruned_where
+    ctx = _ctx(tmp_path, monkeypatch)
+    t = ctx.t
+    assert _pruned_where({}, t) == ""
+    assert _pruned_where({"pruned_sources": "library"}, t) == t("prune_source_library")
+    both = _pruned_where({"pruned_sources": "library,stable"}, t)
+    assert t("prune_source_library") in both and t("prune_source_stable") in both
+    assert t("prune_source_lazer") not in both
+    # Rows written before pruned_sources existed still read correctly.
+    assert _pruned_where({"is_pruned": 1}, t) == t("prune_source_library")
+    ctx.db.close()
+
+
+def test_restore_dialog_states_the_source_and_lets_you_pick(qapp, tmp_path,
+                                                            monkeypatch):
+    """"Restore" silently downloading from a third-party mirror is not good
+    enough — say where the files come from, and offer the free exact copy."""
+    from rosu.ui.restore_dialog import MIRROR, RECYCLE, RestoreSourceDialog
+    ctx = _ctx(tmp_path, monkeypatch)
+    dlg = RestoreSourceDialog(ctx, 214, None)
+    assert dlg.rb_recycle.isChecked()             # free + exact is the default
+    dlg._accept()
+    assert dlg.choice == RECYCLE
+    dlg.rb_mirror.setChecked(True)
+    dlg._accept()
+    assert dlg.choice == MIRROR
+    # The mirror option must name the host it will actually download from.
+    from rosu.api_mirror import MIRROR_URL
+    host = MIRROR_URL.split("//", 1)[-1].split("/", 1)[0]
+    assert host in ctx.t("restore_opt_mirror", url=host)
     dlg.close()
     ctx.db.close()
 

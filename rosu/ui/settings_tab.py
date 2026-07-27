@@ -577,7 +577,11 @@ class SettingsTab(QWidget):
         it did not create is invisible to it."""
         t = self.ctx.t
         fid = (self.ctx.cfg.drive_folder_id or "").strip()
-        if not fid:
+        # Only while connected: after Disconnect there is nothing backing up, so
+        # "Backing up into this Drive folder" would be describing something that
+        # is not happening. The id itself is kept, so reconnecting reuses it.
+        connected = bool(self.ctx.services.drive_status().get("connected"))
+        if not fid or not connected:
             self.lbl_drive_folder.setVisible(False)
             return
         url = f"https://drive.google.com/drive/folders/{fid}"

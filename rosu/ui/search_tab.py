@@ -29,6 +29,20 @@ _DATA_ROW_ROLE = Qt.UserRole + 40   # maps a (sortable) view row back to _last_r
 _PANEL_FILTER_FIELDS = {"mode", "star", "key", "keys", "bpm", "length", "ar", "od"}
 
 
+def _pruned_where(row: dict, t) -> str:
+    """Which copies of this set have been pruned, translated — "" when none.
+
+    Prune is per-location. ``tracks.is_pruned`` means only "the Library copy is
+    stripped"; ``pruned_sources`` records every place a prune ran. A set can be
+    pruned in the Library and in osu!(stable) while its osu!lazer copy is whole,
+    so a bare "pruned" badge claimed more than was true.
+    """
+    sources = [s for s in (row.get("pruned_sources") or "").split(",") if s]
+    if not sources and row.get("is_pruned"):
+        sources = ["library"]      # rows written before pruned_sources existed
+    return ", ".join(t(f"prune_source_{s}") for s in sources)
+
+
 def _star_cell(diffs: list[dict]) -> tuple[str, float, str]:
     """(text, sort, tooltip) for the Star column from a set's per-diff rows.
 
@@ -272,12 +286,14 @@ class SearchTab(QWidget):
                 status = row.get("library_status") or "-"
                 if status == "disappeared" and row.get("status_changed_at"):
                     status = f"disappeared @ {row['status_changed_at']}"
-                if row.get("is_pruned"):
-                    # `is_pruned` used to exist ONLY to decide whether the row got
-                    # a repair context-menu entry — invisible otherwise, so there
-                    # was no way to see which sets had been stripped, and the only
-                    # way back was a right-click nobody found.
-                    status = f"{status} · {self.ctx.t('lib_status_pruned')}"
+                # `is_pruned` used to exist ONLY to decide whether the row got a
+                # repair context-menu entry — invisible otherwise. And it is
+                # per-LOCATION: a set can be stripped in the Library and/or in
+                # osu!(stable) while its osu!lazer copy is untouched, so the badge
+                # has to name where, or it over-claims.
+                where = _pruned_where(row, self.ctx.t)
+                if where:
+                    status = f"{status} · {self.ctx.t('lib_status_pruned')} ({where})"
                 bpm = row.get("bpm")
                 length = row.get("length_seconds")
                 attempts = row.get("copy_attempts", 0)
@@ -330,8 +346,8 @@ class SearchTab(QWidget):
                         item.setToolTip(star_tip)  # per-diff star + CS/AR/OD/HP
                     if c == 9 and skill_tip:
                         item.setToolTip(skill_tip)  # per-diff Rosu Skillset breakdown
-                    if c == 13 and row.get("is_pruned"):
-                        item.setToolTip(self.ctx.t("pruned_tip"))
+                    if c == 13 and where:
+                        item.setToolTip(self.ctx.t("pruned_tip", where=where))
                     if c == 14:
                         item.setToolTip(self.ctx.t("where_legend"))  # explain the icons
                     if c in (2, 3, 4, 7, 8, 9, 12):

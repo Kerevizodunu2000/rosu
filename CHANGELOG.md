@@ -95,17 +95,32 @@ now describes the library it claims to describe.**
   have rendered as raw key names and nothing would have failed until someone opened that screen.
 
 - **Undoing a prune.** "How do I get my videos back?" had no answer beyond a per-map right-click.
-  Shortcuts → **Restore pruned maps** re-downloads every pruned set at full size, and prune's own
-  Recycle Bin copy is now named after the set (`Artist - Title.osz.orig`) instead of a tempfile
-  name, so restoring it by hand gives back something identifiable rather than `tmpab12cd.osz.orig`.
+  Shortcuts → **Restore pruned maps** now asks where the files should come back **from**, and says
+  what each route costs: the **Recycle Bin** (free, byte-identical, instant — Rosu opens it and
+  says what to look for rather than reaching into it) or an **osu! mirror** (`catboy.best`,
+  explicitly named as third-party). It also states why the official osu! servers are not an
+  option: downloads there need a signed-in account and the public API has no download endpoint.
+  Prune's own Recycle Bin copy is now named after the set (`Artist - Title.osz.orig`) instead of
+  a tempfile name, so restoring it by hand gives back something identifiable.
+- **The "pruned" badge no longer over-claims.** Prune is per-location, but one flag made a row read
+  as though every copy of the set had been stripped — including the osu!lazer copy, which was
+  untouched. Schema v11 records *where* (`pruned_sources`), the badge names those places, and the
+  tooltip says outright that copies elsewhere were not touched. `is_pruned` stays Library-only on
+  purpose: letting a client-side prune set it would make the Library scan skip a file it never
+  touched, and the bulk restore re-download one that was never pruned.
 - **Which maps were pruned, when, and how** is now recorded (schema v10: `pruned_at`,
   `prune_mode`) and logged one line per set, instead of only a run total.
-- **Slim down osu!lazer** (Shortcuts) — a guided round-trip that gets lazer's space back without
-  the unsafe file deletion: save everything into the Library → you delete the beatmaps in lazer's
-  own Maintenance screen → Rosu measures lazer's file store to confirm it really emptied → prune
-  the Library (optional) → send it all back. Every step is explained before it runs and confirmed
-  before it acts, and Rosu never claims lazer was emptied when the store says otherwise (it offers
-  an explicit override, since only the user can see lazer's screen).
+- **Prune osu!lazer** (Shortcuts, and reached by picking osu!lazer in the Prune dialog) — lazer's
+  files cannot be stripped in place, so pruning it means going the long way round, and these steps
+  *are* that prune: save everything into the Library → you delete the beatmaps in lazer's own
+  Maintenance screen → Rosu measures lazer's file store to confirm it really emptied → prune the
+  Library (optional) → send it all back. Every step is explained before it runs and confirmed
+  before it acts. **The delete step is gated on proof**: it does not unlock until every set lazer
+  exported is verified present in the Library, by beatmapset id and by file — "N new sets added"
+  is not proof, since an already-known set counts as a duplicate and a failed copy counts as
+  nothing. And Rosu never claims lazer was emptied when its file store says otherwise (it offers an
+  explicit override, since only the user can see lazer's screen). Picking osu!lazer in the Prune
+  dialog leads here instead of just refusing.
 - The star histogram's selection now says how many **sets** searching that range will list, not
   just how many difficulties the bars hold — "2727 difficulties" followed by "1509 matches" read
   as a bug. Both bin modes also explain themselves on hover.
@@ -126,6 +141,9 @@ now describes the library it claims to describe.**
   label. They now use a dedicated `#iconbtn` style with near-zero padding.
 - The prune job is no longer titled "Prune Library" — it prunes osu!(stable) too, and the row's
   detail line names the source.
+- Settings kept showing "Backing up into this Drive folder: …" after Disconnect, describing
+  something that was no longer happening. It now appears only while connected (the folder id is
+  still remembered, so reconnecting reuses the same folder).
 - Settings now names the Google Drive folder Rosu backs up into, as a link, and explains why a
   "Rosu" folder it did not create is invisible to it: Rosu asks for the narrow `drive.file`
   permission, which only ever exposes files this app created — so a folder made by hand, or one

@@ -102,10 +102,19 @@ class ImportMixin:
                     self.log.error("import:lazer", detail)
                     return {"source": "lazer", "found": True, "error": "helper_failed",
                             "detail": detail}
+                exported = sorted(out.glob("*.osz"))
                 res = self.import_osz_folder(out, progress,
                                              source_label="local_osu_lazer")
-                self.log.info("CLIENT_IMPORT", client="lazer", added=res["new"], made=0)
-                return {"source": "lazer", "found": True, **res}
+                # Prove every exported set really reached the Library BEFORE any
+                # caller tells the user it is safe to delete them from lazer.
+                # "N new sets added" is not that proof: a set already in the
+                # Library counts as a duplicate, and a failed copy counts as
+                # nothing at all.
+                missing = self._not_in_library(exported)
+                self.log.info("CLIENT_IMPORT", client="lazer", added=res["new"],
+                              made=0, exported=len(exported), missing=len(missing))
+                return {"source": "lazer", "found": True,
+                        "exported": len(exported), "missing": missing, **res}
             finally:
                 shutil.rmtree(out, ignore_errors=True)
 
@@ -314,6 +323,29 @@ class ImportMixin:
                 "drive": {"connected": bool(self.cfg.drive_connected),
                           "count": self.db.drive_count()},
             }
+
+        def _not_in_library(self, exported_paths) -> list[str]:
+            """Of these exported .osz, which are NOT physically in the Library?
+
+            The helper names each file ``<beatmapsetId> Artist - Title.osz``, so
+            the id is the leading number. A set with no id, or whose row is not
+            ``in_library``, is reported by name — the caller must be able to say
+            exactly what did not make it across.
+            """
+            import re
+            lib = self.cfg.library_path
+            missing: list[str] = []
+            for p in exported_paths:
+                p = Path(p)
+                m = re.match(r"(\d+)", p.name)
+                row = self.db.find_track_row(int(m.group(1)) if m else None, p.name)
+                if row is None or not row["in_library"]:
+                    missing.append(p.name)
+                    continue
+                fn = row["filename"]
+                if not fn or not (lib / fn).exists():
+                    missing.append(p.name)
+            return missing
 
         def lazer_store_stats(self) -> dict:
             """Size of osu!lazer's content-addressed file store (``files/``).

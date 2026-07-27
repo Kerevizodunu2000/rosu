@@ -154,6 +154,19 @@ class LazerSlimDialog(QDialog):
         if res.get("error") or res.get("cancelled"):
             self.lbl_status.setText(t("lazer_slim_save_failed"))
             return
+        # HARD GATE. The next step tells the user to delete their beatmaps out of
+        # lazer, so it must not be reachable until every set lazer exported is
+        # provably in the Library. "N new sets added" is not proof — an already
+        # known set counts as a duplicate and a failed copy counts as nothing.
+        missing = res.get("missing") or []
+        if missing:
+            shown = ", ".join(missing[:5]) + (", …" if len(missing) > 5 else "")
+            self.lbl_status.setText(t("lazer_slim_not_all_saved",
+                                      n=len(missing), names=shown))
+            return
+        if not res.get("exported"):
+            self.lbl_status.setText(t("lazer_slim_nothing_there"))
+            return
         self._saved = res
         # Measure the store BEFORE the user deletes anything, so step 3 has a
         # baseline to compare against.
@@ -162,7 +175,7 @@ class LazerSlimDialog(QDialog):
         self._render()
         self.lbl_status.setText(t(
             "lazer_slim_saved", new=res.get("new", 0),
-            total=res.get("total", res.get("new", 0)),
+            total=res.get("exported", 0),
             size=_fmt_size((self._before or {}).get("bytes", 0))))
 
     # -- step 2/3: the user deletes in lazer, we verify ------------------------

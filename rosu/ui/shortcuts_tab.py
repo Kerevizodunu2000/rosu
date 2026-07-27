@@ -702,11 +702,24 @@ class ShortcutsTab(QWidget):
                             star_range))
 
     def on_restore_pruned(self) -> None:
-        """Bulk-undo prune: re-download every pruned set at full size."""
+        """Bulk-undo prune — after saying, and letting the user choose, where the
+        files come back FROM."""
+        from .restore_dialog import RECYCLE, RestoreSourceDialog, open_recycle_bin
         t = self.ctx.t
         n = self.services.pruned_count()
         if n == 0:
             QMessageBox.information(self, t("app_title"), t("sc_restore_none"))
+            return
+        picker = RestoreSourceDialog(self.ctx, n, self)
+        if picker.exec() != QDialog.Accepted or not picker.choice:
+            return
+        if picker.choice == RECYCLE:
+            # Rosu opens the bin and says what to look for; it does not reach
+            # into it. Nothing is downloaded and nothing is changed here.
+            opened = open_recycle_bin()
+            QMessageBox.information(
+                self, t("app_title"),
+                t("restore_recycle_how" if opened else "restore_recycle_manual"))
             return
         if QMessageBox.question(
                 self, t("app_title"), t("sc_restore_confirm", n=n),
