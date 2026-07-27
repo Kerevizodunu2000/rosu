@@ -1243,10 +1243,17 @@ STRINGS: dict[str, dict[str, str]] = {
     "lazer_slim_b_save": {
         "en": "Rosu is re-exporting every beatmap set out of lazer and adding the "
               "ones you don't already have to your Library. Nothing in lazer is "
-              "modified. This can take a while on a big collection.",
+              "modified — its database is only ever read.\n\nOn a big collection "
+              "this takes minutes, and it needs temporary disk space roughly the "
+              "size of your lazer collection (the sets are rebuilt in your temp "
+              "folder first, then moved into the Library). Make sure the drive "
+              "holding %TEMP% has room.",
         "tr": "Rosu, lazer'daki her beatmap setini yeniden dışa aktarıp sende "
-              "olmayanları Kütüphanene ekliyor. lazer'da hiçbir şey değiştirilmez. "
-              "Büyük bir koleksiyonda bu biraz sürebilir."},
+              "olmayanları Kütüphanene ekliyor. lazer'da hiçbir şey değiştirilmez — "
+              "veritabanı yalnızca okunur.\n\nBüyük bir koleksiyonda bu dakikalar "
+              "sürer ve kabaca lazer koleksiyonun kadar geçici disk alanı ister "
+              "(setler önce geçici klasörde yeniden oluşturulur, sonra Kütüphaneye "
+              "taşınır). %TEMP% klasörünün olduğu diskte yer olduğundan emin ol."},
     "lazer_slim_btn_save": {"en": "Retry", "tr": "Tekrar dene"},
     "lazer_slim_saving": {"en": "Reading osu!lazer…", "tr": "osu!lazer okunuyor…"},
     "lazer_slim_saved": {
