@@ -151,8 +151,20 @@ class LazerSlimDialog(QDialog):
         if not res.get("found"):
             self.lbl_status.setText(t("lazer_slim_not_found"))
             return
-        if res.get("error") or res.get("cancelled"):
-            self.lbl_status.setText(t("lazer_slim_save_failed"))
+        if res.get("cancelled"):
+            self.lbl_status.setText(t("lazer_slim_cancelled"))
+            return
+        if res.get("error"):
+            # Say WHICH failure. Collapsing every error into "close lazer and try
+            # again" sent the user off to do something that could not possibly
+            # help — a missing helper is not a locked database.
+            if res["error"] == "helper_missing":
+                self.lbl_status.setText(t("lazer_slim_helper_missing"))
+            else:
+                detail = str(res.get("detail") or "").strip()
+                self.lbl_status.setText(
+                    t("lazer_slim_save_failed")
+                    + (f"\n\n{detail}" if detail else ""))
             return
         # HARD GATE. The next step tells the user to delete their beatmaps out of
         # lazer, so it must not be reachable until every set lazer exported is

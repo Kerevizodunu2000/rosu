@@ -86,3 +86,38 @@ def test_not_in_library_names_what_did_not_make_it(tmp_path):
     saved.unlink()
     assert "10 A - B.osz" in svc._not_in_library(exported)
     db.close()
+
+
+def test_lazer_helper_is_found_from_the_package_root(tmp_path):
+    """Regression: the lookup was Path(__file__).parent / "assets", correct while
+    this code lived in rosu/services.py. The v1.7 split moved it to
+    rosu/services/import_svc.py, so it started looking in rosu/services/assets/
+    and found nothing — every lazer read then failed with "helper missing" when
+    running from source. Anchor it on the rosu PACKAGE, not the module."""
+    from pathlib import Path
+
+    import rosu
+    from rosu import config
+    from rosu.db import Database
+    from rosu.services import Services
+
+    class _Log:
+        def info(self, *a, **k):
+            pass
+
+        def error(self, *a, **k):
+            pass
+
+    cfg = config._fill_defaults(config.Config(root=str(tmp_path)))
+    cfg.ensure_dirs()
+    db = Database(cfg.db_path)
+    svc = Services(cfg, db, _Log())
+
+    expected = (Path(rosu.__file__).resolve().parent / "assets" / "lazer_export"
+                / "RosuLazerExport.exe")
+    found = svc._lazer_helper()
+    if expected.exists():
+        assert found == expected
+    else:                      # a checkout without the bundled binary
+        assert found is None
+    db.close()

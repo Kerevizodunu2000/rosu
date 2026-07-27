@@ -15,8 +15,9 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QComboBox, QDialog, QHBoxLayout, QHeaderView, QLabel, QProgressBar,
-    QPushButton, QSpinBox, QTableWidget, QTableWidgetItem, QVBoxLayout,
+    QCheckBox, QComboBox, QDialog, QHBoxLayout, QHeaderView, QLabel,
+    QProgressBar, QPushButton, QSpinBox, QTableWidget, QTableWidgetItem,
+    QVBoxLayout,
 )
 
 from .. import prune as prune_mod
@@ -53,7 +54,8 @@ class PruneDialog(QDialog):
         t = ctx.t
 
         self.setWindowTitle(t("prune_title"))
-        self.setMinimumSize(680, 560)
+        # Compact by default now the per-set list starts hidden.
+        self.setMinimumSize(680, 400)
         root = QVBoxLayout(self)
         root.setSpacing(10)
 
@@ -141,16 +143,26 @@ class PruneDialog(QDialog):
         self.lbl_status.setWordWrap(True)
         root.addWidget(self.lbl_status)
 
+        self.lbl_total = QLabel(objectName="h2")
+        self.lbl_total.setWordWrap(True)
+        root.addWidget(self.lbl_total)
+
+        # The per-set list is HIDDEN by default. Scrolling 1922 rows is not how
+        # anyone decides whether to prune — the totals line above is. It stays one
+        # click away, because "these exact sets will change" is still the thing a
+        # destructive action has to be able to show.
+        self.chk_list = QCheckBox(t("prune_show_list"))
+        self.chk_list.setToolTip(t("prune_show_list_tip"))
+        self.chk_list.toggled.connect(self._toggle_list)
+        root.addWidget(self.chk_list)
+
         self.table = QTableWidget(0, 3)
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         self.table.verticalHeader().setVisible(False)
         self.table.setAlternatingRowColors(True)
+        self.table.setVisible(False)
         root.addWidget(self.table, 1)
-
-        self.lbl_total = QLabel(objectName="h2")
-        self.lbl_total.setWordWrap(True)
-        root.addWidget(self.lbl_total)
 
         bottom = QHBoxLayout()
         bottom.addStretch(1)
@@ -281,6 +293,10 @@ class PruneDialog(QDialog):
             self.scan()
 
     # -- table ----------------------------------------------------------------
+    def _toggle_list(self, on: bool) -> None:
+        self.table.setVisible(bool(on))
+        self.adjustSize()
+
     def _refill(self) -> None:
         """Re-apply order + limit to the last scan. Pure and instant — changing
         the order must not re-read the disk."""

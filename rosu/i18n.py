@@ -1273,8 +1273,20 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "osu!lazer is turned off in Settings — turn it on first.",
         "tr": "osu!lazer Ayarlar'da kapalı — önce açman gerekiyor."},
     "lazer_slim_save_failed": {
-        "en": "Could not read osu!lazer. Close lazer completely and try again.",
-        "tr": "osu!lazer okunamadı. lazer'ı tamamen kapatıp tekrar dene."},
+        "en": "Could not read osu!lazer. Close lazer completely and try again — "
+              "its database is locked while it is running.",
+        "tr": "osu!lazer okunamadı. lazer'ı tamamen kapatıp tekrar dene — çalışırken "
+              "veritabanı kilitli oluyor."},
+    "lazer_slim_cancelled": {
+        "en": "Cancelled. Nothing was changed anywhere.",
+        "tr": "İptal edildi. Hiçbir yerde hiçbir şey değişmedi."},
+    "lazer_slim_helper_missing": {
+        "en": "Rosu's osu!lazer reader (RosuLazerExport.exe) is missing from this "
+              "install, so lazer cannot be read at all. Closing lazer will not "
+              "help. Re-install Rosu, or run it from a complete copy.",
+        "tr": "Rosu'nun osu!lazer okuyucusu (RosuLazerExport.exe) bu kurulumda yok, "
+              "bu yüzden lazer hiç okunamıyor. lazer'ı kapatmak işe yaramaz. "
+              "Rosu'yu yeniden kur ya da eksiksiz bir kopyadan çalıştır."},
 
     "lazer_slim_h_delete": {"en": "Step 2 — now delete them inside lazer",
                             "tr": "Adım 2 — şimdi lazer içinden sil"},
@@ -1538,6 +1550,15 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "Nothing here can be pruned right now.",
         "tr": "Şu anda burada kırpılabilecek bir şey yok."},
     "prune_col_freed": {"en": "Would free", "tr": "Kazanılacak"},
+    "prune_show_list": {"en": "Show the list of sets",
+                        "tr": "Set listesini göster"},
+    "prune_show_list_tip": {
+        "en": "Lists every set that would change, with its size and how much it "
+              "would free. Hidden by default — the totals above are what you "
+              "decide from; the list is here for when you want to check.",
+        "tr": "Değişecek her seti, boyutunu ve kazandıracağı yeri listeler. "
+              "Varsayılan olarak gizli — kararı yukarıdaki toplamlara göre "
+              "veriyorsun; liste kontrol etmek istediğinde burada."},
     "prune_total": {"en": "{n} set(s) selected · {size} would be freed",
                     "tr": "{n} set seçildi · {size} kazanılacak"},
     "prune_run": {"en": "Prune", "tr": "Kırp"},

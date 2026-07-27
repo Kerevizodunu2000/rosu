@@ -14,6 +14,17 @@ the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 now describes the library it claims to describe.**
 
 ### Fixed
+- **Nothing could read osu!lazer when running from source — a regression from the v1.7 services
+  split.** `_lazer_helper` located the bundled `RosuLazerExport.exe` with
+  `Path(__file__).parent / "assets"`, which was right while the code lived in `rosu/services.py`;
+  the split moved it to `rosu/services/import_svc.py`, so the lookup pointed at
+  `rosu/services/assets/` and quietly found nothing. Every lazer read — Save from lazer, the
+  lazer↔stable transfer, the lazer prune steps — failed. It is now anchored on the `rosu` package
+  rather than the module's directory, with a regression test. (The frozen exe was unaffected: its
+  `_MEIPASS` fallback still resolved.)
+- **And the failure gave advice that could not work:** every error, including a missing helper,
+  was reported as "close osu!lazer completely and try again". The three cases are now told apart
+  and the underlying detail is shown.
 - **Search results were silently capped at 500.** `Services.search` never passed a limit, so
   every query inherited `rosu.search.search`'s 500 default — a star range holding 1600 sets
   listed exactly 500 of them and looked complete, while browsing with an empty box (which used
@@ -76,9 +87,11 @@ now describes the library it claims to describe.**
   - **How many and in what order** — biggest-saving-first, smallest-first or by name, and a limit
     ("prune the 200 that free the most"). Only sets that would actually free something are ever
     counted, so the number in the button is the number of sets that really change.
-  - **A per-set preview** — name, current size and exactly how much it would free, from a
-    read-only scan (the zip's directory is read; nothing is decompressed or written), followed by
-    a 3-second countdown confirmation naming the source, the mode, the total, and how to undo it.
+  - **A preview** — how many sets would change and how much they would free, from a read-only scan
+    (the zip's directory is read; nothing is decompressed or written), followed by a 3-second
+    countdown confirmation naming the source, the mode, the total, and how to undo it. The per-set
+    list is one click away rather than filling the dialog: scrolling 1922 rows is not how anyone
+    decides whether to prune, but "these exact sets will change" still has to be showable.
 - osu!(stable) can be pruned at all now: it stores beatmaps as loose files rather than archives,
   so a folder-mode prune was written for it. It refuses any folder that resolves outside the
   detected `Songs` directory, refuses folders with no `.osu` in them, never removes a `.osu`, and

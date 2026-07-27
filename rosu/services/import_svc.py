@@ -159,10 +159,21 @@ class ImportMixin:
 
         def _lazer_helper(self):
             """Locate the bundled lazer-export .exe (works in the dev tree and the
-            frozen exe, where PyInstaller extracts data under _MEIPASS/rosu)."""
+            frozen exe, where PyInstaller extracts data under _MEIPASS/rosu).
+
+            Anchored on the ``rosu`` PACKAGE, not on this module's directory. It
+            used to be ``Path(__file__).parent / "assets"``, which was correct
+            while this code lived in ``rosu/services.py`` — the v1.7 split moved
+            it to ``rosu/services/import_svc.py``, so the lookup started pointing
+            at ``rosu/services/assets/`` and silently found nothing. Every lazer
+            read (Save from lazer, lazer↔stable transfer, the lazer prune steps)
+            then failed with "helper missing" when run from source.
+            """
             import sys
+            import rosu
             name = "RosuLazerExport.exe"
-            candidates = [Path(__file__).resolve().parent / "assets" / "lazer_export" / name]
+            pkg_root = Path(rosu.__file__).resolve().parent
+            candidates = [pkg_root / "assets" / "lazer_export" / name]
             meipass = getattr(sys, "_MEIPASS", None)
             if meipass:
                 candidates.append(Path(meipass) / "rosu" / "assets" / "lazer_export" / name)
