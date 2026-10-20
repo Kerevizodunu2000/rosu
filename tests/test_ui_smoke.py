@@ -662,3 +662,91 @@ def test_search_row_columns_match_the_stored_data(qapp, tmp_path, monkeypatch):
     assert tab.table._row_path(0) == ""
     win.close()
     ctx.db.close()
+
+
+def test_remove_dialog_builds_with_no_client_available(qapp, tmp_path, monkeypatch):
+    from rosu.ui.remove_dialog import RemoveDialog
+    ctx = _ctx(tmp_path, monkeypatch)
+    monkeypatch.setattr(type(ctx.services), "removal_sources", lambda self: [
+        {"key": "stable", "available": False, "reason": "no_stable"},
+        {"key": "lazer", "available": False, "reason": "lazer_helper"}])
+    dlg = RemoveDialog(ctx)
+    assert not dlg.btn_run.isEnabled()
+    assert dlg.lbl_status.text() == ctx.t("rm_no_source")
+    dlg.reject()
+    ctx.db.close()
+
+
+def test_remove_dialog_lists_a_scan_and_warns_about_unbacked_sets(qapp, tmp_path, monkeypatch):
+    from rosu.ui.remove_dialog import RemoveDialog
+    ctx = _ctx(tmp_path, monkeypatch)
+    monkeypatch.setattr(type(ctx.services), "removal_sources", lambda self: [
+        {"key": "stable", "available": False, "reason": "no_stable"},
+        {"key": "lazer", "available": False, "reason": "lazer_helper"}])
+    dlg = RemoveDialog(ctx)
+    dlg._on_scanned({"source": "stable", "sets": [
+        {"key": "1 A", "name": "1 A", "size": 10, "backed_up": True},
+        {"key": "2 B", "name": "2 B", "size": 20, "backed_up": False}]}, dlg._scan_seq)
+    assert dlg.btn_run.isEnabled() and dlg.table.rowCount() == 2
+    dlg.rb_only.setChecked(True)
+    assert "1" in dlg.lbl_warn.text()                     # 1 set has no Library copy
+    dlg.cbo_which.setCurrentIndex(dlg.cbo_which.findData("backed_up"))
+    assert dlg.table.rowCount() == 1 and dlg.lbl_warn.text() == ""
+    dlg.reject()
+    ctx.db.close()
+
+
+def test_drive_browser_filters_and_offers_only_restorable_rows(qapp, tmp_path, monkeypatch):
+    from rosu.ui import drive_browser_dialog as dbd
+    entries = [
+        {"key": "id:1", "name": "1 A - T.osz", "artist": "Alpha", "title": "Tune", "size": 5,
+         "chunk": "c0", "on_drive": True, "in_library": True, "this_device": True, "device": "x"},
+        {"key": "id:2", "name": "2 B - U.osz", "artist": "Beta", "title": "Song", "size": 7,
+         "chunk": "c0", "on_drive": True, "in_library": False, "this_device": False, "device": "y"},
+        {"key": "id:3", "name": "3 C - V.osz", "artist": "Gamma", "title": "Song", "size": 9,
+         "chunk": "c1", "on_drive": False, "in_library": False, "this_device": False, "device": "y"},
+    ]
+    assert [e["key"] for e in dbd.filter_entries(entries)] == ["id:2", "id:3"]
+    assert [e["key"] for e in dbd.filter_entries(entries, "song beta")] == ["id:2"]
+    assert [e["key"] for e in dbd.filter_entries(entries, "", hide_in_library=False)] == ["id:1", "id:2", "id:3"]
+
+    ctx = _ctx(tmp_path, monkeypatch)
+    monkeypatch.setattr(dbd.DriveBrowserDialog, "load", lambda self: None)   # no worker
+    dlg = dbd.DriveBrowserDialog(ctx)
+    dlg._on_loaded({"entries": entries, "devices": 2, "missing": 1, "orphans": []})
+    assert dlg.table.rowCount() == 2
+    dlg.table.selectAll()
+    chosen = dlg._selected()
+    assert [e["key"] for e in chosen] == ["id:2"]            # the missing archive is not restorable
+    dlg.reject()
+    ctx.db.close()
+
+
+def test_job_row_describes_remove_and_restore_jobs(qapp, tmp_path, monkeypatch):
+    from rosu.jobs import Job, new_id
+    from rosu.ui.shortcuts_tab import _describe_job
+    ctx = _ctx(tmp_path, monkeypatch)
+    job = Job(new_id(), "job_remove", kind="remove")
+    job.ctx["options"] = {"remove_source": "stable", "sets": 3, "save_first": True}
+    line = _describe_job(job, ctx.t)
+    assert ctx.t("rm_mode_save") in line and "3" in line
+    job2 = Job(new_id(), "job_drive_restore", kind="drive_restore")
+    job2.ctx["options"] = {"restore_sets": 4}
+    assert "4" in _describe_job(job2, ctx.t)
+    ctx.db.close()
+
+
+def test_update_banner_links_the_exe_and_escapes(qapp, tmp_path, monkeypatch):
+    from rosu.ui.main_window import MainWindow
+    ctx = _ctx(tmp_path, monkeypatch)
+    win = MainWindow(ctx, qapp)
+    rel = "https://github.com/Kerevizodunu2000/rosu/releases/"
+    win._on_update_checked({"newer": True, "tag": "v9.9.9", "url": rel + "tag/v9.9.9",
+                            "download_url": rel + "download/v9.9.9/rosu-v9.9.9-win64.exe",
+                            "notes": "<b>notes</b>"})
+    text = win.update_banner.text()
+    from html import escape
+    assert "rosu-v9.9.9-win64.exe" in text and escape(ctx.t("update_whats_new")) in text
+    assert win.update_banner.toolTip() == "<b>notes</b>"
+    win.close()
+    ctx.db.close()

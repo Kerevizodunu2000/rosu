@@ -10,6 +10,56 @@ the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-10-20
+
+**Take sets out of osu!, and get sets back from your Drive backup.**
+
+### Added
+- **Remove from osu!** (Shortcuts → *Remove from osu!…*). Pick a client and see every
+  set in it — its size and whether the Library already holds it — filtered (all /
+  already in the Library / not in the Library), ordered and capped, before a countdown
+  confirmation. Two modes:
+  - **Save to Library, then remove** copies each set into the Library first and removes
+    only the sets that are then provably there (a real `.osz` on disk); anything it
+    cannot prove is kept and listed.
+  - **Remove only** says up front how many of the chosen sets have no Library copy.
+
+  osu!(stable): each set's `Songs/` folder goes to the Recycle Bin; every name is
+  resolved inside the detected Songs folder first and anything else is refused. Refused
+  while osu! is running.
+  osu!lazer: never touched on disk (lazer shares one stored copy between every set with
+  a byte-identical file). The bundled helper gains `list` and `delete` commands that
+  flip lazer's own `DeletePending` flag, after proving the database opens read-only with
+  this helper's Realm (so the write cannot upgrade the file format) and after copying
+  `client.realm` aside as the undo path. **The shipped helper binary is unchanged**, so
+  lazer removal shows as "not available yet" until the helper is rebuilt and verified
+  on a real lazer install (`tools/RosuLazerExport/README.md`).
+- **Drive backup browser + restore** (Shortcuts → *Browse Drive backup…*). Lists every
+  set the Google Drive backup holds — merging the manifest of every PC that backs up
+  into it — with a filter, which PC backed it up, and whether the Library already has
+  it; flags archives that are no longer on Drive and backup files no manifest lists.
+  Restoring downloads only the archives that hold the chosen sets, extracts just those
+  members (plain `.osz` names only, size-capped), verifies each against the SHA-256
+  recorded at backup time and imports them through the normal dedup pipeline — download
+  on the Drive lane, import on the disk lane.
+- **Report tracking link.** After "Report a problem", Rosu shows (and copies) the
+  report's private status link from rosu-web.
+- **Opt-in anonymous crash reports** (Settings, off by default). An unexpected error —
+  uncaught, or caught by a background task — sends its type, a short message with file
+  paths and e-mail addresses removed, and the `module:function` names of the stack, plus
+  the Rosu version and OS. Disk/network errors, cancellations and Rosu's own handled
+  errors are never sent; each distinct crash is sent once per session.
+
+### Changed
+- The update check asks Rosu's site (`/api/latest-version`) first and falls back to
+  GitHub; the banner links the new `.exe` directly (plus "What's new"), with the
+  release-notes excerpt as its tooltip. Every link is validated as pointing into this
+  project's GitHub releases.
+- The collection sync has its own cancel token, like every other long scan.
+
+### Removed
+- A dead `_clear_osz` re-export from `rosu.services`.
+
 ### Fixed
 - **Search "Mode" column showed only one mode for mixed sets.** It read the mode of
   the alphabetically-first difficulty, stored once and never refreshed, while
@@ -1069,7 +1119,8 @@ Initial release. The core archive-management pipeline.
 - **EN/TR** localization; English-only code/logs.
 - Single-file **PyInstaller** build (`osu-archiver.spec`) + GitHub Actions build workflow.
 
-[Unreleased]: https://github.com/Kerevizodunu2000/rosu/compare/v1.7.1...HEAD
+[Unreleased]: https://github.com/Kerevizodunu2000/rosu/compare/v1.8.0...HEAD
+[1.8.0]: https://github.com/Kerevizodunu2000/rosu/compare/v1.7.1...v1.8.0
 [1.7.1]: https://github.com/Kerevizodunu2000/rosu/compare/v1.6.3...v1.7.1
 [1.6.3]: https://github.com/Kerevizodunu2000/rosu/compare/v1.6.2...v1.6.3
 [1.6.2]: https://github.com/Kerevizodunu2000/rosu/compare/v1.6.0...v1.6.2

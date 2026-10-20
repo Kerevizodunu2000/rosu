@@ -157,3 +157,15 @@ def test_read_image_ok(tmp_path):
     assert data == b"\x89PNG\r\n\x1a\n"
     assert name == "shot.png"
     assert mime == "image/png"
+
+
+def test_status_link_is_accepted_only_from_the_endpoints_own_host():
+    from rosu.report import _status_link
+    ep = "https://rosu-web.vercel.app/api/report"
+    good = "https://rosu-web.vercel.app/report/status/" + "A" * 43
+    assert _status_link(good, ep) == good
+    assert _status_link("https://evil.example/report/status/" + "A" * 43, ep) is None
+    assert _status_link("http://rosu-web.vercel.app/report/status/" + "A" * 43, ep) is None
+    assert _status_link(good + "?x=1", ep) is None
+    assert _status_link("https://rosu-web.vercel.app/admin", ep) is None
+    assert _status_link(None, ep) is None

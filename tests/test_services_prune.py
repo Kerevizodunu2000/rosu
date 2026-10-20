@@ -108,7 +108,7 @@ def test_sync_collections_tags_matching_tracks(tmp_path):
     write_collection_db(coll_path, 1, [OsuCollection("Favorites", [checksum])])
 
     res = svc.sync_collections(coll_path)
-    assert res == {"found": True, "collections": 1, "tagged": 1}
+    assert res == {"found": True, "collections": 1, "tagged": 1, "cancelled": False}
     row = db.find_track_row(1, "1 A - B.osz")
     assert "Collection:Favorites" in row["tags"].split()
 
