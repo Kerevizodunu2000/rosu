@@ -75,7 +75,6 @@ class Histogram(QWidget):
             return
 
         h = rect.height() - _M_TOP - _M_BOTTOM
-        n = len(self._bins)
         max_count = max((c for _, _, c in self._bins), default=0) or 1
         bar_w = self._bar_width()
         accent = pal.highlight().color()

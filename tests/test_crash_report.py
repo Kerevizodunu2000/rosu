@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Opt-in crash reports (v1.8): what is built, what is never sent."""
-import threading
 
 import pytest
 

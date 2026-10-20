@@ -21,7 +21,7 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
     QAbstractItemView, QApplication, QHeaderView, QMenu, QTableWidget,
-    QTableWidgetItem, QMessageBox
+    QTableWidgetItem,
 )
 
 _CLEAN_ROLE = Qt.UserRole + 11  # per-row clean copy name (single-click copy)

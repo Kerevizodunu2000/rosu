@@ -66,7 +66,6 @@ def test_apply_msd_stamps_even_with_no_results():
 
 def test_mania_msd_for_pack_aggregation():
     db = _db()
-    from rosu.models import ParsedPack
     pack_id = db.get_or_create_local_pack("TP1")
     for bid, ov in ((1, 5.0), (2, 7.0)):
         tid = _track(db, bid)
@@ -179,7 +178,7 @@ def test_search_filters_only_does_not_crash_rank():
 
 def test_apply_api_enrichment_sets_not_coalesce():
     db = _db()
-    tid = _track(db, 42)
+    _track(db, 42)
     db.apply_api_enrichment(42, {"status": "pending", "play_count": 100}, "t1")
     assert db.all_tracks()[0]["ranked_status"] == "pending"
     # a later run must OVERWRITE (live fields), not keep the first value

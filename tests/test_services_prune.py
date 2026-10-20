@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Tests for the v1.7 prune/collections/repair service methods."""
-import struct
 import zipfile
 
 from rosu import config
@@ -329,7 +328,7 @@ def test_stable_prune_does_not_mark_the_library_copy_as_pruned(tmp_path, monkeyp
     skip a file it never touched."""
     from rosu import client_import
     cfg, db, svc = _svc(tmp_path)
-    tid = _make_set(cfg, db, 55, {"map.osu": b"x", "video.mp4": b"z" * 4000})
+    _make_set(cfg, db, 55, {"map.osu": b"x", "video.mp4": b"z" * 4000})
     songs = tmp_path / "Songs"
     (songs / "55 A - B").mkdir(parents=True)
     (songs / "55 A - B" / "map.osu").write_bytes(b"osu file format v14\n")
