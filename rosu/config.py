@@ -104,6 +104,10 @@ class Config:
     device_id: str = ""                  # random id for this install's manifest shard
 
     # Bookkeeping
+    # v1.9 UI state: Search columns the user hid (column keys like "col_bpm") and
+    # saved searches ([{"name", "query", "tags"}], see rosu.presets).
+    search_hidden_columns: list = field(default_factory=list)
+    saved_searches: list = field(default_factory=list)
     schema_note: str = "paths are absolute; edit from Settings tab"
     _extra: dict = field(default_factory=dict)
 
@@ -190,6 +194,10 @@ def _fill_defaults(cfg: Config) -> Config:
         cfg.drive_chunk_bytes = 1073741824
     if cfg.drive_chunk_bytes < 1024 * 1024:   # never below 1 MiB
         cfg.drive_chunk_bytes = 1024 * 1024
+    from . import presets
+    hidden = cfg.search_hidden_columns if isinstance(cfg.search_hidden_columns, list) else []
+    cfg.search_hidden_columns = [c for c in hidden if isinstance(c, str)][:50]
+    cfg.saved_searches = presets.normalize(cfg.saved_searches)
     return cfg
 
 

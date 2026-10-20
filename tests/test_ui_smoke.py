@@ -773,3 +773,52 @@ def test_update_banner_links_the_exe_and_escapes(qapp, tmp_path, monkeypatch):
     assert win.update_banner.toolTip() == "<qt>&lt;b&gt;notes&lt;/b&gt;</qt>"
     win.close()
     ctx.db.close()
+
+
+def test_search_columns_hide_persist_and_saved_searches_apply(qapp, tmp_path, monkeypatch):
+    from rosu.ui.main_window import MainWindow
+    ctx = _ctx(tmp_path, monkeypatch)
+    saves = []
+    monkeypatch.setattr(type(ctx), "save_config", lambda self: saves.append(1))
+    win = MainWindow(ctx, qapp)
+    tab = win.search
+    bpm = tab._KEYS.index("col_bpm")
+    tab._set_column_visible("col_bpm", False)
+    assert tab.table.isColumnHidden(bpm) and ctx.cfg.search_hidden_columns == ["col_bpm"]
+    tab._set_hidden_columns(["col_name", "col_bpm"])          # the name column never hides
+    assert not tab.table.isColumnHidden(0) and ctx.cfg.search_hidden_columns == ["col_bpm"]
+    tab._set_column_visible("col_bpm", True)
+    assert not tab.table.isColumnHidden(bpm) and saves
+    ran = []
+    monkeypatch.setattr(tab, "do_search", lambda: ran.append(tab.box.text()))
+    tab.apply_saved_search({"name": "x", "query": "mode=mania star>5", "tags": True})
+    assert ran == ["mode=mania star>5"] and tab.chk_tags.isChecked()
+    tab._fill_saved_menu()                                     # builds without error
+    win.close()
+    ctx.db.close()
+
+
+def test_logs_tab_filters_and_appends_live(qapp, tmp_path, monkeypatch):
+    from rosu.ui.main_window import MainWindow
+    ctx = _ctx(tmp_path, monkeypatch)
+    win = MainWindow(ctx, qapp)
+    tab = win.logs
+    ctx.log.info("SEARCH", query="abc", results=1)
+    ctx.log.error("unit:test", "something broke")
+    tab.on_shown()
+    qapp.processEvents()
+    total = tab.table.rowCount()
+    assert total >= 2
+    tab.chk_errors.setChecked(True)
+    assert all(tab.table.item(r, 1).text() == "ERROR" for r in range(tab.table.rowCount()))
+    tab.chk_errors.setChecked(False)
+    tab.filter.setText("abc")
+    tab._refill()
+    assert tab.table.rowCount() == 1 and tab.table.item(0, 2).text() == "SEARCH"
+    tab.filter.setText("")
+    tab._refill()
+    ctx.log.info("SEARCH", query="live", results=0)
+    qapp.processEvents()
+    assert tab.table.rowCount() == total + 1
+    win.close()
+    ctx.db.close()

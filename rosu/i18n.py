@@ -1867,6 +1867,44 @@ STRINGS: dict[str, dict[str, str]] = {
               "Library first if you want. Shows exactly what goes before anything is touched.",
         "tr": "osu!(stable) veya osu!lazer'dan beatmap setlerini kaldırır — istersen önce "
               "Library'e kaydeder. Hiçbir şeye dokunmadan önce tam olarak neyin gideceğini gösterir."},
+    # -- v1.9: Logs table ----------------------------------------------------------
+    "log_col_time": {"en": "Time", "tr": "Zaman"},
+    "log_col_level": {"en": "Level", "tr": "Seviye"},
+    "log_col_action": {"en": "Action", "tr": "İşlem"},
+    "log_col_fields": {"en": "Details", "tr": "Ayrıntılar"},
+    "log_col_message": {"en": "Message", "tr": "Mesaj"},
+    "log_errors_only": {"en": "Errors only", "tr": "Yalnızca hatalar"},
+    "log_filter": {"en": "Filter the log…", "tr": "Logu filtrele…"},
+    "log_count": {"en": "{shown} of {total} lines", "tr": "{total} satırın {shown} tanesi"},
+    # -- v1.9: Search columns, saved searches, export ---------------------------
+    "tip_column_menu": {"en": "Right-click to choose which columns to show.",
+                        "tr": "Hangi sütunların görüneceğini seçmek için sağ tıkla."},
+    "columns_show_all": {"en": "Show all columns", "tr": "Tüm sütunları göster"},
+    "saved_searches": {"en": "★ Saved", "tr": "★ Kayıtlı"},
+    "tip_saved_searches": {
+        "en": "Save the current search (text and filters) under a name, and run it again "
+              "with one click.",
+        "tr": "Geçerli aramayı (metin ve filtreler) bir adla kaydet ve tek tıkla tekrar "
+              "çalıştır."},
+    "saved_search_save": {"en": "Save this search…", "tr": "Bu aramayı kaydet…"},
+    "saved_search_delete": {"en": "Delete", "tr": "Sil"},
+    "saved_search_none": {"en": "No saved searches yet", "tr": "Henüz kayıtlı arama yok"},
+    "saved_search_name": {"en": "Name:", "tr": "Ad:"},
+    "saved_search_saved": {"en": "Saved as \"{name}\".", "tr": "\"{name}\" olarak kaydedildi."},
+    "btn_export_results": {"en": "Export…", "tr": "Dışa aktar…"},
+    "tip_export_results": {
+        "en": "Save the listed sets as a CSV (spreadsheet) or JSON file.",
+        "tr": "Listelenen setleri CSV (tablo) ya da JSON dosyası olarak kaydet."},
+    "export_results_none": {"en": "Nothing to export — the list is empty.",
+                            "tr": "Dışa aktarılacak bir şey yok — liste boş."},
+    "export_results_done": {"en": "Exported {n} sets.", "tr": "{n} set dışa aktarıldı."},
+    "export_results_done_shown": {
+        "en": "Exported the {n} sets shown (the search matched more; narrow it to export "
+              "the rest).",
+        "tr": "Gösterilen {n} set dışa aktarıldı (arama daha fazlasını buldu; kalanı için "
+              "aramayı daralt)."},
+    "export_results_failed": {"en": "Could not write the file: {error}",
+                              "tr": "Dosya yazılamadı: {error}"},
     "rm_title": {"en": "Remove from osu!", "tr": "osu!'dan Kaldır"},
     "rm_intro": {
         "en": "Pick a client and which sets to take out of it. Nothing changes until you "

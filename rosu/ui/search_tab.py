@@ -9,11 +9,12 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
-    QCheckBox, QComboBox, QDialog, QDialogButtonBox, QHBoxLayout, QLabel,
-    QLineEdit, QMessageBox, QPushButton, QVBoxLayout, QWidget,
+    QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QHBoxLayout,
+    QInputDialog, QLabel, QLineEdit, QMenu, QMessageBox, QPushButton, QToolButton,
+    QVBoxLayout, QWidget,
 )
 
-from .. import query
+from .. import presets, query, table_export
 from ..columns import has_library_copy, library_status_text, mode_text, where_marks
 from ..i18n import human_duration
 from ..workers import Worker
@@ -122,6 +123,7 @@ class SearchTab(QWidget):
         self._search_seq = 0        # ignore results from superseded searches
         self._loaded_once = False
         self._last_rows: list[dict] = []   # current results (row → Map Details)
+        self._last_truncated = False       # the results are a capped page
         self._pending_histogram = False    # open the histogram once results refresh
         self._hist_mode = "auto"           # star-histogram binning, remembered
         self._hist_pairs: list = []        # (track_id, star) behind the bars
@@ -139,10 +141,20 @@ class SearchTab(QWidget):
         self.btn_reload.clicked.connect(self.refresh_now)       # visible re-pull
         self.btn_hist = QPushButton(objectName="secondary")
         self.btn_hist.clicked.connect(self._show_histogram)     # star distribution
+        # v1.9: saved searches (a menu rebuilt on open) and CSV/JSON export.
+        self.btn_saved = QToolButton(objectName="secondary")
+        self.btn_saved.setPopupMode(QToolButton.InstantPopup)
+        self.saved_menu = QMenu(self.btn_saved)
+        self.saved_menu.aboutToShow.connect(self._fill_saved_menu)
+        self.btn_saved.setMenu(self.saved_menu)
+        self.btn_export = QPushButton(objectName="secondary")
+        self.btn_export.clicked.connect(self._export_results)
         row.addWidget(self.box, 1)
         row.addWidget(self.btn)
         row.addWidget(self.btn_reload)
+        row.addWidget(self.btn_saved)
         row.addWidget(self.btn_hist)
+        row.addWidget(self.btn_export)
         root.addLayout(row)
 
         # Visual filters panel (v1.6) — composes the same query syntax into the box.
@@ -167,6 +179,11 @@ class SearchTab(QWidget):
         self.table.openLocationRequested.connect(self._open_location)
         self.table.repairRequested.connect(self._repair_map)
         self.table.rowActivated.connect(self._show_map_details)   # dbl-click → details
+        # v1.9: right-click a column header to hide/show columns (remembered).
+        header = self.table.horizontalHeader()
+        header.setContextMenuPolicy(Qt.CustomContextMenu)
+        header.customContextMenuRequested.connect(self._column_menu)
+        self._apply_hidden_columns()
         root.addWidget(self.table, 1)
 
         # Debounced live search: wait until typing pauses (~250 ms) before running.
@@ -190,7 +207,12 @@ class SearchTab(QWidget):
         self.box.setToolTip(t("tip_search_box"))
         self.btn.setToolTip(t("tip_search_btn"))
         self.btn_reload.setToolTip(t("tip_reload"))
+        self.btn_saved.setText(t("saved_searches"))
+        self.btn_saved.setToolTip(t("tip_saved_searches"))
+        self.btn_export.setText(t("btn_export_results"))
+        self.btn_export.setToolTip(t("tip_export_results"))
         self.table.setHorizontalHeaderLabels([t(k) for k in self._KEYS])
+        self.table.horizontalHeader().setToolTip(t("tip_column_menu"))
         self.table.set_menu_labels(t("copy_names_action"), t("copy_table_action"))
         self.table._menu_open_location = t("menu_open_location")
         self.table._menu_repair = t("menu_repair")
@@ -262,6 +284,7 @@ class SearchTab(QWidget):
             return  # a newer search already ran; drop this stale result
         rows = res["rows"]
         total = res["total"]
+        self._last_truncated = bool(res["truncated"])
         self._populate(rows)
         t = self.ctx.t
         if res["truncated"]:
@@ -360,6 +383,111 @@ class SearchTab(QWidget):
 
     def _open_location(self, path: str) -> None:
         reveal_in_explorer(self, self.ctx, path)
+
+    # -- columns (v1.9) ----------------------------------------------------------
+    def _apply_hidden_columns(self) -> None:
+        hidden = set(self.ctx.cfg.search_hidden_columns)
+        for c, key in enumerate(self._KEYS):
+            # The name column carries copy/open/details: it never hides.
+            self.table.setColumnHidden(c, c != 0 and key in hidden)
+
+    def _column_menu(self, pos) -> None:
+        t = self.ctx.t
+        menu = QMenu(self)
+        for c, key in enumerate(self._KEYS):
+            act = menu.addAction(t(key))
+            act.setCheckable(True)
+            act.setChecked(not self.table.isColumnHidden(c))
+            act.setEnabled(c != 0)
+            act.toggled.connect(lambda on, k=key: self._set_column_visible(k, on))
+        menu.addSeparator()
+        menu.addAction(t("columns_show_all"), lambda: self._set_hidden_columns([]))
+        menu.exec(self.table.horizontalHeader().mapToGlobal(pos))
+
+    def _set_column_visible(self, key: str, visible: bool) -> None:
+        hidden = [k for k in self.ctx.cfg.search_hidden_columns if k != key]
+        if not visible:
+            hidden.append(key)
+        self._set_hidden_columns(hidden)
+
+    def _set_hidden_columns(self, hidden: list[str]) -> None:
+        self.ctx.cfg.search_hidden_columns = [k for k in self._KEYS[1:] if k in hidden]
+        self._apply_hidden_columns()
+        self.ctx.save_config()   # UI state: saved at once in either Settings mode
+
+    # -- saved searches (v1.9) ---------------------------------------------------
+    def _fill_saved_menu(self) -> None:
+        t = self.ctx.t
+        menu = self.saved_menu
+        menu.clear()
+        save = menu.addAction(t("saved_search_save"), self._save_current_search)
+        save.setEnabled(bool(self.box.text().strip()))
+        saved = self.ctx.cfg.saved_searches
+        if saved:
+            menu.addSeparator()
+            for e in saved:
+                act = menu.addAction(e["name"], lambda e=e: self.apply_saved_search(e))
+                act.setToolTip(e["query"])
+            menu.setToolTipsVisible(True)
+            menu.addSeparator()
+            delete = menu.addMenu(t("saved_search_delete"))
+            for e in saved:
+                delete.addAction(e["name"], lambda n=e["name"]: self._delete_saved_search(n))
+        else:
+            menu.addSeparator()
+            menu.addAction(t("saved_search_none")).setEnabled(False)
+
+    def _save_current_search(self) -> None:
+        t = self.ctx.t
+        text = self.box.text().strip()
+        if not text:
+            return
+        name, ok = QInputDialog.getText(self, t("saved_searches"), t("saved_search_name"),
+                                        text=text[:presets.NAME_MAX])
+        if not ok or not name.strip():
+            return
+        self.ctx.cfg.saved_searches = presets.save(
+            self.ctx.cfg.saved_searches, name, text, self.chk_tags.isChecked())
+        self.ctx.save_config()
+        self.result.setText(t("saved_search_saved", name=" ".join(name.split())))
+
+    def apply_saved_search(self, entry: dict) -> None:
+        """Put a saved search back in the box (and the tags toggle) and run it."""
+        self.filters.blockSignals(True)   # reset the panel without it rewriting the box
+        self.filters.clear()
+        self.filters.blockSignals(False)
+        self.chk_tags.blockSignals(True)
+        self.chk_tags.setChecked(bool(entry.get("tags")))
+        self.chk_tags.blockSignals(False)
+        self.box.blockSignals(True)
+        self.box.setText(entry.get("query", ""))
+        self.box.blockSignals(False)
+        self.do_search()
+
+    def _delete_saved_search(self, name: str) -> None:
+        self.ctx.cfg.saved_searches = presets.remove(self.ctx.cfg.saved_searches, name)
+        self.ctx.save_config()
+
+    # -- export (v1.9) -------------------------------------------------------------
+    def _export_results(self) -> None:
+        t = self.ctx.t
+        if not self._last_rows:
+            self.result.setText(t("export_results_none"))
+            return
+        path, _flt = QFileDialog.getSaveFileName(
+            self, t("btn_export_results"), str(self.ctx.cfg.data_path / "rosu-search.csv"),
+            "CSV (*.csv);;JSON (*.json)")
+        if not path:
+            return
+        if not path.lower().endswith((".csv", ".json")):
+            path += ".json" if "json" in _flt.lower() else ".csv"
+        try:
+            n = table_export.write(path, self._last_rows, self.box.text().strip())
+        except OSError as exc:
+            QMessageBox.warning(self, t("app_title"), t("export_results_failed", error=str(exc)))
+            return
+        self.result.setText(t("export_results_done_shown" if self._last_truncated
+                              else "export_results_done", n=n))
 
     def _repair_map(self, filename: str) -> None:
         t = self.ctx.t
