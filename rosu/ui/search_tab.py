@@ -10,8 +10,8 @@ from __future__ import annotations
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QHBoxLayout,
-    QInputDialog, QLabel, QLineEdit, QMenu, QMessageBox, QPushButton, QToolButton,
-    QVBoxLayout, QWidget,
+    QInputDialog, QLabel, QLineEdit, QMenu, QMessageBox, QPushButton,
+    QStackedWidget, QToolButton, QVBoxLayout, QWidget,
 )
 
 from .. import presets, query, table_export
@@ -19,6 +19,7 @@ from ..columns import has_library_copy, library_status_text, mode_text, where_ma
 from ..i18n import human_duration
 from ..workers import Worker
 from .copy_table import CopyTable, SortItem
+from .cover_gallery import GALLERY_CAP, CoverGallery
 from .filters_panel import FiltersPanel
 from .histogram import Histogram
 from .reveal import reveal_in_explorer
@@ -149,11 +150,16 @@ class SearchTab(QWidget):
         self.btn_saved.setMenu(self.saved_menu)
         self.btn_export = QPushButton(objectName="secondary")
         self.btn_export.clicked.connect(self._export_results)
+        self.btn_gallery = QPushButton(objectName="secondary")
+        self.btn_gallery.setCheckable(True)
+        self.btn_gallery.setChecked(self.ctx.cfg.search_view == "gallery")
+        self.btn_gallery.toggled.connect(self._set_gallery)
         row.addWidget(self.box, 1)
         row.addWidget(self.btn)
         row.addWidget(self.btn_reload)
         row.addWidget(self.btn_saved)
         row.addWidget(self.btn_hist)
+        row.addWidget(self.btn_gallery)
         row.addWidget(self.btn_export)
         root.addLayout(row)
 
@@ -184,7 +190,15 @@ class SearchTab(QWidget):
         header.setContextMenuPolicy(Qt.CustomContextMenu)
         header.customContextMenuRequested.connect(self._column_menu)
         self._apply_hidden_columns()
-        root.addWidget(self.table, 1)
+        # v1.9: the same results as a grid of cover art.
+        self.gallery = CoverGallery(self.ctx)
+        self.gallery.rowActivated.connect(self._show_details_for)
+        self._gallery_stale = True
+        self.views = QStackedWidget()
+        self.views.addWidget(self.table)
+        self.views.addWidget(self.gallery)
+        self.views.setCurrentWidget(self.gallery if self.btn_gallery.isChecked() else self.table)
+        root.addWidget(self.views, 1)
 
         # Debounced live search: wait until typing pauses (~250 ms) before running.
         self._debounce = QTimer(self)
@@ -211,6 +225,8 @@ class SearchTab(QWidget):
         self.btn_saved.setToolTip(t("tip_saved_searches"))
         self.btn_export.setText(t("btn_export_results"))
         self.btn_export.setToolTip(t("tip_export_results"))
+        self.btn_gallery.setText(t("btn_gallery"))
+        self.btn_gallery.setToolTip(t("tip_gallery", n=GALLERY_CAP))
         self.table.setHorizontalHeaderLabels([t(k) for k in self._KEYS])
         self.table.horizontalHeader().setToolTip(t("tip_column_menu"))
         self.table.set_menu_labels(t("copy_names_action"), t("copy_table_action"))
@@ -302,6 +318,9 @@ class SearchTab(QWidget):
 
     def _populate(self, rows: list[dict]) -> None:
         self._last_rows = rows
+        self._gallery_stale = True
+        if self.btn_gallery.isChecked():
+            self._fill_gallery()
         self.table.setUpdatesEnabled(False)   # coalesce paints while filling (item 10)
         self.table.setSortingEnabled(False)
         try:
@@ -526,12 +545,29 @@ class SearchTab(QWidget):
         item = self.table.item(view_row, 0)
         if item is None:
             return
-        idx = item.data(_DATA_ROW_ROLE)
-        if idx is None or idx >= len(self._last_rows):
+        self._show_details_for(item.data(_DATA_ROW_ROLE))
+
+    def _show_details_for(self, idx) -> None:
+        if idx is None or not 0 <= idx < len(self._last_rows):
             return
         from .map_details_dialog import MapDetailsDialog
         MapDetailsDialog(self.ctx, self._last_rows[idx], self,
                          on_restore=self._repair_map).exec()
+
+    # -- gallery (v1.9) ------------------------------------------------------------
+    def _set_gallery(self, on: bool) -> None:
+        self.views.setCurrentWidget(self.gallery if on else self.table)
+        self.ctx.cfg.search_view = "gallery" if on else "table"
+        self.ctx.save_config()   # UI state: saved at once in either Settings mode
+        if on:
+            self._fill_gallery()
+        else:
+            self.gallery.stop()
+
+    def _fill_gallery(self) -> None:
+        if self._gallery_stale:
+            self._gallery_stale = False
+            self.gallery.set_rows(self._last_rows)
 
     def _show_histogram(self) -> None:
         """Star distribution. If the Library has sets without a star yet, offer to

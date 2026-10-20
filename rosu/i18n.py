@@ -1891,6 +1891,12 @@ STRINGS: dict[str, dict[str, str]] = {
     "saved_search_none": {"en": "No saved searches yet", "tr": "Henüz kayıtlı arama yok"},
     "saved_search_name": {"en": "Name:", "tr": "Ad:"},
     "saved_search_saved": {"en": "Saved as \"{name}\".", "tr": "\"{name}\" olarak kaydedildi."},
+    "btn_gallery": {"en": "▦ Gallery", "tr": "▦ Galeri"},
+    "tip_gallery": {
+        "en": "Show the results as cover art (the first {n}). Double-click a cover for "
+              "its details.",
+        "tr": "Sonuçları kapak görselleriyle göster (ilk {n} tanesi). Ayrıntılar için bir "
+              "kapağa çift tıkla."},
     "btn_export_results": {"en": "Export…", "tr": "Dışa aktar…"},
     "tip_export_results": {
         "en": "Save the listed sets as a CSV (spreadsheet) or JSON file.",

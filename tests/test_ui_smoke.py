@@ -794,6 +794,10 @@ def test_search_columns_hide_persist_and_saved_searches_apply(qapp, tmp_path, mo
     tab.apply_saved_search({"name": "x", "query": "mode=mania star>5", "tags": True})
     assert ran == ["mode=mania star>5"] and tab.chk_tags.isChecked()
     tab._fill_saved_menu()                                     # builds without error
+    tab.btn_gallery.setChecked(True)
+    assert tab.views.currentWidget() is tab.gallery and ctx.cfg.search_view == "gallery"
+    tab.btn_gallery.setChecked(False)
+    assert tab.views.currentWidget() is tab.table and ctx.cfg.search_view == "table"
     win.close()
     ctx.db.close()
 
@@ -821,4 +825,33 @@ def test_logs_tab_filters_and_appends_live(qapp, tmp_path, monkeypatch):
     qapp.processEvents()
     assert tab.table.rowCount() == total + 1
     win.close()
+    ctx.db.close()
+
+
+def test_cover_gallery_makes_and_caches_thumbnails(qapp, tmp_path, monkeypatch):
+    import zipfile
+    from PySide6.QtGui import QImage
+    from rosu.ui.cover_gallery import THUMB_H, THUMB_W, CoverGallery, cover_crop
+    ctx = _ctx(tmp_path, monkeypatch)
+    img = QImage(1920, 1080, QImage.Format_RGB32)
+    img.fill(0x3366CC)
+    img.save(str(tmp_path / "bg.png"), "PNG")
+    png = (tmp_path / "bg.png").read_bytes()
+    osz = ctx.cfg.library_path / "1 A - B.osz"
+    with zipfile.ZipFile(osz, "w") as zf:
+        zf.writestr("A - B [x].osu", '[Events]\n0,0,"bg.png",0,0\n')
+        zf.writestr("bg.png", png)
+    rows = [{"artist": "A", "title": "B", "filename": osz.name, "in_library": 1,
+             "library_status": "present"},
+            {"artist": "C", "title": "memory only", "filename": "2 C.osz", "in_library": 1,
+             "library_status": "memory"}]
+    g = CoverGallery(ctx)
+    g.set_rows(rows)
+    assert g.count() == 2
+    g._loader.wait(10000)
+    qapp.processEvents()
+    assert len(list((ctx.cfg.data_path / "covers").glob("*.jpg"))) == 1
+    assert g.item(0).icon().pixmap(THUMB_W, THUMB_H).toImage().pixelColor(5, 5).blue() > 150
+    tall = cover_crop(QImage(100, 1000, QImage.Format_RGB32))
+    assert (tall.width(), tall.height()) == (THUMB_W, THUMB_H)
     ctx.db.close()

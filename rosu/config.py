@@ -108,6 +108,7 @@ class Config:
     # saved searches ([{"name", "query", "tags"}], see rosu.presets).
     search_hidden_columns: list = field(default_factory=list)
     saved_searches: list = field(default_factory=list)
+    search_view: str = "table"           # "table" or "gallery" (cover art)
     schema_note: str = "paths are absolute; edit from Settings tab"
     _extra: dict = field(default_factory=dict)
 
@@ -198,6 +199,8 @@ def _fill_defaults(cfg: Config) -> Config:
     hidden = cfg.search_hidden_columns if isinstance(cfg.search_hidden_columns, list) else []
     cfg.search_hidden_columns = [c for c in hidden if isinstance(c, str)][:50]
     cfg.saved_searches = presets.normalize(cfg.saved_searches)
+    if cfg.search_view not in ("table", "gallery"):
+        cfg.search_view = "table"
     return cfg
 
 
