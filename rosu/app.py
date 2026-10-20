@@ -130,6 +130,8 @@ def run() -> int:
         return 0 if ok else 1
 
     app.setStyleSheet(qss)
+    from . import crash_report
+    crash_report.install(lambda: bool(getattr(ctx.cfg, "crash_reports", False)))
     ctx.log.info("APP_START", version=__version__, root=str(ctx.cfg.root))
     if healed is not None:
         ctx.log.info("PATH_HEAL", status=healed.status, root=str(ctx.cfg.root))

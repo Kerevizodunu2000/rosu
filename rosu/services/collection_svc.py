@@ -14,8 +14,14 @@ class CollectionMixin:
         p = install_dir / "collection.db"
         return p if p.exists() else None
 
-    def sync_collections(self, db_path: Path | str) -> dict:
-        """Reads collection.db and tags tracks in the library with Collection names."""
+    def sync_collections(self, db_path: Path | str, progress=None, cancel=None) -> dict:
+        """Reads collection.db and tags tracks in the library with Collection names.
+
+        Has its own cancel token (``cancel_collection_sync``), like every other
+        long scan, so stopping it never disturbs an import or upload running
+        alongside. Tags are only ever added, so stopping part-way is safe."""
+        self._collections_cancel.clear()
+        _eff = cancel if cancel is not None else self._collections_cancel.is_set
         p = Path(db_path)
         if not p.exists():
             return {"found": False}
@@ -41,6 +47,9 @@ class CollectionMixin:
 
         if not track_to_new_tags:
             return {"found": True, "collections": len(collections), "tagged": 0}
+        if _eff():
+            return {"found": True, "collections": len(collections), "tagged": 0,
+                    "cancelled": True}
 
         # Update tracks. bulk() holds the DB lock for the whole block, so the
         # raw cursor use below is safe (same pattern the contextmanager is for).
@@ -48,6 +57,8 @@ class CollectionMixin:
         with self.db.bulk():
             cursor = self.db._conn.cursor()
             for track_id, new_tags in track_to_new_tags.items():
+                if _eff():
+                    break
                 cursor.execute("SELECT tags FROM tracks WHERE id = ?", (track_id,))
                 row = cursor.fetchone()
                 if not row:
@@ -69,4 +80,9 @@ class CollectionMixin:
 
         if tagged_count > 0:
             self.db._bump()
-        return {"found": True, "collections": len(collections), "tagged": tagged_count}
+        return {"found": True, "collections": len(collections), "tagged": tagged_count,
+                "cancelled": _eff()}
+
+    def cancel_collection_sync(self) -> None:
+        """Stop only an in-progress collection sync."""
+        self._collections_cancel.set()

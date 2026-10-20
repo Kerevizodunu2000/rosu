@@ -67,3 +67,18 @@ def test_v14_client_and_autosave_defaults_round_trip(tmp_path, monkeypatch):
     r = config.load_config()
     assert (r.lazer_enabled, r.stable_enabled, r.settings_autosave) == \
         (False, True, False)
+
+
+def test_fill_defaults_turns_hand_edited_switches_into_bools():
+    cfg = config.Config(root="x", watch_enabled="false", auto_prune="yes", check_updates=0,
+                        crash_reports=None)
+    cfg = config._fill_defaults(cfg)
+    assert cfg.watch_enabled is False and cfg.auto_prune is True
+    assert cfg.check_updates is False and cfg.crash_reports is False
+
+
+def test_fill_defaults_cleans_watch_and_column_settings():
+    cfg = config.Config(root="x", watch_folder=["C:/Downloads"],
+                        search_hidden_columns=["artist", "x" * 65, 3])
+    cfg = config._fill_defaults(cfg)
+    assert cfg.watch_folder == "" and cfg.search_hidden_columns == ["artist"]

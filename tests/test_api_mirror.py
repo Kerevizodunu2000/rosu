@@ -4,7 +4,6 @@
 No real network access — ``urlopen`` is monkeypatched with a fake response
 that yields chunks from an in-memory buffer.
 """
-import pytest
 
 from rosu import api_mirror
 

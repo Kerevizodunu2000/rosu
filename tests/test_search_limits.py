@@ -210,3 +210,30 @@ def test_pruned_filter_round_trips_through_search():
     rows = search.search(db, "pruned=yes")
     assert [r["display_name"] for r in rows] == ["Artist - Stripped"]
     db.close()
+
+
+def test_recall_cap_never_cuts_the_best_match():
+    # 2100 sets merely *contain* "ion" (Motion, Vision…), inserted first; the one
+    # set titled "Ion" comes last. The recall used to stop at its cap in table
+    # order, so the exact match never reached the ranker.
+    db = _db()
+    with db.bulk():
+        for i in range(1, 2101):
+            _track(db, i, name=f"Motion{i}", artist="Band")
+    _track(db, 9999, name="Ion", artist="Someone")
+    rows = search.search(db, "ion", limit=10)
+    assert rows[0]["beatmapset_id"] == 9999
+    db.close()
+
+
+def test_recall_cap_keeps_word_starts_after_punctuation():
+    db = _db()
+    with db.bulk():
+        for i in range(1, 2101):
+            _track(db, i, name=f"Motion{i}", artist="Band")
+    for bid, name in ((9001, "Foo-Ion"), (9002, "Song (Ion mix)"), (9003, "Re:Ion"),
+                      (9004, "「Ion」"), (9005, "x.Ion")):
+        _track(db, bid, name=name, artist="Someone")
+    found = {r["beatmapset_id"] for r in search.search(db, "ion", limit=10)}
+    assert {9001, 9002, 9003, 9004, 9005} <= found
+    db.close()

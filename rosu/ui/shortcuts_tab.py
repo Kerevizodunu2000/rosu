@@ -70,6 +70,15 @@ def _copy_to_clipboard(text: str) -> bool:
     return True
 
 
+def _plain_message(parent, title: str, text: str) -> None:
+    """An information box that shows ``text`` literally — it can carry file names
+    from Drive or a client folder, and QMessageBox renders anything that looks
+    like HTML as HTML."""
+    box = QMessageBox(QMessageBox.Information, title, text, QMessageBox.Ok, parent)
+    box.setTextFormat(Qt.PlainText)
+    box.exec()
+
+
 def _describe_job(job, t) -> str:
     """One line spelling out every choice behind a queued job.
 
@@ -116,8 +125,20 @@ def _describe_job(job, t) -> str:
             bits.append(t("prune_n_sets", n=opts["sets"]))
         if opts.get("freed_estimate"):
             bits.append(t("prune_frees", size=_fmt_size(opts["freed_estimate"])))
-    elif job.kind == "restore" and opts.get("restore_sets"):
+    elif job.kind in ("restore", "drive_restore") and opts.get("restore_sets"):
         bits.append(t("prune_n_sets", n=opts["restore_sets"]))
+    elif job.kind == "watch_import" and opts.get("files"):
+        bits.append(t("watch_n_files", n=opts["files"]))
+    elif job.kind == "library_move":
+        bits.append(t("job_library_move_desc", dest=opts.get("dest", "")))
+        if opts.get("remove_old"):
+            bits.append(t("mv_remove_old_short"))
+    elif job.kind == "remove":
+        if opts.get("remove_source"):
+            bits.append(t(f"prune_source_{opts['remove_source']}"))
+        bits.append(t("rm_mode_save" if opts.get("save_first") else "rm_mode_only"))
+        if opts.get("sets"):
+            bits.append(t("prune_n_sets", n=opts["sets"]))
     if not bits:
         return ""
     line = "   ·   ".join(bits)
@@ -376,6 +397,26 @@ class ShortcutsTab(QWidget):
         drow.addStretch(1)
         root.addLayout(drow)
 
+        # v1.8: take sets out of a client (HANDOFF 4.1) and get sets back from
+        # the Drive backup (4.2).
+        crow = QHBoxLayout()
+        self.btn_remove = QPushButton(objectName="secondary")
+        self.btn_remove.clicked.connect(self.on_remove)
+        crow.addWidget(self.btn_remove)
+        self.btn_drive_browse = QPushButton(objectName="secondary")
+        self.btn_drive_browse.clicked.connect(self.on_drive_browse)
+        crow.addWidget(self.btn_drive_browse)
+        # v1.9: move the Library to another folder/drive (copy, verify, switch).
+        self.btn_move_library = QPushButton(objectName="secondary")
+        self.btn_move_library.clicked.connect(self.on_move_library)
+        crow.addWidget(self.btn_move_library)
+        # v1.10: the same song in different sets (audio fingerprints).
+        self.btn_same_song = QPushButton(objectName="secondary")
+        self.btn_same_song.clicked.connect(self.on_same_song)
+        crow.addWidget(self.btn_same_song)
+        crow.addStretch(1)
+        root.addLayout(crow)
+
         # -- İş Kuyruğu / job queue --------------------------------------------
         self.jobqueue_box = QGroupBox()
         qlay = QVBoxLayout(self.jobqueue_box)
@@ -445,6 +486,14 @@ class ShortcutsTab(QWidget):
         self.btn_restore.setToolTip(t("tip_restore_pruned"))
         self.btn_lazer_flow.setText(t("btn_lazer_slim"))
         self.btn_lazer_flow.setToolTip(t("tip_lazer_slim"))
+        self.btn_remove.setText(t("btn_remove_from_client"))
+        self.btn_remove.setToolTip(t("tip_remove_from_client"))
+        self.btn_drive_browse.setText(t("btn_drive_browse"))
+        self.btn_drive_browse.setToolTip(t("tip_drive_browse"))
+        self.btn_move_library.setText(t("btn_move_library"))
+        self.btn_move_library.setToolTip(t("tip_move_library"))
+        self.btn_same_song.setText(t("btn_same_song"))
+        self.btn_same_song.setToolTip(t("tip_same_song"))
         self.jobqueue_box.setTitle(t("sc_jobqueue_title"))
         self.btn_clear_finished.setText(t("job_clear_finished"))
         self.queue_empty.setText(t("queue_empty"))
@@ -526,6 +575,7 @@ class ShortcutsTab(QWidget):
             b.setVisible(bool(on))
         self.transfer_box.setVisible(both)     # transfer needs BOTH clients
         self.save_box.setVisible(lz or st)
+        self.btn_remove.setVisible(bool(lz or st))
         self.unpack_box.setVisible(lz or st)
         disabled = [n for n, on in (("osu!lazer", lz), ("osu!(stable)", st)) if not on]
         self.disabled_hint.setVisible(bool(disabled))
@@ -728,6 +778,62 @@ class ShortcutsTab(QWidget):
             return
         self._enqueue(self.services.build_restore_pruned_job(), ("restore", n))
 
+    def on_remove(self) -> None:
+        """Remove sets from osu!(stable) / osu!lazer — preview + countdown in the
+        dialog, then a queued job (HANDOFF 4.1)."""
+        from .remove_dialog import RemoveDialog
+        dlg = RemoveDialog(self.ctx, self)
+        if dlg.exec() != QDialog.Accepted or not dlg.plan:
+            return
+        plan = dlg.plan
+        job = self.services.build_remove_job(plan["source"], plan["keys"], plan["save_first"])
+        self._enqueue(job, ("remove", plan["source"], plan["save_first"], tuple(plan["keys"])))
+
+    def on_drive_browse(self) -> None:
+        """List what the Drive backup holds and restore chosen sets (HANDOFF 4.2)."""
+        t = self.ctx.t
+        if not self.ctx.cfg.drive_connected:
+            QMessageBox.information(self, t("app_title"), t("drive_connect_first"))
+            return
+        from .drive_browser_dialog import DriveBrowserDialog
+        dlg = DriveBrowserDialog(self.ctx, self)
+        if dlg.exec() != QDialog.Accepted or not dlg.plan:
+            return
+        entries = dlg.plan
+        self._enqueue(self.services.build_drive_restore_job(entries),
+                      ("drive_restore", tuple(sorted(str(e.get("key")) for e in entries))))
+
+    def on_move_library(self) -> None:
+        """Move the Library to another folder or drive — plan + countdown in the
+        dialog, then a queued disk-lane job (v1.9)."""
+        from .move_library_dialog import MoveLibraryDialog
+        dlg = MoveLibraryDialog(self.ctx, self)
+        if dlg.exec() != QDialog.Accepted or not dlg.plan:
+            return
+        plan = dlg.plan
+        self._enqueue(self.services.build_library_move_job(plan["dest"], plan["remove_old"]),
+                      ("library_move", plan["dest"]))
+
+    def on_same_song(self) -> None:
+        """Find the same song in different Library sets (audio fingerprints) and
+        recycle the ones picked — preview + countdown in the dialog (v1.10)."""
+        from .same_song_dialog import SameSongDialog
+        dlg = SameSongDialog(self.ctx, self)
+        accepted = dlg.exec() == QDialog.Accepted
+        plan = dlg.plan
+        dlg.deleteLater()
+        if not accepted or not plan:
+            return
+        self._enqueue(self.services.build_recycle_sets_job(plan),
+                      ("same_song", tuple(sorted(plan))))
+
+    def queue_watch_import(self, paths):
+        """New files in the watched folder (v1.9) → a quiet disk-lane import.
+        Returns the queued job (the watcher follows its state)."""
+        job = self.services.build_watch_import_job(paths)
+        self._enqueue(job)
+        return job
+
     def on_lazer_slim(self) -> None:
         """The guided osu!lazer round-trip (see :mod:`rosu.ui.lazer_slim_dialog`)."""
         from .lazer_slim_dialog import LazerSlimDialog
@@ -893,6 +999,10 @@ class ShortcutsTab(QWidget):
             "dedup": self._present_dedup,
             "prune": self._present_prune,
             "restore": self._present_restore,
+            "remove": self._present_remove,
+            "drive_restore": self._present_drive_restore,
+            "library_move": self._present_library_move,
+            "watch_import": self._present_watch_import,
         }.get(job.kind)
         if presenter is not None:
             presenter(res)
@@ -1003,6 +1113,8 @@ class ShortcutsTab(QWidget):
         (the queue row shows the × and carries the detail as a tooltip)."""
         t = self.ctx.t
         err = job.error or ""
+        if job.kind == "watch_import":
+            self.mw.folder_watch.job_failed(job.ctx.get("paths") or [])
         if job.kind == "export" and job.ctx.get("written"):
             archives = [str(a) for a in job.ctx["written"]]
             location = str(Path(archives[0]).parent)
@@ -1040,6 +1152,84 @@ class ShortcutsTab(QWidget):
             self._set_status("sc_restore_partial", n=repaired, failed=failed)
         else:
             self._set_status("sc_restore_failed", failed=failed)
+        self.mw.search.reload()
+
+    def _present_remove(self, res) -> None:
+        t = self.ctx.t
+        err = res.get("error")
+        if err:
+            QMessageBox.warning(self, t("app_title"), t(f"rm_err_{err}"))
+            self._set_status(f"rm_err_{err}")
+            return
+        removed, kept, failed = res.get("removed", 0), len(res.get("kept", [])), len(res.get("failed", []))
+        lines = [t("rm_done", n=removed, source=t(f"prune_source_{res.get('source', 'stable')}"))]
+        if res.get("saved"):
+            lines.append(t("rm_done_saved", n=res["saved"]))
+        if kept:
+            lines.append(t("rm_done_kept", n=kept))
+        if failed:
+            lines.append(t("rm_done_failed", n=failed))
+        if res.get("source") == "lazer" and removed:
+            lines.append(t("rm_done_lazer_restart"))
+            if res.get("backup"):
+                lines.append(t("rm_done_backup", path=res["backup"]))
+        if res.get("source") == "stable" and removed:
+            lines.append(t("rm_done_stable_refresh"))
+        _plain_message(self, t("app_title"), "\n".join(lines))
+        self._set_status("rm_done", n=removed, source=t(f"prune_source_{res.get('source', 'stable')}"))
+        self.mw.search.reload()
+
+    def _present_drive_restore(self, res) -> None:
+        t = self.ctx.t
+        if res.get("error"):
+            QMessageBox.warning(self, t("app_title"),
+                                t("drv_err_not_connected") if res["error"] == "not_connected"
+                                else t("drv_err", detail=res.get("detail", "")))
+            return
+        failed = res.get("failed") or []
+        lines = [t("drv_done", n=res.get("restored", 0), already=res.get("already", 0))]
+        if failed:
+            reasons = [str(f.get("reason")) for f in failed[:5]]
+            shown = ", ".join(f"{f.get('name')} ({t(f'drv_fail_{r}')})"
+                              for f, r in zip(failed[:5], reasons))
+            lines.append(t("drv_done_failed", n=len(failed), names=shown))
+        _plain_message(self, t("app_title"), "\n".join(lines))
+        self._set_status("drv_done", n=res.get("restored", 0), already=res.get("already", 0))
+        self.mw.search.reload()
+
+    def _present_watch_import(self, res) -> None:
+        # Auto-import is background work: a status line, never a popup.
+        self.mw.folder_watch.job_done(res)
+        self._set_status("watch_done", new=res.get("new", 0), files=res.get("files", 0))
+        self.mw.search.reload()
+
+    def _present_library_move(self, res) -> None:
+        t = self.ctx.t
+        err = res.get("error")
+        if err or res.get("cancelled"):
+            msg = t("mv_cancelled") if res.get("cancelled") and not err else \
+                t(f"mv_err_{err}", n=len(res.get("conflicts") or []),
+                  names=", ".join((res.get("conflicts") or [])[:5]))
+            if res.get("detail"):
+                msg += "\n\n" + res["detail"]
+            _plain_message(self, t("app_title"), msg + "\n\n" + t("mv_nothing_changed"))
+            return
+        lines = [t("mv_done", n=res.get("moved", 0) + res.get("same", 0), dest=res.get("dest", ""))]
+        if res.get("late"):
+            lines.append(t("mv_done_late", n=res["late"]))
+        if res.get("left_behind"):
+            lines.append(t("mv_done_left_behind", n=len(res["left_behind"]),
+                           names=", ".join(res["left_behind"][:5])))
+        if res.get("old_removed"):
+            lines.append(t("mv_done_recycled", n=res["old_removed"]))
+        if res.get("old_failed"):
+            lines.append(t("mv_done_old_failed", n=res["old_failed"]))
+        elif res.get("old_kept"):
+            lines.append(t("mv_done_old_kept_no_bin"))
+        _plain_message(self, t("app_title"), "\n".join(lines))
+        self._set_status("mv_done", n=res.get("moved", 0) + res.get("same", 0),
+                         dest=res.get("dest", ""))
+        self.mw.settings.library_moved(res.get("dest", ""))
         self.mw.search.reload()
 
     def _present_prune(self, res) -> None:

@@ -173,5 +173,31 @@ def submit_report(title, description, *, image_bytes=None, image_name=None,
     except ValueError:
         return {"ok": False, "error": "bad_reply"}
     if data.get("ok"):
-        return {"ok": True, "id": data.get("id")}
+        out = {"ok": True, "id": data.get("id")}
+        link = _status_link(data.get("status_url"), url)
+        if link:
+            out["status_url"] = link
+        return out
     return {"ok": False, "error": data.get("error", "server")}
+
+
+def _status_link(value, endpoint: str) -> str | None:
+    """The report's private tracking page (rosu-web v1.3+), accepted only as an
+    https link on the endpoint's own host under ``/report/status/`` — the reply
+    is shown as a clickable link, so nothing else may get through."""
+    import re
+    from urllib.parse import urlsplit
+    if not isinstance(value, str) or len(value) > 300:
+        return None
+    try:
+        got, ep = urlsplit(value), urlsplit(endpoint)
+    except ValueError:
+        return None
+    # Exact netloc (no userinfo, no port games) and no backslash: browsers and
+    # urlsplit disagree on "https://evil\\@host/…". The link handed on is
+    # rebuilt from the endpoint, never echoed.
+    if "\\" in value or got.scheme != "https" or not ep.netloc or got.netloc != ep.netloc:
+        return None
+    if got.query or got.fragment or not re.fullmatch(r"/report/status/[A-Za-z0-9_-]{20,100}", got.path):
+        return None
+    return f"https://{ep.netloc}{got.path}"

@@ -1,15 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 from __future__ import annotations
 import datetime as _dt
-import threading
-import time
 from pathlib import Path
 
-from .. import (
-    archives, config, excel_report, extractor, gaps, jobs, library, osu_api,
-    osu_import, parsing, search, db, msd, ratings
-)
-from ..models import ExtractPlan, ParsedPack
+from .. import jobs, library
 
 _CLIENT_LABEL = {"lazer": "osu!lazer", "stable": "osu!(stable)"}
 
@@ -75,10 +69,13 @@ class LibraryMixin:
                           disappeared=res["disappeared"], present=res["present"])
             return res
 
-        def import_osz_folder(self, folder, progress=None, source_label=None) -> dict:
+        def import_osz_folder(self, folder, progress=None, source_label=None,
+                              physical_copy: bool | None = None) -> dict:
             """Dedup every .osz in ``folder`` into the Library (shared by the stable,
             lazer and manual import paths). Emits k/n import progress (item 3) and, when
-            ``source_label`` is set, tags each set with its origin (item 9)."""
+            ``source_label`` is set, tags each set with its origin (item 9).
+            ``physical_copy`` overrides the setting: saving a set before it leaves
+            osu!, or restoring one from Drive, must leave a real file."""
             folder = Path(folder)
             total = sum(1 for _ in folder.glob("*.osz")) if folder.exists() else 0
             done = [0]
@@ -90,13 +87,148 @@ class LibraryMixin:
     
             res = library.copy_to_library(
                 folder, self.cfg.library_path, self.db, now_iso(),
-                self.cfg.library_physical_copy, cb if progress else None,
+                self.cfg.library_physical_copy if physical_copy is None else physical_copy,
+                cb if progress else None,
                 source_label=source_label, auto_prune=self.cfg.auto_prune,
                 prune_mode=self.cfg.prune_mode)
             self.rebuild()
             self.log.info("LIBRARY_COPY", new=res["new"], duplicates=res["duplicates"],
                           dup_ids=res["dup_ids"][:50])
             return res
+
+        def import_osz_files(self, paths, progress=None, cancel=None) -> dict:
+            """Add these ``.osz`` files to the Library (the watch folder, v1.9).
+            They are copied to a temp stage first, so the import never reads a
+            file that is still changing — and never moves or deletes the user's
+            own copies. ``{"new","duplicates","files","imported","rejected",
+            "failed","cancelled"}``: ``imported`` / ``rejected`` (not an archive)
+            are done with; ``failed`` (copy error, no space) may be retried."""
+            import shutil
+            import tempfile
+            import zipfile
+            _eff = cancel if cancel is not None else (lambda: False)
+            srcs = [Path(p) for p in (paths or [])]
+            res = {"new": 0, "duplicates": 0, "files": 0, "imported": [], "rejected": [],
+                   "failed": [], "cancelled": False}
+            need = 0
+            for src in srcs:
+                try:
+                    need += src.stat().st_size
+                except OSError:
+                    pass
+            if not self.cfg.library_path.is_dir():
+                # The Library's drive is unplugged (or the folder is gone): do not
+                # stage anything; the watcher waits and tries again later.
+                res["failed"] = [str(p) for p in srcs]
+                self.log.error("watch:library", f"Library folder not available: {self.cfg.library_path}")
+                return res
+            stage = Path(tempfile.mkdtemp(prefix="rosu_watch_"))
+            try:
+                margin = 256 * 1024 * 1024
+                for where in (stage, self.cfg.library_path):
+                    try:
+                        if shutil.disk_usage(where).free < need + margin:
+                            res["failed"] = [str(p) for p in srcs]
+                            self.log.error("watch:space", f"not enough free space in {where}")
+                            return res
+                    except OSError:
+                        pass
+                staged: list[Path] = []
+                for src in srcs:
+                    if _eff():
+                        res["cancelled"] = True
+                        break
+                    if src.suffix.lower() != ".osz" or not src.is_file():
+                        res["rejected"].append(str(src))
+                        continue
+                    try:
+                        shutil.copy2(src, stage / src.name)
+                    except OSError as exc:
+                        res["failed"].append(str(src))
+                        self.log.error("watch:copy", f"{src.name}: {str(exc)[:150]}")
+                        continue
+                    if not zipfile.is_zipfile(stage / src.name):
+                        (stage / src.name).unlink(missing_ok=True)
+                        res["rejected"].append(str(src))
+                        continue
+                    staged.append(src)
+                res["files"] = len(staged)
+                if not staged or res["cancelled"]:
+                    res["failed"] += [str(p) for p in staged]   # not imported: try again later
+                    return res
+                out = self.import_osz_folder(stage, progress, source_label="watch_folder")
+                res["new"] = int(out.get("new", 0))
+                res["duplicates"] = int(out.get("duplicates", 0))
+                res["imported"] = [str(p) for p in staged]
+                self.log.info("WATCH_IMPORT", files=len(staged), new=res["new"])
+                return res
+            finally:
+                shutil.rmtree(stage, ignore_errors=True)
+
+        def stage_to_output(self, paths, progress=None) -> dict:
+            """Copy chosen Library sets into Output (v1.9), so "Import to osu!"
+            sends exactly those. Only files directly in the Library are taken;
+            an Output file with the same name is never replaced. ``{"copied",
+            "already", "skipped"}``."""
+            import os
+            import shutil
+            import tempfile
+            from ..fsutil import place_new
+            lib = self.cfg.library_path.resolve()
+            out = self.cfg.output_path
+            out.mkdir(parents=True, exist_ok=True)
+            res = {"copied": 0, "already": 0, "skipped": 0}
+            paths = list(paths or [])
+            for i, p in enumerate(paths, 1):
+                src = Path(p)
+                try:
+                    inside = src.resolve().parent == lib
+                except OSError:
+                    inside = False
+                if not inside or src.suffix.lower() != ".osz" or not src.is_file():
+                    res["skipped"] += 1
+                    continue
+                dest = out / src.name
+                if dest.exists():
+                    same = dest.is_file() and dest.stat().st_size == src.stat().st_size
+                    res["already" if same else "skipped"] += 1
+                    continue
+                # Through a temp file next to it, so a failed copy never leaves a
+                # half-written .osz in Output for "Import to osu!" to pick up.
+                tmp = None
+                try:
+                    fd, tmp_name = tempfile.mkstemp(dir=out, prefix=".rosu-stage-", suffix=".part")
+                    os.close(fd)
+                    tmp = Path(tmp_name)
+                    shutil.copyfile(src, tmp)
+                    shutil.copystat(src, tmp)
+                    place_new(tmp, dest)   # never replaces a file that appeared meanwhile
+                    tmp = None
+                    res["copied"] += 1
+                except OSError as exc:
+                    res["skipped"] += 1
+                    self.log.error("stage:output", f"{src.name}: {str(exc)[:150]}")
+                finally:
+                    if tmp is not None:
+                        tmp.unlink(missing_ok=True)
+                if progress:
+                    progress({"kind": "stage", "done": i, "total": len(paths)})
+            self.log.info("STAGE_OUTPUT", **res)
+            return res
+
+        def build_watch_import_job(self, paths) -> jobs.Job:
+            """Queue new watch-folder files for import (disk lane)."""
+            paths = [str(p) for p in (paths or [])]
+            job = jobs.Job(jobs.new_id(), "job_watch_import", kind="watch_import")
+            job.ctx["options"] = {"files": len(paths)}
+            job.ctx["paths"] = paths
+
+            def s_import(ctx, progress, cancel):
+                ctx["result"] = self.import_osz_files(paths, progress, cancel)
+
+            job.steps = [jobs.Step("job_step_watch_import", jobs.Lane.DISK, s_import)]
+            job.finalize = lambda ctx: ctx.get("result", {"new": 0})
+            return job
 
         def _dedup_scan(self) -> tuple[list, dict, int]:
             """Scan the Library and plan dedup without deleting: returns

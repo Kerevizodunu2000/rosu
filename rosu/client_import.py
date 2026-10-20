@@ -92,12 +92,13 @@ def beatmapset_id_for_folder(folder: Path) -> int | None:
 
 def zip_folder_to_osz(folder: Path, dest_osz: Path) -> Path:
     """Zip a Songs/ folder's *contents* into an .osz, preserving nested subfolders
-    (storyboards/skins). Stored (no compression) since the media is already packed."""
+    (storyboards/skins). Stored (no compression) since the media is already packed.
+    A file dated before 1980 (zip's epoch) is stored as 1980 instead of failing."""
     folder = Path(folder)
     dest_osz = Path(dest_osz)
     dest_osz.parent.mkdir(parents=True, exist_ok=True)
     tmp = dest_osz.with_suffix(dest_osz.suffix + ".part")
-    with zipfile.ZipFile(tmp, "w", zipfile.ZIP_STORED) as z:
+    with zipfile.ZipFile(tmp, "w", zipfile.ZIP_STORED, strict_timestamps=False) as z:
         for p in sorted(folder.rglob("*")):
             if p.is_file():
                 z.write(p, p.relative_to(folder).as_posix())

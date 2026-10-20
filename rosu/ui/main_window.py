@@ -63,6 +63,9 @@ class MainWindow(QMainWindow):
 
         # live-log mirror into the Logs tab
         self.ctx.log.ui_sink = self.logs.append_line
+        from .folder_watch import FolderWatcher
+        self.folder_watch = FolderWatcher(self)   # v1.9, opt-in (Settings)
+        self.folder_watch.reconfigure()
 
         self._prev_index = self.tabs.currentIndex()
         self.tabs.currentChanged.connect(self._on_tab_changed)
@@ -93,10 +96,20 @@ class MainWindow(QMainWindow):
         if not info:
             self.update_banner.setVisible(False)
             return
-        link = self.ctx.t("update_open")
+        from html import escape
+        t = self.ctx.t
+        # The direct .exe when the site supplied one, else the release page. Both
+        # were validated as links into this project's GitHub releases.
+        dl = info.get("download_url") or info["url"]
+        links = f"  <a href='{escape(dl, quote=True)}'>{escape(t('update_open'))}</a>"
+        if info.get("download_url"):
+            links += (f"  ·  <a href='{escape(info['url'], quote=True)}'>"
+                      f"{escape(t('update_whats_new'))}</a>")
         self.update_banner.setText(
-            self.ctx.t("update_available", tag=info["tag"])
-            + f"  <a href='{info['url']}'>{link}</a>")
+            escape(t("update_available", tag=info["tag"])) + links)
+        if info.get("notes"):
+            from .links import plain_tip
+            self.update_banner.setToolTip(plain_tip(info["notes"]))
         self.update_banner.setVisible(True)
 
     # -- shared operations ---------------------------------------------------
@@ -181,13 +194,17 @@ class MainWindow(QMainWindow):
                     q.cancel_all()
         except Exception:
             pass
-        for holder in self._ordered_tabs + [self]:   # include our own update worker
-            for w in list(getattr(holder, "_threads", [])):
-                try:
-                    if w.isRunning():
-                        w.wait(5000)  # give each worker up to 5s to finish
-                except RuntimeError:
-                    pass  # C++ object already gone
+        self.search.gallery.stop()   # thumbnails: stop at the next cover
+        from .. import workers
+        holders = [getattr(h, "_threads", []) for h in self._ordered_tabs + [self]]
+        # Plus every Worker still alive anywhere (a closed dialog's scan, the
+        # gallery loader) — a QThread destroyed while running aborts the app.
+        for w in {id(x): x for group in holders + [list(workers._live)] for x in group}.values():
+            try:
+                if w.isRunning():
+                    w.wait(5000)  # give each worker up to 5s to finish
+            except RuntimeError:
+                pass  # C++ object already gone
         for tab in self._ordered_tabs:   # remove any queued job's temp stage dir
             q = getattr(tab, "queue", None)
             if q is not None:

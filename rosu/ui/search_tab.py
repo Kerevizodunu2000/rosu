@@ -7,17 +7,22 @@ is browsable (item 11).
 """
 from __future__ import annotations
 
+import time
+
 from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
-    QCheckBox, QComboBox, QDialog, QDialogButtonBox, QHBoxLayout, QLabel,
-    QLineEdit, QMessageBox, QPushButton, QVBoxLayout, QWidget,
+    QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QHBoxLayout,
+    QInputDialog, QLabel, QLineEdit, QMenu, QMessageBox, QPushButton,
+    QStackedWidget, QToolButton, QVBoxLayout, QWidget,
 )
 
-from .. import query
+from .. import presets, query, table_export
 from ..columns import has_library_copy, library_status_text, mode_text, where_marks
 from ..i18n import human_duration
 from ..workers import Worker
 from .copy_table import CopyTable, SortItem
+from .cover_gallery import GALLERY_CAP, CoverGallery
 from .filters_panel import FiltersPanel
 from .histogram import Histogram
 from .reveal import reveal_in_explorer
@@ -122,6 +127,7 @@ class SearchTab(QWidget):
         self._search_seq = 0        # ignore results from superseded searches
         self._loaded_once = False
         self._last_rows: list[dict] = []   # current results (row → Map Details)
+        self._last_truncated = False       # the results are a capped page
         self._pending_histogram = False    # open the histogram once results refresh
         self._hist_mode = "auto"           # star-histogram binning, remembered
         self._hist_pairs: list = []        # (track_id, star) behind the bars
@@ -131,6 +137,17 @@ class SearchTab(QWidget):
         root.setSpacing(10)
 
         row = QHBoxLayout()
+        # v1.9: back/forward through the last 16 searches (Alt+←/→).
+        self._history = presets.History()
+        self._navigating = False
+        self.btn_back = QToolButton(objectName="secondary", text="◀")
+        self.btn_back.clicked.connect(lambda: self._go_history(-1))
+        self.btn_fwd = QToolButton(objectName="secondary", text="▶")
+        self.btn_fwd.clicked.connect(lambda: self._go_history(1))
+        QShortcut(QKeySequence("Alt+Left"), self, activated=lambda: self._go_history(-1))
+        QShortcut(QKeySequence("Alt+Right"), self, activated=lambda: self._go_history(1))
+        row.addWidget(self.btn_back)
+        row.addWidget(self.btn_fwd)
         self.box = QLineEdit()
         self.box.returnPressed.connect(self.do_search)          # Enter = search now
         self.btn = QPushButton()
@@ -139,10 +156,25 @@ class SearchTab(QWidget):
         self.btn_reload.clicked.connect(self.refresh_now)       # visible re-pull
         self.btn_hist = QPushButton(objectName="secondary")
         self.btn_hist.clicked.connect(self._show_histogram)     # star distribution
+        # v1.9: saved searches (a menu rebuilt on open) and CSV/JSON export.
+        self.btn_saved = QToolButton(objectName="secondary")
+        self.btn_saved.setPopupMode(QToolButton.InstantPopup)
+        self.saved_menu = QMenu(self.btn_saved)
+        self.saved_menu.aboutToShow.connect(self._fill_saved_menu)
+        self.btn_saved.setMenu(self.saved_menu)
+        self.btn_export = QPushButton(objectName="secondary")
+        self.btn_export.clicked.connect(self._export_results)
+        self.btn_gallery = QPushButton(objectName="secondary")
+        self.btn_gallery.setCheckable(True)
+        self.btn_gallery.setChecked(self.ctx.cfg.search_view == "gallery")
+        self.btn_gallery.toggled.connect(self._set_gallery)
         row.addWidget(self.box, 1)
         row.addWidget(self.btn)
         row.addWidget(self.btn_reload)
+        row.addWidget(self.btn_saved)
         row.addWidget(self.btn_hist)
+        row.addWidget(self.btn_gallery)
+        row.addWidget(self.btn_export)
         root.addLayout(row)
 
         # Visual filters panel (v1.6) — composes the same query syntax into the box.
@@ -166,8 +198,22 @@ class SearchTab(QWidget):
         self.table.setColumnCount(len(self._KEYS))
         self.table.openLocationRequested.connect(self._open_location)
         self.table.repairRequested.connect(self._repair_map)
+        self.table.stageRequested.connect(self._stage_to_output)
         self.table.rowActivated.connect(self._show_map_details)   # dbl-click → details
-        root.addWidget(self.table, 1)
+        # v1.9: right-click a column header to hide/show columns (remembered).
+        header = self.table.horizontalHeader()
+        header.setContextMenuPolicy(Qt.CustomContextMenu)
+        header.customContextMenuRequested.connect(self._column_menu)
+        self._apply_hidden_columns()
+        # v1.9: the same results as a grid of cover art.
+        self.gallery = CoverGallery(self.ctx)
+        self.gallery.rowActivated.connect(self._show_details_for)
+        self._gallery_stale = True
+        self.views = QStackedWidget()
+        self.views.addWidget(self.table)
+        self.views.addWidget(self.gallery)
+        self.views.setCurrentWidget(self.gallery if self.btn_gallery.isChecked() else self.table)
+        root.addWidget(self.views, 1)
 
         # Debounced live search: wait until typing pauses (~250 ms) before running.
         self._debounce = QTimer(self)
@@ -190,10 +236,20 @@ class SearchTab(QWidget):
         self.box.setToolTip(t("tip_search_box"))
         self.btn.setToolTip(t("tip_search_btn"))
         self.btn_reload.setToolTip(t("tip_reload"))
+        self.btn_saved.setText(t("saved_searches"))
+        self.btn_saved.setToolTip(t("tip_saved_searches"))
+        self.btn_export.setText(t("btn_export_results"))
+        self.btn_export.setToolTip(t("tip_export_results"))
+        self.btn_back.setToolTip(t("tip_history_back"))
+        self.btn_fwd.setToolTip(t("tip_history_forward"))
+        self.btn_gallery.setText(t("btn_gallery"))
+        self.btn_gallery.setToolTip(t("tip_gallery", n=GALLERY_CAP))
         self.table.setHorizontalHeaderLabels([t(k) for k in self._KEYS])
+        self.table.horizontalHeader().setToolTip(t("tip_column_menu"))
         self.table.set_menu_labels(t("copy_names_action"), t("copy_table_action"))
         self.table._menu_open_location = t("menu_open_location")
         self.table._menu_repair = t("menu_repair")
+        self.table._menu_stage = t("menu_stage_output")
 
     def on_shown(self) -> None:
         # First time the tab is opened, show the full library so it's browsable.
@@ -245,11 +301,14 @@ class SearchTab(QWidget):
         query = self.box.text().strip()
         self._search_seq += 1
         seq = self._search_seq
+        # Back/forward runs a search that must not be pushed onto the history
+        # again; the flag belongs to this one search, whatever happens to it.
+        from_history, self._navigating = self._navigating, False
         self.result.setText(self.ctx.t("working"))
         w = Worker(self.ctx.services.search_page, query,
                    search_tags=self.chk_tags.isChecked())
         self._threads.append(w)
-        w.succeeded.connect(lambda res, s=seq, q=query: self._on_results(res, s, q))
+        w.succeeded.connect(lambda res, s=seq, q=query, h=from_history: self._on_results(res, s, q, h))
         w.failed.connect(self._on_failed)
         w.finished.connect(lambda: self._threads.remove(w) if w in self._threads else None)
         w.start()
@@ -257,11 +316,15 @@ class SearchTab(QWidget):
     def _on_failed(self, msg: str) -> None:
         self.result.setText(msg)
 
-    def _on_results(self, res: dict, seq: int, query: str) -> None:
+    def _on_results(self, res: dict, seq: int, query: str, from_history: bool = False) -> None:
         if seq != self._search_seq:
             return  # a newer search already ran; drop this stale result
         rows = res["rows"]
         total = res["total"]
+        self._last_truncated = bool(res["truncated"])
+        if not from_history:
+            self._history.push((query, self.chk_tags.isChecked()), time.monotonic())
+        self._sync_history_buttons()
         self._populate(rows)
         t = self.ctx.t
         if res["truncated"]:
@@ -279,6 +342,9 @@ class SearchTab(QWidget):
 
     def _populate(self, rows: list[dict]) -> None:
         self._last_rows = rows
+        self._gallery_stale = True
+        if self.btn_gallery.isChecked():
+            self._fill_gallery()
         self.table.setUpdatesEnabled(False)   # coalesce paints while filling (item 10)
         self.table.setSortingEnabled(False)
         try:
@@ -361,6 +427,138 @@ class SearchTab(QWidget):
     def _open_location(self, path: str) -> None:
         reveal_in_explorer(self, self.ctx, path)
 
+    def _stage_to_output(self, paths: list) -> None:
+        """Library → Output staging (v1.9): pick sets here, then "Import to
+        osu!" on the Dashboard sends exactly those."""
+        w = Worker(self.ctx.services.stage_to_output, paths)
+        self._threads.append(w)
+        w.succeeded.connect(self._staged)
+        w.failed.connect(self._on_failed)
+        w.finished.connect(lambda: self._threads.remove(w) if w in self._threads else None)
+        w.start()
+
+    def _staged(self, res: dict) -> None:
+        self.result.setText(self.ctx.t("stage_output_done", n=res.get("copied", 0),
+                                       already=res.get("already", 0),
+                                       skipped=res.get("skipped", 0)))
+        self.mw.dashboard.refresh_scan()
+
+    # -- columns (v1.9) ----------------------------------------------------------
+    def _apply_hidden_columns(self) -> None:
+        hidden = set(self.ctx.cfg.search_hidden_columns)
+        for c, key in enumerate(self._KEYS):
+            # The name column carries copy/open/details: it never hides.
+            self.table.setColumnHidden(c, c != 0 and key in hidden)
+
+    def _column_menu(self, pos) -> None:
+        t = self.ctx.t
+        menu = QMenu(self)
+        for c, key in enumerate(self._KEYS):
+            act = menu.addAction(t(key))
+            act.setCheckable(True)
+            act.setChecked(not self.table.isColumnHidden(c))
+            act.setEnabled(c != 0)
+            act.toggled.connect(lambda on, k=key: self._set_column_visible(k, on))
+        menu.addSeparator()
+        menu.addAction(t("columns_show_all"), lambda: self._set_hidden_columns([]))
+        menu.exec(self.table.horizontalHeader().mapToGlobal(pos))
+
+    def _set_column_visible(self, key: str, visible: bool) -> None:
+        hidden = [k for k in self.ctx.cfg.search_hidden_columns if k != key]
+        if not visible:
+            hidden.append(key)
+        self._set_hidden_columns(hidden)
+
+    def _set_hidden_columns(self, hidden: list[str]) -> None:
+        self.ctx.cfg.search_hidden_columns = [k for k in self._KEYS[1:] if k in hidden]
+        self._apply_hidden_columns()
+        self.ctx.save_config()   # UI state: saved at once in either Settings mode
+
+    # -- saved searches (v1.9) ---------------------------------------------------
+    def _fill_saved_menu(self) -> None:
+        t = self.ctx.t
+        menu = self.saved_menu
+        menu.clear()
+        save = menu.addAction(t("saved_search_save"), self._save_current_search)
+        save.setEnabled(bool(self.box.text().strip()))
+        saved = self.ctx.cfg.saved_searches
+        if saved:
+            menu.addSeparator()
+            for e in saved:
+                act = menu.addAction(e["name"], lambda e=e: self.apply_saved_search(e))
+                act.setToolTip(e["query"])
+            menu.setToolTipsVisible(True)
+            menu.addSeparator()
+            delete = menu.addMenu(t("saved_search_delete"))
+            for e in saved:
+                delete.addAction(e["name"], lambda n=e["name"]: self._delete_saved_search(n))
+        else:
+            menu.addSeparator()
+            menu.addAction(t("saved_search_none")).setEnabled(False)
+
+    def _save_current_search(self) -> None:
+        t = self.ctx.t
+        text = self.box.text().strip()
+        if not text:
+            return
+        name, ok = QInputDialog.getText(self, t("saved_searches"), t("saved_search_name"),
+                                        text=text[:presets.NAME_MAX])
+        if not ok or not name.strip():
+            return
+        self.ctx.cfg.saved_searches = presets.save(
+            self.ctx.cfg.saved_searches, name, text, self.chk_tags.isChecked())
+        self.ctx.save_config()
+        self.result.setText(t("saved_search_saved", name=" ".join(name.split())))
+
+    def _sync_history_buttons(self) -> None:
+        self.btn_back.setEnabled(self._history.can_back())
+        self.btn_fwd.setEnabled(self._history.can_forward())
+
+    def _go_history(self, step: int) -> None:
+        entry = self._history.back() if step < 0 else self._history.forward()
+        if entry is None:
+            return
+        self._navigating = True
+        self.apply_saved_search({"query": entry[0], "tags": entry[1]})
+
+    def apply_saved_search(self, entry: dict) -> None:
+        """Put a saved search back in the box (and the tags toggle) and run it."""
+        self.filters.blockSignals(True)   # reset the panel without it rewriting the box
+        self.filters.clear()
+        self.filters.blockSignals(False)
+        self.chk_tags.blockSignals(True)
+        self.chk_tags.setChecked(bool(entry.get("tags")))
+        self.chk_tags.blockSignals(False)
+        self.box.blockSignals(True)
+        self.box.setText(entry.get("query", ""))
+        self.box.blockSignals(False)
+        self.do_search()
+
+    def _delete_saved_search(self, name: str) -> None:
+        self.ctx.cfg.saved_searches = presets.remove(self.ctx.cfg.saved_searches, name)
+        self.ctx.save_config()
+
+    # -- export (v1.9) -------------------------------------------------------------
+    def _export_results(self) -> None:
+        t = self.ctx.t
+        if not self._last_rows:
+            self.result.setText(t("export_results_none"))
+            return
+        path, _flt = QFileDialog.getSaveFileName(
+            self, t("btn_export_results"), str(self.ctx.cfg.data_path / "rosu-search.csv"),
+            "CSV (*.csv);;JSON (*.json)")
+        if not path:
+            return
+        if not path.lower().endswith((".csv", ".json")):
+            path += ".json" if "json" in _flt.lower() else ".csv"
+        try:
+            n = table_export.write(path, self._last_rows, self.box.text().strip())
+        except OSError as exc:
+            QMessageBox.warning(self, t("app_title"), t("export_results_failed", error=str(exc)))
+            return
+        self.result.setText(t("export_results_done_shown" if self._last_truncated
+                              else "export_results_done", n=n))
+
     def _repair_map(self, filename: str) -> None:
         t = self.ctx.t
         reply = QMessageBox.question(
@@ -398,12 +596,29 @@ class SearchTab(QWidget):
         item = self.table.item(view_row, 0)
         if item is None:
             return
-        idx = item.data(_DATA_ROW_ROLE)
-        if idx is None or idx >= len(self._last_rows):
+        self._show_details_for(item.data(_DATA_ROW_ROLE))
+
+    def _show_details_for(self, idx) -> None:
+        if idx is None or not 0 <= idx < len(self._last_rows):
             return
         from .map_details_dialog import MapDetailsDialog
         MapDetailsDialog(self.ctx, self._last_rows[idx], self,
                          on_restore=self._repair_map).exec()
+
+    # -- gallery (v1.9) ------------------------------------------------------------
+    def _set_gallery(self, on: bool) -> None:
+        self.views.setCurrentWidget(self.gallery if on else self.table)
+        self.ctx.cfg.search_view = "gallery" if on else "table"
+        self.ctx.save_config()   # UI state: saved at once in either Settings mode
+        if on:
+            self._fill_gallery()
+        else:
+            self.gallery.stop()
+
+    def _fill_gallery(self) -> None:
+        if self._gallery_stale:
+            self._gallery_stale = False
+            self.gallery.set_rows(self._last_rows)
 
     def _show_histogram(self) -> None:
         """Star distribution. If the Library has sets without a star yet, offer to

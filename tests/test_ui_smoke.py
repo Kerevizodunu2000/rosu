@@ -8,6 +8,7 @@ lost-map button, Output view, update banner). No network is used: the startup
 update check is disabled for the test.
 """
 import os
+from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -661,4 +662,455 @@ def test_search_row_columns_match_the_stored_data(qapp, tmp_path, monkeypatch):
     assert cell("col_lib_status") == ctx.t("lib_status_memory") != "memory"
     assert tab.table._row_path(0) == ""
     win.close()
+    ctx.db.close()
+
+
+def test_remove_dialog_builds_with_no_client_available(qapp, tmp_path, monkeypatch):
+    from rosu.ui.remove_dialog import RemoveDialog
+    ctx = _ctx(tmp_path, monkeypatch)
+    monkeypatch.setattr(type(ctx.services), "removal_sources", lambda self: [
+        {"key": "stable", "available": False, "reason": "no_stable"},
+        {"key": "lazer", "available": False, "reason": "lazer_helper"}])
+    dlg = RemoveDialog(ctx)
+    _sources_loaded(dlg, qapp)
+    assert not dlg.btn_run.isEnabled()
+    assert dlg.lbl_status.text() == ctx.t("rm_no_source")
+    dlg.reject()
+    ctx.db.close()
+
+
+def _sources_loaded(dlg, qapp):
+    """The dialog asks which clients are available off the UI thread."""
+    dlg._src_worker.wait(5000)
+    qapp.processEvents()
+
+
+def test_remove_dialog_offers_only_save_first_for_lazer(qapp, tmp_path, monkeypatch):
+    from rosu.ui.remove_dialog import RemoveDialog
+    ctx = _ctx(tmp_path, monkeypatch)
+    monkeypatch.setattr(type(ctx.services), "removal_sources", lambda self: [
+        {"key": "stable", "available": False, "reason": "no_stable"},
+        {"key": "lazer", "available": True, "reason": ""}])
+    monkeypatch.setattr(RemoveDialog, "scan", lambda self: None)
+    dlg = RemoveDialog(ctx)
+    _sources_loaded(dlg, qapp)
+    assert dlg.cbo_source.currentData() == "lazer"
+    assert dlg.rb_save.isChecked() and not dlg.rb_only.isEnabled()
+    dlg.reject()
+    ctx.db.close()
+
+
+def test_remove_dialog_lists_a_scan_and_warns_about_unbacked_sets(qapp, tmp_path, monkeypatch):
+    from rosu.ui.remove_dialog import RemoveDialog
+    ctx = _ctx(tmp_path, monkeypatch)
+    monkeypatch.setattr(type(ctx.services), "removal_sources", lambda self: [
+        {"key": "stable", "available": False, "reason": "no_stable"},
+        {"key": "lazer", "available": False, "reason": "lazer_helper"}])
+    dlg = RemoveDialog(ctx)
+    _sources_loaded(dlg, qapp)
+    dlg._on_scanned({"source": "stable", "sets": [
+        {"key": "1 A", "name": "1 A", "size": 10, "backed_up": True},
+        {"key": "2 B", "name": "2 B", "size": 20, "backed_up": False}]}, dlg._scan_seq)
+    assert dlg.btn_run.isEnabled() and dlg.table.rowCount() == 2
+    dlg.rb_only.setChecked(True)
+    assert "1" in dlg.lbl_warn.text()                     # 1 set has no Library copy
+    dlg.cbo_which.setCurrentIndex(dlg.cbo_which.findData("backed_up"))
+    assert dlg.table.rowCount() == 1 and dlg.lbl_warn.text() == ""
+    dlg.reject()
+    ctx.db.close()
+
+
+def test_drive_browser_filters_and_offers_only_restorable_rows(qapp, tmp_path, monkeypatch):
+    from rosu.ui import drive_browser_dialog as dbd
+    entries = [
+        {"key": "id:1", "name": "1 A - T.osz", "artist": "Alpha", "title": "Tune", "size": 5,
+         "chunk": "c0", "on_drive": True, "in_library": True, "this_device": True, "device": "x"},
+        {"key": "id:2", "name": "2 B - U.osz", "artist": "Beta", "title": "Song", "size": 7,
+         "chunk": "c0", "on_drive": True, "in_library": False, "this_device": False, "device": "y"},
+        {"key": "id:3", "name": "3 C - V.osz", "artist": "Gamma", "title": "Song", "size": 9,
+         "chunk": "c1", "on_drive": False, "in_library": False, "this_device": False, "device": "y"},
+    ]
+    assert [e["key"] for e in dbd.filter_entries(entries)] == ["id:2", "id:3"]
+    assert [e["key"] for e in dbd.filter_entries(entries, "song beta")] == ["id:2"]
+    assert [e["key"] for e in dbd.filter_entries(entries, "", hide_in_library=False)] == ["id:1", "id:2", "id:3"]
+
+    ctx = _ctx(tmp_path, monkeypatch)
+    monkeypatch.setattr(dbd.DriveBrowserDialog, "load", lambda self: None)   # no worker
+    dlg = dbd.DriveBrowserDialog(ctx)
+    dlg._on_loaded({"entries": entries, "devices": 2, "missing": 1, "orphans": []})
+    assert dlg.table.rowCount() == 2
+    dlg.table.selectAll()
+    chosen = dlg._selected()
+    assert [e["key"] for e in chosen] == ["id:2"]            # the missing archive is not restorable
+    dlg.reject()
+    ctx.db.close()
+
+
+def test_job_row_describes_remove_and_restore_jobs(qapp, tmp_path, monkeypatch):
+    from rosu.jobs import Job, new_id
+    from rosu.ui.shortcuts_tab import _describe_job
+    ctx = _ctx(tmp_path, monkeypatch)
+    job = Job(new_id(), "job_remove", kind="remove")
+    job.ctx["options"] = {"remove_source": "stable", "sets": 3, "save_first": True}
+    line = _describe_job(job, ctx.t)
+    assert ctx.t("rm_mode_save") in line and "3" in line
+    job2 = Job(new_id(), "job_drive_restore", kind="drive_restore")
+    job2.ctx["options"] = {"restore_sets": 4}
+    assert "4" in _describe_job(job2, ctx.t)
+    ctx.db.close()
+
+
+def test_update_banner_links_the_exe_and_escapes(qapp, tmp_path, monkeypatch):
+    from rosu.ui.main_window import MainWindow
+    ctx = _ctx(tmp_path, monkeypatch)
+    win = MainWindow(ctx, qapp)
+    rel = "https://github.com/Kerevizodunu2000/rosu/releases/"
+    win._on_update_checked({"newer": True, "tag": "v9.9.9", "url": rel + "tag/v9.9.9",
+                            "download_url": rel + "download/v9.9.9/rosu-v9.9.9-win64.exe",
+                            "notes": "<b>notes</b>"})
+    text = win.update_banner.text()
+    from html import escape
+    assert "rosu-v9.9.9-win64.exe" in text and escape(ctx.t("update_whats_new")) in text
+    assert win.update_banner.toolTip() == "<qt>&lt;b&gt;notes&lt;/b&gt;</qt>"
+    win.close()
+    ctx.db.close()
+
+
+def test_search_columns_hide_persist_and_saved_searches_apply(qapp, tmp_path, monkeypatch):
+    from rosu.ui.main_window import MainWindow
+    ctx = _ctx(tmp_path, monkeypatch)
+    saves = []
+    monkeypatch.setattr(type(ctx), "save_config", lambda self: saves.append(1))
+    win = MainWindow(ctx, qapp)
+    tab = win.search
+    bpm = tab._KEYS.index("col_bpm")
+    tab._set_column_visible("col_bpm", False)
+    assert tab.table.isColumnHidden(bpm) and ctx.cfg.search_hidden_columns == ["col_bpm"]
+    tab._set_hidden_columns(["col_name", "col_bpm"])          # the name column never hides
+    assert not tab.table.isColumnHidden(0) and ctx.cfg.search_hidden_columns == ["col_bpm"]
+    tab._set_column_visible("col_bpm", True)
+    assert not tab.table.isColumnHidden(bpm) and saves
+    ran = []
+    monkeypatch.setattr(tab, "do_search", lambda: ran.append(tab.box.text()))
+    tab.apply_saved_search({"name": "x", "query": "mode=mania star>5", "tags": True})
+    assert ran == ["mode=mania star>5"] and tab.chk_tags.isChecked()
+    tab._fill_saved_menu()                                     # builds without error
+    tab.btn_gallery.setChecked(True)
+    assert tab.views.currentWidget() is tab.gallery and ctx.cfg.search_view == "gallery"
+    tab.btn_gallery.setChecked(False)
+    assert tab.views.currentWidget() is tab.table and ctx.cfg.search_view == "table"
+    win.close()
+    ctx.db.close()
+
+
+def test_logs_tab_filters_and_appends_live(qapp, tmp_path, monkeypatch):
+    from rosu.ui.main_window import MainWindow
+    ctx = _ctx(tmp_path, monkeypatch)
+    win = MainWindow(ctx, qapp)
+    tab = win.logs
+    ctx.log.info("SEARCH", query="abc", results=1)
+    ctx.log.error("unit:test", "something broke")
+    tab.on_shown()
+    qapp.processEvents()
+    total = tab.table.rowCount()
+    assert total >= 2
+    tab.chk_errors.setChecked(True)
+    assert all(tab.table.item(r, 1).text() == "ERROR" for r in range(tab.table.rowCount()))
+    tab.chk_errors.setChecked(False)
+    tab.filter.setText("abc")
+    tab._refill()
+    assert tab.table.rowCount() == 1 and tab.table.item(0, 2).text() == "SEARCH"
+    tab.filter.setText("")
+    tab._refill()
+    ctx.log.info("SEARCH", query="live", results=0)
+    qapp.processEvents()
+    assert tab.table.rowCount() == total + 1
+    tab._on_live_line("1999-01-01T00:00:01 | INFO  | OLD | <b>x</b> | yesterday")
+    assert tab.table.rowCount() == total + 1          # another day's line stays out
+    tab._on_live_line("Traceback line with <b>markup</b>")
+    assert tab.table.rowCount() == total + 2
+    tip = tab.table.item(total + 1, 4).toolTip()
+    assert "&lt;b&gt;" in tip and "<b>" not in tip   # shown literally
+    win.close()
+    ctx.db.close()
+
+
+def test_cover_gallery_makes_and_caches_thumbnails(qapp, tmp_path, monkeypatch):
+    import zipfile
+    from PySide6.QtGui import QImage
+    from rosu.ui.cover_gallery import THUMB_H, THUMB_W, CoverGallery, cover_crop
+    ctx = _ctx(tmp_path, monkeypatch)
+    img = QImage(1920, 1080, QImage.Format_RGB32)
+    img.fill(0x3366CC)
+    img.save(str(tmp_path / "bg.png"), "PNG")
+    png = (tmp_path / "bg.png").read_bytes()
+    osz = ctx.cfg.library_path / "1 A - B.osz"
+    with zipfile.ZipFile(osz, "w") as zf:
+        zf.writestr("A - B [x].osu", '[Events]\n0,0,"bg.png",0,0\n')
+        zf.writestr("bg.png", png)
+    rows = [{"artist": "A", "title": "B", "filename": osz.name, "in_library": 1,
+             "library_status": "present"},
+            {"artist": "C", "title": "memory only", "filename": "2 C.osz", "in_library": 1,
+             "library_status": "memory"}]
+    g = CoverGallery(ctx)
+    g.set_rows(rows)
+    assert g.count() == 2
+    g._loader.wait(10000)
+    qapp.processEvents()
+    assert len(list((ctx.cfg.data_path / "covers").glob("*.jpg"))) == 1
+    assert g.item(0).icon().pixmap(THUMB_W, THUMB_H).toImage().pixelColor(5, 5).blue() > 150
+    tall = cover_crop(QImage(100, 1000, QImage.Format_RGB32))
+    assert (tall.width(), tall.height()) == (THUMB_W, THUMB_H)
+    ctx.db.close()
+
+
+def test_move_library_dialog_previews_and_the_result_updates_settings(qapp, tmp_path, monkeypatch):
+    from rosu.ui.main_window import MainWindow
+    from rosu.ui.move_library_dialog import MoveLibraryDialog
+    ctx = _ctx(tmp_path, monkeypatch)
+    (ctx.cfg.library_path / "1 A - B.osz").write_bytes(b"x" * 10)
+    dlg = MoveLibraryDialog(ctx)
+    dlg.dest.setText(str(ctx.cfg.library_path))
+    dlg.check()
+    dlg._worker.wait(5000)
+    qapp.processEvents()
+    assert not dlg.btn_move.isEnabled() and dlg.lbl_plan.text() == ctx.t("mv_err_same")
+    dlg.dest.setText(str(tmp_path / "NewLib"))
+    dlg.check()
+    dlg._worker.wait(5000)
+    qapp.processEvents()
+    assert dlg.btn_move.isEnabled() and "1" in dlg.lbl_plan.text()
+    win = MainWindow(ctx, qapp)
+    shown = []
+    monkeypatch.setattr("rosu.ui.shortcuts_tab._plain_message", lambda *a: shown.append(a[2]))
+    new_lib = tmp_path / "NewLib"
+    new_lib.mkdir()
+    ctx.cfg.library_dir = str(new_lib)          # what move_library switched to
+    win.shortcuts._present_library_move({"moved": 1, "same": 0, "dest": str(new_lib)})
+    assert win.settings.library.text() == str(new_lib)
+    assert not win.settings._is_dirty()
+    win.settings._save(silent=True)             # a later Save keeps the new folder
+    assert ctx.cfg.library_dir == str(new_lib)
+    win.shortcuts._present_library_move({"error": "conflicts", "conflicts": ["a.osz"]})
+    assert ctx.t("mv_nothing_changed") in shown[-1]
+    win.close()
+    ctx.db.close()
+
+
+def test_autosaved_crash_report_toggle_leaves_settings_clean(qapp, tmp_path, monkeypatch):
+    from rosu.ui.main_window import MainWindow
+    ctx = _ctx(tmp_path, monkeypatch)
+    ctx.cfg.settings_autosave = True
+    win = MainWindow(ctx, qapp)
+    win.settings.cb_crash_reports.setChecked(not win.settings.cb_crash_reports.isChecked())
+    assert ctx.cfg.crash_reports == win.settings.cb_crash_reports.isChecked()
+    assert not win.settings._is_dirty()      # v1.8: the toggle was missing from the baseline
+    win.close()
+    ctx.db.close()
+
+
+def test_folder_watcher_queues_new_downloads_only(qapp, tmp_path, monkeypatch):
+    import zipfile
+    from types import SimpleNamespace
+    from rosu import jobs
+    from rosu.ui.main_window import MainWindow
+    import rosu.ui.folder_watch as fw_mod
+    ctx = _ctx(tmp_path, monkeypatch)
+    downloads = tmp_path / "Downloads"
+    downloads.mkdir()
+    with zipfile.ZipFile(downloads / "1 old.osz", "w") as zf:
+        zf.writestr("a.osu", "x")
+    win = MainWindow(ctx, qapp)
+    queued = []
+
+    def queue(paths):
+        job = SimpleNamespace(state=jobs.State.PENDING, paths=[str(p) for p in paths])
+        queued.append(job)
+        return job
+    monkeypatch.setattr(win.shortcuts, "queue_watch_import", queue)
+    clock = [1000.0]
+    monkeypatch.setattr(fw_mod.time, "monotonic", lambda: clock[0])
+    fw = win.folder_watch
+    ctx.cfg.watch_enabled = True
+    ctx.cfg.watch_folder = str(downloads)
+    fw.reconfigure()
+    assert fw.folder == downloads
+    with zipfile.ZipFile(downloads / "2 new.osz", "w") as zf:
+        zf.writestr("b.osu", "y")
+    fw.scan()                        # first look: new file seen, not settled
+    fw.scan()                        # unchanged since: taken
+    assert [[Path(p).name for p in j.paths] for j in queued] == [["2 new.osz"]]
+    fw.scan()
+    assert len(queued) == 1          # one batch at a time, never queued twice
+    fw.reconfigure()                 # saving other settings leaves the watch alone
+    fw.scan()
+    assert len(queued) == 1 and fw._job is queued[0]
+    new = queued[0].paths[0]
+    queued[0].state = jobs.State.FAILED
+    fw.job_failed([new])
+    fw.scan()
+    assert len(queued) == 1          # a failed import waits before it is retried
+    assert fw._retry.isActive()
+    clock[0] += fw_mod.RETRY_S + 1
+    fw.scan()
+    assert len(queued) == 2          # retried after the pause
+    fw.job_done({"failed": [new]})   # failed again: the pause doubles
+    clock[0] += fw_mod.RETRY_S + 1
+    fw.scan()
+    assert len(queued) == 2
+    clock[0] += fw_mod.RETRY_S
+    fw.scan()
+    assert len(queued) == 3
+    queued[-1].state = jobs.State.CANCELLED   # cancelled in the queue: like a failure
+    fw.scan()
+    assert fw._job is None and len(queued) == 3
+    clock[0] += 4 * fw_mod.RETRY_S + 1
+    fw.scan()
+    assert len(queued) == 4
+    fw.job_done({"imported": [new]})
+    ctx.cfg.watch_folder = str(tmp_path)          # another folder, then back again
+    fw.reconfigure()
+    ctx.cfg.watch_folder = str(downloads)
+    fw.reconfigure()                 # restart: the handled file is remembered
+    fw.scan()
+    fw.scan()
+    assert len(queued) == 4
+    with zipfile.ZipFile(downloads / "3 while closed.osz", "w") as zf:
+        zf.writestr("c.osu", "z")
+    ctx.cfg.watch_enabled = False
+    fw.reconfigure()
+    ctx.cfg.watch_enabled = True
+    fw.reconfigure()                 # a download that arrived while Rosu was closed
+    fw.scan()
+    fw.scan()
+    assert queued[-1].paths[0].endswith("3 while closed.osz")
+    fw.job_done({"imported": ["somewhere/else.osz"]})   # a stale result changes nothing
+    assert fw._job is queued[-1]
+    ctx.cfg.watch_enabled = False
+    fw.reconfigure()
+    assert fw.folder is None
+    win.close()
+    ctx.db.close()
+
+
+class _Sig:
+    def __init__(self):
+        self._slots = []
+
+    def connect(self, fn):
+        self._slots.append(fn)
+
+    def emit(self, *a):
+        for fn in self._slots:
+            fn(*a)
+
+
+class _ManualWorker:
+    """A Worker stand-in whose result is delivered when the test says so."""
+    started: list = []
+
+    def __init__(self, fn, *a, **k):
+        self.fn, self.a, self.k = fn, a, k
+        self.succeeded, self.failed, self.finished = _Sig(), _Sig(), _Sig()
+
+    def start(self):
+        _ManualWorker.started.append(self)
+
+    def deliver(self):
+        self.succeeded.emit(self.fn(*self.a, **self.k))
+        self.finished.emit()
+
+
+def test_search_history_goes_back_and_forward(qapp, tmp_path, monkeypatch):
+    from rosu.ui.main_window import MainWindow
+    ctx = _ctx(tmp_path, monkeypatch)
+    win = MainWindow(ctx, qapp)
+    tab = win.search
+    clock = iter(range(0, 1000, 10))
+    monkeypatch.setattr("rosu.ui.search_tab.time.monotonic", lambda: next(clock))
+    monkeypatch.setattr("rosu.ui.search_tab.Worker", _ManualWorker)
+    _ManualWorker.started = []
+
+    def search(q):
+        tab.box.setText(q)
+        tab.do_search()
+        return _ManualWorker.started[-1]
+    search("alpha").deliver()
+    search("beta").deliver()
+    assert tab.btn_back.isEnabled() and not tab.btn_fwd.isEnabled()
+    tab._go_history(-1)
+    _ManualWorker.started[-1].deliver()
+    assert tab.box.text() == "alpha"
+    assert tab.btn_fwd.isEnabled() and not tab.btn_back.isEnabled()
+    tab._go_history(1)
+    _ManualWorker.started[-1].deliver()
+    assert tab.box.text() == "beta" and not tab.btn_fwd.isEnabled()
+    # Going back, then typing before that result arrives: the stale result is
+    # dropped and the typed search still lands in the history.
+    tab._go_history(-1)
+    stale = _ManualWorker.started[-1]
+    search("gamma").deliver()
+    stale.deliver()
+    assert tab._history.back() == ("alpha", tab.chk_tags.isChecked())
+    win.close()
+    ctx.db.close()
+
+
+def test_stage_to_output_copies_library_files_only(tmp_path, monkeypatch):
+    ctx = _ctx(tmp_path, monkeypatch)
+    lib = ctx.cfg.library_path
+    (lib / "1 A.osz").write_bytes(b"a")
+    outside = tmp_path / "elsewhere.osz"
+    outside.write_bytes(b"x")
+    (ctx.cfg.output_path / "2 B.osz").write_bytes(b"different")
+    (lib / "2 B.osz").write_bytes(b"b")
+    res = ctx.services.stage_to_output([lib / "1 A.osz", lib / "2 B.osz", outside])
+    assert res == {"copied": 1, "already": 0, "skipped": 2}
+    assert (ctx.cfg.output_path / "1 A.osz").read_bytes() == b"a"
+    assert (ctx.cfg.output_path / "2 B.osz").read_bytes() == b"different"   # not replaced
+    import shutil
+
+    def broken_copy(src, dst, **_k):
+        with open(dst, "wb") as fh:
+            fh.write(b"half")
+        raise OSError("disk full")
+    (lib / "3 C.osz").write_bytes(b"c")
+    monkeypatch.setattr(shutil, "copyfile", broken_copy)
+    res = ctx.services.stage_to_output([lib / "3 C.osz"])
+    assert res["skipped"] == 1
+    assert sorted(p.name for p in ctx.cfg.output_path.iterdir()) == ["1 A.osz", "2 B.osz"]
+    ctx.db.close()
+
+
+def test_same_song_dialog_lists_groups_and_keeps_one_per_song(qapp, tmp_path, monkeypatch):
+    from PySide6.QtCore import Qt
+    from rosu.ui.same_song_dialog import SameSongDialog, extras
+    ctx = _ctx(tmp_path, monkeypatch)
+    group = [
+        {"track_id": 1, "filename": "1 A - S.osz", "beatmapset_id": 1, "artist": "A", "title": "S",
+         "creator": "m1", "diff_count": 3, "size": 100},
+        {"track_id": 2, "filename": "2 A - S (TV).osz", "beatmapset_id": 2, "artist": "A", "title": "S",
+         "creator": "m2", "diff_count": 5, "size": 50},
+        {"track_id": 3, "filename": "3 A - S.osz", "beatmapset_id": 3, "artist": "A", "title": "S",
+         "creator": "m3", "diff_count": 5, "size": 80},
+    ]
+    assert extras(group) == ["1 A - S.osz", "2 A - S (TV).osz"]     # keeps 5 diffs, larger
+    monkeypatch.setattr(type(ctx.services), "fingerprint_library",
+                        lambda self, progress=None, cancel=None: {"computed": 3, "cached": 0,
+                                                                  "failed": 0, "cancelled": False})
+    monkeypatch.setattr(type(ctx.services), "same_song_report",
+                        lambda self, progress=None: {"groups": [group], "fingerprinted": 3})
+    dlg = SameSongDialog(ctx)
+    dlg._worker.wait(5000)
+    qapp.processEvents()
+    assert dlg.tree.topLevelItemCount() == 1 and dlg.tree.topLevelItem(0).childCount() == 3
+    assert not dlg.btn_recycle.isEnabled()                            # nothing pre-selected
+    dlg._select_extras()
+    assert sorted(dlg._checked()) == ["1 A - S.osz", "2 A - S (TV).osz"]
+    top = dlg.tree.topLevelItem(0)
+    for j in range(top.childCount()):
+        top.child(j).setCheckState(0, Qt.Checked)
+    dlg._confirm()                                                    # every copy: refused
+    assert dlg.plan is None and dlg.lbl_status.text() == ctx.t("ss_keep_one")
+    dlg.reject()
     ctx.db.close()

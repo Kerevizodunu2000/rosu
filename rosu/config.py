@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import os
 import sys
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 
 # --- Enumerated option values (stored in config, compared in code) ----------
@@ -77,6 +77,9 @@ class Config:
     auto_backup_after_extract: bool = False   # auto-run Copy to Library after extract
     zip_disposal: str = "recycle"
     check_updates: bool = True   # check GitHub for a newer release on startup
+    # v1.8: opt-in crash reports (exception type + scrubbed message + module:function
+    # stack, see rosu/crash_report.py). OFF unless the user turns it on.
+    crash_reports: bool = False
     auto_refresh_on_tab: bool = True   # re-run a tab's on_shown() when switched to
     
     auto_prune: bool = False     # automatically prune new maps added to library
@@ -101,6 +104,14 @@ class Config:
     device_id: str = ""                  # random id for this install's manifest shard
 
     # Bookkeeping
+    # v1.9 UI state: Search columns the user hid (column keys like "col_bpm") and
+    # saved searches ([{"name", "query", "tags"}], see rosu.presets).
+    search_hidden_columns: list = field(default_factory=list)
+    saved_searches: list = field(default_factory=list)
+    search_view: str = "table"           # "table" or "gallery" (cover art)
+    # v1.9 watch folder (opt-in): new .osz files appearing there go to the Library.
+    watch_enabled: bool = False
+    watch_folder: str = ""
     schema_note: str = "paths are absolute; edit from Settings tab"
     _extra: dict = field(default_factory=dict)
 
@@ -147,8 +158,15 @@ class Config:
         return self.data_path / "drive"
 
     def ensure_dirs(self) -> None:
-        for p in (self.packs_path, self.output_path, self.library_path,
-                  self.data_path, self.logs_path):
+        # data/logs must exist (the database lives there). The user's own
+        # folders may sit on a drive that is offline right now (a Library moved
+        # to an external disk): that must not stop the app from starting.
+        for p in (self.packs_path, self.output_path, self.library_path):
+            try:
+                p.mkdir(parents=True, exist_ok=True)
+            except OSError:
+                pass
+        for p in (self.data_path, self.logs_path):
             p.mkdir(parents=True, exist_ok=True)
 
 
@@ -187,7 +205,38 @@ def _fill_defaults(cfg: Config) -> Config:
         cfg.drive_chunk_bytes = 1073741824
     if cfg.drive_chunk_bytes < 1024 * 1024:   # never below 1 MiB
         cfg.drive_chunk_bytes = 1024 * 1024
+    from . import presets
+    hidden = cfg.search_hidden_columns if isinstance(cfg.search_hidden_columns, list) else []
+    cfg.search_hidden_columns = [c for c in hidden if isinstance(c, str) and len(c) <= 64][:50]
+    cfg.saved_searches = presets.normalize(cfg.saved_searches)
+    if cfg.search_view not in ("table", "gallery"):
+        cfg.search_view = "table"
+    if not isinstance(cfg.watch_folder, str):
+        cfg.watch_folder = ""
+    _coerce_bools(cfg)
     return cfg
+
+
+_TRUE_WORDS = ("1", "true", "yes", "on")
+
+
+def _coerce_bools(cfg: Config) -> None:
+    """A hand-edited ``"false"`` is a non-empty string, so it would read as on:
+    every on/off setting is turned back into a real bool (anything unreadable
+    falls back to the default)."""
+    for f in fields(cfg):
+        if not isinstance(f.default, bool):
+            continue
+        value = getattr(cfg, f.name)
+        if isinstance(value, bool):
+            continue
+        if isinstance(value, str):
+            value = value.strip().lower() in _TRUE_WORDS
+        elif isinstance(value, (int, float)):
+            value = bool(value)
+        else:
+            value = f.default
+        setattr(cfg, f.name, value)
 
 
 def load_config() -> Config:

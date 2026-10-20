@@ -24,7 +24,10 @@ LGPL-2.1.txt
     Source: https://www.gnu.org/licenses/lgpl-2.1.txt
     Covers: py7zr, pyppmd, pybcj, inflate64, multivolumefile
     (`.7z` extraction + its PPMd/BCJ/deflate64 codecs and multi-volume
-    archive support).
+    archive support); Chromaprint's fpcalc and the FFmpeg libraries built
+    into it (audio fingerprints). fpcalc is the unmodified official release
+    binary, run as a separate program; its sources are linked from
+    ../THIRD-PARTY-LICENSES.md.
 
 Apache-2.0.txt
     Apache License, Version 2.0.
@@ -51,6 +54,7 @@ Component → file map
 | inflate64                                               | LGPL-2.1.txt       |
 | multivolumefile                                         | LGPL-2.1.txt       |
 | Realm .NET (in RosuLazerExport.exe)                     | Apache-2.0.txt + Realm-dotnet-NOTICE.txt |
+| Chromaprint fpcalc (+ FFmpeg inside it)                 | LGPL-2.1.txt       |
 
 All other bundled/depended-on components (openpyxl, Send2Trash, RapidFuzz,
 keyring, pywin32-ctypes, jaraco.*, more-itertools, Brotli, texttable,

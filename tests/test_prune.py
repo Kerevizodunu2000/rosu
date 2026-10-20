@@ -5,7 +5,10 @@ Destructive-operation safety is the priority here: the swap-in must never
 leave the Library file missing, and a suspiciously large zip member must be
 refused rather than read into memory.
 """
+import os
 import zipfile
+
+import pytest
 
 from rosu import prune
 
@@ -159,6 +162,8 @@ def test_swap_failure_leaves_original_untouched(tmp_path, monkeypatch):
     assert list(tmp_path.iterdir()) == [p]
 
 
+@pytest.mark.skipif(hasattr(os, "geteuid") and os.geteuid() == 0,
+                    reason="root ignores the read-only bit, so the file is writable after all")
 def test_readonly_file_leaves_no_stray_orig_copy(tmp_path):
     # shutil.copy2 also copies the read-only bit, so the aside-copy of a
     # read-only Library file is itself read-only and a plain os.remove raises

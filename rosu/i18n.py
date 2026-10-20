@@ -906,8 +906,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "tr": "Çıkarma işleminden hemen sonra yeni müzikleri otomatik olarak "
               "Library'e kopyalar."},
     "tip_check_updates": {
-        "en": "On startup, quietly check GitHub for a newer Rosu release.",
-        "tr": "Başlangıçta, daha yeni bir Rosu sürümü için GitHub'ı sessizce denetler."},
+        "en": "On startup, quietly check Rosu's site (or GitHub) for a newer release.",
+        "tr": "Başlangıçta, daha yeni bir sürüm için Rosu'nun sitesini (veya GitHub'ı) "
+              "sessizce denetler."},
     "tip_clear_before": {"en": "Empty the Output folder before each new extraction.",
                         "tr": "Her yeni çıkarmadan önce Output klasörünü boşaltır."},
     "tip_update_reference": {
@@ -1859,6 +1860,485 @@ STRINGS: dict[str, dict[str, str]] = {
               "try again.",
         "tr": "Kısa sürede birkaç rapor gönderdin. Lütfen biraz bekleyip tekrar "
               "dene."},
+    # -- v1.8: remove from a client (HANDOFF 4.1) ------------------------------
+    "btn_remove_from_client": {"en": "Remove from osu!…", "tr": "osu!'dan Kaldır…"},
+    "tip_remove_from_client": {
+        "en": "Take beatmap sets out of osu!(stable) or osu!lazer — saving them to the "
+              "Library first if you want. Shows exactly what goes before anything is touched.",
+        "tr": "osu!(stable) veya osu!lazer'dan beatmap setlerini kaldırır — istersen önce "
+              "Library'e kaydeder. Hiçbir şeye dokunmadan önce tam olarak neyin gideceğini gösterir."},
+    "tip_history_back": {"en": "Previous search (Alt+←)", "tr": "Önceki arama (Alt+←)"},
+    "tip_history_forward": {"en": "Next search (Alt+→)", "tr": "Sonraki arama (Alt+→)"},
+
+    # -- v1.9: Library → Output staging --------------------------------------------
+    "menu_stage_output": {"en": "Copy to Output (for Import to osu!)",
+                          "tr": "Output'a kopyala (osu!'ya aktarmak için)"},
+    "stage_output_done": {
+        "en": "Copied {n} sets to Output ({already} already there, {skipped} skipped). Use "
+              "Import to osu! on the Dashboard to send them.",
+        "tr": "{n} set Output'a kopyalandı ({already} tanesi zaten oradaydı, {skipped} "
+              "atlandı). Göndermek için Gösterge Paneli'nde osu!'ya Aktar'ı kullan."},
+
+    # -- v1.10: same song, different sets ---------------------------------------------
+    "btn_same_song": {"en": "Same song, different sets…", "tr": "Aynı şarkı, farklı setler…"},
+    "tip_same_song": {
+        "en": "Find Library sets that use the same song — re-encodes, re-uploads, TV-size "
+              "cuts — by listening to the audio itself, and recycle the ones you pick.",
+        "tr": "Aynı şarkıyı kullanan Library setlerini — yeniden kodlamalar, yeniden "
+              "yüklemeler, TV-boyu kesimler — sesin kendisine bakarak bul ve seçtiklerini geri "
+              "dönüşüme gönder."},
+    "ss_title": {"en": "Same song, different sets", "tr": "Aynı şarkı, farklı setler"},
+    "ss_intro": {
+        "en": "Rosu fingerprints each Library set's audio (the first two minutes) and groups "
+              "the sets whose songs match. Different sets of one song are often different "
+              "maps worth keeping: nothing is selected for you, and one set of every song "
+              "always stays.",
+        "tr": "Rosu her Library setinin sesinin parmak izini çıkarır (ilk iki dakika) ve "
+              "şarkısı eşleşen setleri gruplar. Bir şarkının farklı setleri çoğu zaman "
+              "saklamaya değer farklı haritalardır: senin yerine hiçbir şey seçilmez ve her "
+              "şarkıdan bir set daima kalır."},
+    "ss_scan": {"en": "Scan again", "tr": "Yeniden tara"},
+    "ss_scanning": {"en": "Listening to the Library…", "tr": "Library dinleniyor…"},
+    "ss_scanning_n": {"en": "Fingerprinting {done} of {total} new sets…",
+                      "tr": "{total} yeni setin {done} tanesinin parmak izi çıkarılıyor…"},
+    "ss_no_fpcalc": {
+        "en": "This build has no fpcalc (the audio fingerprint tool). Running from source: "
+              "python tools/fetch_fpcalc.py",
+        "tr": "Bu sürümde fpcalc (ses parmak izi aracı) yok. Kaynaktan çalıştırıyorsan: "
+              "python tools/fetch_fpcalc.py"},
+    "ss_summary": {
+        "en": "{groups} songs appear in more than one set ({sets} sets); {checked} sets "
+              "checked.",
+        "tr": "{groups} şarkı birden fazla sette var ({sets} set); {checked} set kontrol "
+              "edildi."},
+    "ss_unreadable": {"en": "{n} sets have audio that could not be read.",
+                      "tr": "{n} setin sesi okunamadı."},
+    "ss_retry": {"en": "{n} sets could not be checked this time (they are tried again next scan).",
+                 "tr": "{n} set bu sefer kontrol edilemedi (bir sonraki taramada yeniden denenir)."},
+    "ss_fpcalc_broken": {
+        "en": "The audio fingerprint tool (fpcalc) does not start. An antivirus may have blocked "
+              "or quarantined it — allow it, or reinstall Rosu, then scan again.",
+        "tr": "Ses parmak izi aracı (fpcalc) başlamıyor. Bir antivirüs onu engellemiş ya da "
+              "karantinaya almış olabilir — izin ver ya da Rosu'yu yeniden kur, sonra yeniden tara."},
+    "ss_group": {"en": "{name} — {n} sets", "tr": "{name} — {n} set"},
+    "ss_col_diffs": {"en": "Difficulties", "tr": "Zorluklar"},
+    "ss_select_extras": {"en": "Select extras", "tr": "Fazlalıkları seç"},
+    "tip_ss_select_extras": {
+        "en": "In every group, select all sets but the one with the most difficulties.",
+        "tr": "Her grupta, en çok zorluğu olan set dışındaki tüm setleri seç."},
+    "ss_recycle": {"en": "Recycle", "tr": "Geri dönüşüme gönder"},
+    "ss_recycle_n": {"en": "Recycle {n} sets", "tr": "{n} seti geri dönüşüme gönder"},
+    "ss_keep_one": {
+        "en": "Every set of one song is selected — leave at least one per song.",
+        "tr": "Bir şarkının tüm setleri seçili — her şarkıdan en az birini bırak."},
+    "ss_confirm": {
+        "en": "Send {n} Library sets ({size}) to the Recycle Bin?\n\nThey can be restored "
+              "from there. The other sets of each song stay.",
+        "tr": "{n} Library seti ({size}) Geri Dönüşüm Kutusu'na gönderilsin mi?\n\nOradan "
+              "geri yüklenebilirler. Her şarkının diğer setleri kalır."},
+    "job_same_song_recycle": {"en": "Recycle same-song sets", "tr": "Aynı şarkı setlerini geri dönüştür"},
+
+    # -- v1.9: watch folder ------------------------------------------------------------
+    "set_watch": {"en": "Watch a folder", "tr": "Bir klasörü izle"},
+    "set_watch_folder": {"en": "Folder for new .osz downloads (e.g. Downloads)",
+                         "tr": "Yeni .osz indirmelerinin klasörü (ör. İndirilenler)"},
+    "tip_watch": {
+        "en": "New .osz files that appear in this folder are added to the Library (ones "
+              "that arrive while Rosu is closed, the next time it starts). Files already "
+              "there when you turn this on are left alone, and your files are never moved "
+              "or deleted.",
+        "tr": "Bu klasöre gelen yeni .osz dosyaları Library'e eklenir (Rosu kapalıyken "
+              "gelenler, bir sonraki açılışta). Bu ayarı açtığınızda klasörde olan "
+              "dosyalara dokunulmaz; dosyalarınız asla taşınmaz ya da silinmez."},
+    "job_watch_import": {"en": "Add new downloads", "tr": "Yeni indirmeleri ekle"},
+    "job_step_watch_import": {"en": "Import into the Library", "tr": "Library'e aktar"},
+    "watch_n_files": {"en": "{n} new files", "tr": "{n} yeni dosya"},
+    "watch_done": {"en": "Watched folder: {new} new sets added ({files} files).",
+                   "tr": "İzlenen klasör: {new} yeni set eklendi ({files} dosya)."},
+
+    # -- v1.9: move the Library -----------------------------------------------------
+    "btn_move_library": {"en": "Move Library…", "tr": "Library'yi Taşı…"},
+    "tip_move_library": {
+        "en": "Move the Library to another folder or drive. Every file is copied and "
+              "checked before Rosu switches to the new folder.",
+        "tr": "Library'yi başka bir klasöre ya da sürücüye taşı. Rosu yeni klasöre "
+              "geçmeden önce her dosya kopyalanır ve kontrol edilir."},
+    "mv_title": {"en": "Move the Library", "tr": "Library'yi Taşı"},
+    "mv_intro": {
+        "en": "Every file is copied to the new folder and checked byte for byte; only "
+              "then does Rosu switch to it. If anything goes wrong, nothing changes.",
+        "tr": "Her dosya yeni klasöre kopyalanır ve bayt bayt kontrol edilir; Rosu ancak "
+              "ondan sonra oraya geçer. Bir şey ters giderse hiçbir şey değişmez."},
+    "mv_current": {"en": "Current Library: {path}", "tr": "Şu anki Library: {path}"},
+    "mv_dest_placeholder": {"en": "New Library folder…", "tr": "Yeni Library klasörü…"},
+    "mv_checking": {"en": "Checking the destination…", "tr": "Hedef kontrol ediliyor…"},
+    "mv_plan": {"en": "{n} files ({size}) will be copied. Free space there: {free}.",
+                "tr": "{n} dosya ({size}) kopyalanacak. Oradaki boş alan: {free}."},
+    "mv_plan_same": {"en": "{n} of them are already there (identical) and are kept.",
+                     "tr": "Bunların {n} tanesi zaten orada (birebir aynı) ve korunur."},
+    "mv_plan_subfolders": {
+        "en": "Folders inside the Library stay where they are: {names}",
+        "tr": "Library içindeki klasörler olduğu yerde kalır: {names}"},
+    "mv_remove_old": {"en": "Afterwards, send the old copies to the Recycle Bin",
+                      "tr": "Sonra eski kopyaları Geri Dönüşüm Kutusu'na gönder"},
+    "mv_remove_old_short": {"en": "old copies → Recycle Bin",
+                            "tr": "eski kopyalar → Geri Dönüşüm Kutusu"},
+    "tip_mv_remove_old": {
+        "en": "Only after every file is verified in the new folder. On a drive without a "
+              "Recycle Bin the old copies are left alone.",
+        "tr": "Yalnızca her dosya yeni klasörde doğrulandıktan sonra. Geri Dönüşüm Kutusu "
+              "olmayan bir sürücüde eski kopyalara dokunulmaz."},
+    "mv_run": {"en": "Move", "tr": "Taşı"},
+    "mv_confirm": {
+        "en": "Move {n} files ({size}) to:\n{dest}\n\nRosu copies and checks every file, "
+              "then switches to the new folder.",
+        "tr": "{n} dosya ({size}) şuraya taşınsın mı:\n{dest}\n\nRosu her dosyayı "
+              "kopyalayıp kontrol eder, sonra yeni klasöre geçer."},
+    "mv_confirm_old_recycle": {
+        "en": "Then the old copies go to the Recycle Bin.",
+        "tr": "Sonra eski kopyalar Geri Dönüşüm Kutusu'na gider."},
+    "mv_confirm_old_kept": {
+        "en": "The old copies stay where they are (delete them yourself when you are sure).",
+        "tr": "Eski kopyalar olduğu yerde kalır (emin olunca kendin silebilirsin)."},
+    "mv_err_same": {"en": "That is the current Library folder.",
+                    "tr": "Bu zaten şu anki Library klasörü."},
+    "mv_err_inside": {
+        "en": "The new folder cannot be inside the Library, or contain it.",
+        "tr": "Yeni klasör Library'nin içinde olamaz ya da onu içeremez."},
+    "mv_err_not_writable": {"en": "Rosu cannot write to that folder.",
+                            "tr": "Rosu o klasöre yazamıyor."},
+    "mv_err_reserved": {
+        "en": "That folder is (or holds) Rosu's Output, Packs, data or logs folder — Unpack "
+              "empties Output, for one. Pick a folder of its own.",
+        "tr": "O klasör Rosu'nun Output, Packs, data ya da logs klasörü (veya onları "
+              "içeriyor) — örneğin Paketi Aç, Output'u boşaltır. Kendine ait bir klasör seç."},
+    "mv_err_config_save": {
+        "en": "The files were copied, but the new location could not be saved, so the "
+              "Library stays where it was.",
+        "tr": "Dosyalar kopyalandı ama yeni konum kaydedilemedi, bu yüzden Library olduğu "
+              "yerde kalıyor."},
+    "mv_plan_links": {"en": "{n} linked entries in the Library are skipped.",
+                      "tr": "Library'deki {n} bağlantı (link) atlanır."},
+    "mv_done_late": {"en": "{n} files that arrived during the move were copied too.",
+                     "tr": "Taşıma sırasında gelen {n} dosya da kopyalandı."},
+    "mv_done_left_behind": {
+        "en": "{n} files stayed in the old folder (a file with the same name was already "
+              "in the new one): {names}",
+        "tr": "{n} dosya eski klasörde kaldı (yenisinde aynı adlı bir dosya vardı): {names}"},
+    "mv_done_old_failed": {
+        "en": "{n} old copies were left in place: they changed after being copied, or could "
+              "not be recycled.",
+        "tr": "{n} eski kopya yerinde bırakıldı: kopyalandıktan sonra değişmişler ya da geri "
+              "dönüşüme gönderilemediler."},
+    "mv_err_no_library": {"en": "The current Library folder does not exist.",
+                          "tr": "Şu anki Library klasörü yok."},
+    "mv_err_conflicts": {
+        "en": "{n} files with the same name but different contents are already there "
+              "(e.g. {names}). Move or rename them first.",
+        "tr": "Orada aynı adlı ama içeriği farklı {n} dosya zaten var (ör. {names}). Önce "
+              "onları taşı ya da yeniden adlandır."},
+    "mv_err_no_space": {"en": "There is not enough free space there.",
+                        "tr": "Orada yeterli boş alan yok."},
+    "mv_err_copy_failed": {"en": "A file could not be copied or did not match its original.",
+                           "tr": "Bir dosya kopyalanamadı ya da aslıyla eşleşmedi."},
+    "mv_cancelled": {"en": "The move was cancelled.", "tr": "Taşıma iptal edildi."},
+    "mv_nothing_changed": {
+        "en": "Nothing changed: the Library is still where it was.",
+        "tr": "Hiçbir şey değişmedi: Library hâlâ olduğu yerde."},
+    "mv_done": {"en": "The Library ({n} files) is now in {dest}.",
+                "tr": "Library ({n} dosya) artık şurada: {dest}."},
+    "mv_done_recycled": {"en": "{n} old copies went to the Recycle Bin.",
+                         "tr": "{n} eski kopya Geri Dönüşüm Kutusu'na gitti."},
+    "mv_done_old_kept_no_bin": {
+        "en": "The old copies were left in place: that drive has no Recycle Bin.",
+        "tr": "Eski kopyalar yerinde bırakıldı: o sürücüde Geri Dönüşüm Kutusu yok."},
+    "job_library_move": {"en": "Move the Library", "tr": "Library'yi taşı"},
+    "job_step_library_move": {"en": "Copy, verify, switch", "tr": "Kopyala, doğrula, geç"},
+    "job_library_move_desc": {"en": "to {dest}", "tr": "hedef: {dest}"},
+
+    # -- v1.9: Logs table ----------------------------------------------------------
+    "log_col_time": {"en": "Time", "tr": "Zaman"},
+    "log_col_level": {"en": "Level", "tr": "Seviye"},
+    "log_col_action": {"en": "Action", "tr": "İşlem"},
+    "log_col_fields": {"en": "Details", "tr": "Ayrıntılar"},
+    "log_col_message": {"en": "Message", "tr": "Mesaj"},
+    "log_errors_only": {"en": "Errors only", "tr": "Yalnızca hatalar"},
+    "log_filter": {"en": "Filter the log…", "tr": "Logu filtrele…"},
+    "log_count": {"en": "{shown} of {total} lines", "tr": "{total} satırın {shown} tanesi"},
+    # -- v1.9: Search columns, saved searches, export ---------------------------
+    "tip_column_menu": {"en": "Right-click to choose which columns to show.",
+                        "tr": "Hangi sütunların görüneceğini seçmek için sağ tıkla."},
+    "columns_show_all": {"en": "Show all columns", "tr": "Tüm sütunları göster"},
+    "saved_searches": {"en": "★ Saved", "tr": "★ Kayıtlı"},
+    "tip_saved_searches": {
+        "en": "Save the current search (text and filters) under a name, and run it again "
+              "with one click.",
+        "tr": "Geçerli aramayı (metin ve filtreler) bir adla kaydet ve tek tıkla tekrar "
+              "çalıştır."},
+    "saved_search_save": {"en": "Save this search…", "tr": "Bu aramayı kaydet…"},
+    "saved_search_delete": {"en": "Delete", "tr": "Sil"},
+    "saved_search_none": {"en": "No saved searches yet", "tr": "Henüz kayıtlı arama yok"},
+    "saved_search_name": {"en": "Name:", "tr": "Ad:"},
+    "saved_search_saved": {"en": "Saved as \"{name}\".", "tr": "\"{name}\" olarak kaydedildi."},
+    "btn_gallery": {"en": "▦ Gallery", "tr": "▦ Galeri"},
+    "tip_gallery": {
+        "en": "Show the results as cover art (the first {n}). Double-click a cover for "
+              "its details.",
+        "tr": "Sonuçları kapak görselleriyle göster (ilk {n} tanesi). Ayrıntılar için bir "
+              "kapağa çift tıkla."},
+    "btn_export_results": {"en": "Export…", "tr": "Dışa aktar…"},
+    "tip_export_results": {
+        "en": "Save the listed sets as a CSV (spreadsheet) or JSON file.",
+        "tr": "Listelenen setleri CSV (tablo) ya da JSON dosyası olarak kaydet."},
+    "export_results_none": {"en": "Nothing to export — the list is empty.",
+                            "tr": "Dışa aktarılacak bir şey yok — liste boş."},
+    "export_results_done": {"en": "Exported {n} sets.", "tr": "{n} set dışa aktarıldı."},
+    "export_results_done_shown": {
+        "en": "Exported the {n} sets shown (the search matched more; narrow it to export "
+              "the rest).",
+        "tr": "Gösterilen {n} set dışa aktarıldı (arama daha fazlasını buldu; kalanı için "
+              "aramayı daralt)."},
+    "export_results_failed": {"en": "Could not write the file: {error}",
+                              "tr": "Dosya yazılamadı: {error}"},
+    "rm_title": {"en": "Remove from osu!", "tr": "osu!'dan Kaldır"},
+    "rm_intro": {
+        "en": "Pick a client and which sets to take out of it. Nothing changes until you "
+              "confirm, and nothing is removed without a way back: the Recycle Bin or an "
+              "identical copy in the Library.",
+        "tr": "Bir client seç ve içinden hangi setlerin çıkacağını belirle. Sen onaylayana "
+              "kadar hiçbir şey değişmez ve hiçbir şey geri dönüş yolu olmadan kaldırılmaz: "
+              "Geri Dönüşüm Kutusu ya da Library'deki birebir aynı kopya."},
+    "rm_checking": {"en": "Checking which osu! clients are available…",
+                    "tr": "Hangi osu! client'larının kullanılabildiği kontrol ediliyor…"},
+    "rm_source": {"en": "Remove from:", "tr": "Şuradan kaldır:"},
+    "rm_why_disabled": {"en": "This client is turned off in Settings.",
+                        "tr": "Bu client Ayarlar'da kapalı."},
+    "rm_why_no_stable": {"en": "osu!(stable)'s Songs folder was not found.",
+                         "tr": "osu!(stable)'ın Songs klasörü bulunamadı."},
+    "rm_why_no_lazer": {"en": "osu!lazer's data folder was not found.",
+                        "tr": "osu!lazer'ın veri klasörü bulunamadı."},
+    "rm_why_lazer_helper": {
+        "en": "Not available yet: removing from osu!lazer needs the updated lazer helper "
+              "(it edits lazer's database the way lazer itself does). It ships once it has "
+              "been verified on a real lazer install.",
+        "tr": "Henüz kullanılamıyor: osu!lazer'dan kaldırmak için güncellenmiş lazer "
+              "yardımcısı gerekir (lazer'ın veritabanını lazer'ın kendisi gibi düzenler). "
+              "Gerçek bir lazer kurulumunda doğrulandıktan sonra gelecek."},
+    "rm_how_stable": {
+        "en": "Each set's folder in Songs/ goes to the Recycle Bin. In osu!, press F5 in "
+              "song select afterwards so it notices.",
+        "tr": "Her setin Songs/ içindeki klasörü Geri Dönüşüm Kutusu'na gider. Sonrasında "
+              "osu!'da şarkı seçiminde F5'e bas ki fark etsin."},
+    "rm_how_lazer": {
+        "en": "Experimental. The sets are saved to the Library first, then marked deleted "
+              "in lazer's database exactly like lazer's own delete; lazer removes them for "
+              "good on its next start. To get one back later, import it from the Library.",
+        "tr": "Deneysel. Setler önce Library'e kaydedilir, sonra lazer'ın veritabanında "
+              "lazer'ın kendi silme işlemiyle aynı şekilde silinmiş olarak işaretlenir; "
+              "lazer onları bir sonraki açılışında kalıcı olarak kaldırır. Birini sonradan "
+              "geri istersen Library'den içe aktar."},
+    "rm_mode_save": {"en": "Save to Library, then remove", "tr": "Library'e kaydet, sonra kaldır"},
+    "rm_mode_save_tip": {
+        "en": "Copies each set into the Library first and removes only the sets whose "
+              "Library copy holds every difficulty byte for byte. A Library file is never "
+              "overwritten; a set that differs from it stays in osu!.",
+        "tr": "Her seti önce Library'e kopyalar ve yalnızca Library kopyası her zorluğu "
+              "bayt bayt içeren setleri kaldırır. Library'deki bir dosyanın üzerine asla "
+              "yazılmaz; ondan farklı olan set osu!'da kalır."},
+    "rm_mode_only": {"en": "Remove only", "tr": "Sadece kaldır"},
+    "rm_mode_only_tip": {
+        "en": "Removes the sets without saving them anywhere first (they go to the "
+              "Recycle Bin).",
+        "tr": "Setleri önce bir yere kaydetmeden kaldırır (Geri Dönüşüm Kutusu'na "
+              "giderler)."},
+    "rm_mode_only_lazer": {
+        "en": "Not for osu!lazer: lazer deletes removed sets for good on its next start, "
+              "so they are always saved to the Library first.",
+        "tr": "osu!lazer için yok: lazer kaldırılan setleri bir sonraki açılışında kalıcı "
+              "olarak siler, bu yüzden her zaman önce Library'e kaydedilirler."},
+    "rm_which": {"en": "Which:", "tr": "Hangileri:"},
+    "rm_which_all": {"en": "All sets", "tr": "Tüm setler"},
+    "rm_which_backed_up": {"en": "Only sets already in the Library",
+                           "tr": "Yalnızca Library'de olan setler"},
+    "rm_which_not_backed_up": {"en": "Only sets not in the Library",
+                               "tr": "Yalnızca Library'de olmayan setler"},
+    "rm_sort_largest": {"en": "Largest first", "tr": "Önce en büyük"},
+    "rm_sort_smallest": {"en": "Smallest first", "tr": "Önce en küçük"},
+    "rm_sort_name": {"en": "By name", "tr": "İsme göre"},
+    "rm_col_in_library": {"en": "In Library", "tr": "Library'de"},
+    "rm_run": {"en": "Remove", "tr": "Kaldır"},
+    "rm_run_n": {"en": "Remove {n} sets", "tr": "{n} seti kaldır"},
+    "rm_no_source": {"en": "No osu! client is available to remove from.",
+                     "tr": "Kaldırılabilecek bir osu! client'ı yok."},
+    "rm_scanned": {"en": "{n} sets found ({size}); {backed} of them are already in the Library.",
+                   "tr": "{n} set bulundu ({size}); bunların {backed} tanesi zaten Library'de."},
+    "rm_total": {"en": "{n} sets selected · {size}", "tr": "{n} set seçili · {size}"},
+    "rm_warn_save": {
+        "en": "{n} of these are not in the Library yet — they will be copied there first.",
+        "tr": "Bunların {n} tanesi henüz Library'de değil — önce oraya kopyalanacaklar."},
+    "rm_warn_only": {
+        "en": "Careful: {n} of these have no copy in the Library. After removing them Rosu "
+              "has no copy of its own; the Recycle Bin is the only way back.",
+        "tr": "Dikkat: bunların {n} tanesinin Library'de kopyası yok. Kaldırdıktan sonra "
+              "Rosu'nun kendi kopyası olmaz; tek geri dönüş yolu Geri Dönüşüm Kutusu."},
+    "rm_confirm_body": {
+        "en": "Remove {n} sets from {source}?\nMode: {mode}.\n\n{recovery}\n\nClose {source} "
+              "first.",
+        "tr": "{source} içinden {n} set kaldırılsın mı?\nYöntem: {mode}.\n\n{recovery}\n\n"
+              "Önce {source}'ı kapat."},
+    "rm_recovery_stable": {
+        "en": "Undo: the folders are in the Recycle Bin — restore them from there.",
+        "tr": "Geri alma: klasörler Geri Dönüşüm Kutusu'nda — oradan geri yükle."},
+    "rm_recovery_lazer": {
+        "en": "Undo: until osu!lazer is started again, putting back the copy of "
+              "client.realm saved next to it (with lazer closed) restores the sets. After "
+              "that, the Library copy is the way back.",
+        "tr": "Geri alma: osu!lazer yeniden açılana kadar, yanına kaydedilen client.realm "
+              "kopyasını (lazer kapalıyken) geri koymak setleri geri getirir. Ondan sonra "
+              "geri dönüş yolu Library'deki kopyadır."},
+    "rm_listing_lazer": {"en": "Reading osu!lazer's set list…",
+                         "tr": "osu!lazer'ın set listesi okunuyor…"},
+    "rm_deleting_lazer": {"en": "Marking the sets deleted in osu!lazer…",
+                          "tr": "Setler osu!lazer'da silinmiş olarak işaretleniyor…"},
+    "rm_err_no_stable": {"en": "osu!(stable) was not found.", "tr": "osu!(stable) bulunamadı."},
+    "rm_err_no_lazer": {"en": "osu!lazer was not found.", "tr": "osu!lazer bulunamadı."},
+    "rm_err_helper_failed": {
+        "en": "The osu!lazer helper failed — see the Logs tab. Nothing was removed.",
+        "tr": "osu!lazer yardımcısı başarısız oldu — Loglar sekmesine bak. Hiçbir şey "
+              "kaldırılmadı."},
+    "rm_err_bad_source": {"en": "Unknown source.", "tr": "Bilinmeyen kaynak."},
+    "rm_err_unavailable": {"en": "That client is not available (turned off in Settings?).",
+                           "tr": "Bu client kullanılamıyor (Ayarlar'da kapalı mı?)."},
+    "rm_err_client_check_failed": {
+        "en": "Could not check whether osu! is running. Close osu! and try again — nothing "
+              "was removed.",
+        "tr": "osu!'nun açık olup olmadığı kontrol edilemedi. osu!'yu kapatıp tekrar dene — "
+              "hiçbir şey kaldırılmadı."},
+    "rm_err_no_recycle_bin": {
+        "en": "The Songs folder is on a drive without a Recycle Bin (removable or network), "
+              "so removed folders could not be brought back. Use \"Save to Library, then "
+              "remove\" instead — nothing was removed.",
+        "tr": "Songs klasörü Geri Dönüşüm Kutusu olmayan bir sürücüde (çıkarılabilir ya da "
+              "ağ), bu yüzden kaldırılan klasörler geri getirilemez. Bunun yerine \"Library'e "
+              "kaydet, sonra kaldır\"ı kullan — hiçbir şey kaldırılmadı."},
+    "rm_err_client_running": {
+        "en": "osu! is running. Close it and try again — nothing was removed.",
+        "tr": "osu! açık. Kapatıp tekrar dene — hiçbir şey kaldırılmadı."},
+    "rm_err_lazer_helper": {
+        "en": "The bundled osu!lazer helper cannot remove sets yet. Nothing was removed.",
+        "tr": "Paketteki osu!lazer yardımcısı henüz set kaldıramıyor. Hiçbir şey "
+              "kaldırılmadı."},
+    "rm_done": {"en": "Removed {n} sets from {source}.", "tr": "{source} içinden {n} set kaldırıldı."},
+    "rm_done_saved": {"en": "{n} sets were copied into the Library first.",
+                      "tr": "{n} set önce Library'e kopyalandı."},
+    "rm_done_kept": {
+        "en": "{n} sets were kept because the Library does not hold an identical copy "
+              "(see the Logs tab).",
+        "tr": "{n} set, Library'de birebir aynı kopyası olmadığı için bırakıldı (Loglar "
+              "sekmesine bak)."},
+    "rm_done_failed": {"en": "{n} sets could not be removed — see the Logs tab.",
+                       "tr": "{n} set kaldırılamadı — Loglar sekmesine bak."},
+    "rm_done_lazer_restart": {
+        "en": "Start osu!lazer once: it finishes the removal and frees the space then.",
+        "tr": "osu!lazer'ı bir kez aç: kaldırmayı o zaman tamamlar ve alanı boşaltır."},
+    "rm_done_backup": {"en": "Database backup: {path}", "tr": "Veritabanı yedeği: {path}"},
+    "rm_done_stable_refresh": {
+        "en": "In osu!(stable), press F5 in song select to refresh the list.",
+        "tr": "osu!(stable)'da listeyi yenilemek için şarkı seçiminde F5'e bas."},
+    "job_remove": {"en": "Remove from osu!", "tr": "osu!'dan Kaldır"},
+    "job_step_remove_save": {"en": "Save to Library, then remove",
+                             "tr": "Library'e kaydet, sonra kaldır"},
+    "job_step_remove_only": {"en": "Remove", "tr": "Kaldır"},
+
+    # -- v1.8: Drive backup browser (HANDOFF 4.2) -------------------------------
+    "btn_drive_browse": {"en": "Browse Drive backup…", "tr": "Drive Yedeğine Göz At…"},
+    "tip_drive_browse": {
+        "en": "See every set in your Google Drive backup (from this PC and any other) and "
+              "bring chosen ones back into the Library.",
+        "tr": "Google Drive yedeğindeki tüm setleri (bu PC'den ve diğerlerinden) gör ve "
+              "seçtiklerini Library'e geri al."},
+    "drv_title": {"en": "Drive backup", "tr": "Drive Yedeği"},
+    "drv_intro": {
+        "en": "Everything your Drive backup holds, from every PC that backs up into it. "
+              "Select sets and restore them into the Library; each file is checked "
+              "against the fingerprint recorded when it was backed up.",
+        "tr": "Drive yedeğinin içerdiği her şey — oraya yedek alan tüm PC'lerden. Setleri "
+              "seç ve Library'e geri yükle; her dosya yedeklendiği anda kaydedilen parmak "
+              "iziyle karşılaştırılır."},
+    "drv_filter": {"en": "Filter by artist, title or file name…",
+                   "tr": "Sanatçı, başlık veya dosya adına göre süz…"},
+    "drv_hide_in_library": {"en": "Hide sets already in the Library",
+                            "tr": "Library'de olan setleri gizle"},
+    "drv_reload": {"en": "Reload from Drive", "tr": "Drive'dan yeniden yükle"},
+    "drv_col_from": {"en": "Backed up from", "tr": "Yedekleyen"},
+    "drv_col_state": {"en": "State", "tr": "Durum"},
+    "drv_from_here": {"en": "This PC", "tr": "Bu PC"},
+    "drv_from_other": {"en": "Another PC", "tr": "Başka bir PC"},
+    "drv_state_missing": {"en": "archive missing on Drive", "tr": "arşiv Drive'da yok"},
+    "drv_state_in_library": {"en": "in Library", "tr": "Library'de"},
+    "drv_state_restorable": {"en": "restorable", "tr": "geri alınabilir"},
+    "drv_select_all": {"en": "Select all shown", "tr": "Gösterilenlerin hepsini seç"},
+    "drv_restore": {"en": "Restore to Library", "tr": "Library'e Geri Al"},
+    "drv_restore_n": {"en": "Restore {n} sets", "tr": "{n} seti geri al"},
+    "drv_loading": {"en": "Reading the backup from Drive…", "tr": "Yedek Drive'dan okunuyor…"},
+    "drv_err_not_connected": {"en": "Google Drive is not connected (Settings → Drive).",
+                              "tr": "Google Drive bağlı değil (Ayarlar → Drive)."},
+    "drv_err": {"en": "Drive error: {detail}", "tr": "Drive hatası: {detail}"},
+    "drv_summary": {
+        "en": "{n} sets in the backup, from {devices} PC(s); {in_lib} already in the Library.",
+        "tr": "Yedekte {n} set var, {devices} PC'den; {in_lib} tanesi zaten Library'de."},
+    "drv_missing": {
+        "en": "{n} point to an archive that is no longer on Drive.",
+        "tr": "{n} tanesi artık Drive'da olmayan bir arşivi gösteriyor."},
+    "drv_orphans": {
+        "en": "{n} backup file(s) on Drive are not listed in any manifest.",
+        "tr": "Drive'daki {n} yedek dosyası hiçbir manifestte listelenmiyor."},
+    "drv_confirm": {
+        "en": "Restore {n} sets ({size}) into the Library?\n\nRosu downloads the {archives} "
+              "backup archive(s) that hold them — a whole archive even for one set, so this "
+              "can take a while — and checks every file before importing it.",
+        "tr": "{n} set ({size}) Library'e geri alınsın mı?\n\nRosu onları içeren {archives} "
+              "yedek arşivini indirir — tek set için bile arşivin tamamını, bu yüzden biraz "
+              "sürebilir — ve her dosyayı içe aktarmadan önce kontrol eder."},
+    "drv_downloading": {"en": "Downloading {name}…", "tr": "{name} indiriliyor…"},
+    "drv_done": {"en": "Restored {n} sets into the Library ({already} were already there).",
+                 "tr": "{n} set Library'e geri alındı ({already} tanesi zaten oradaydı)."},
+    "drv_done_failed": {"en": "{n} could not be restored: {names}",
+                        "tr": "{n} tanesi geri alınamadı: {names}"},
+    "drv_fail_bad_name": {"en": "unsafe name", "tr": "güvensiz ad"},
+    "drv_fail_not_on_drive": {"en": "archive not on Drive", "tr": "arşiv Drive'da yok"},
+    "drv_fail_download": {"en": "download failed", "tr": "indirme başarısız"},
+    "drv_fail_not_in_archive": {"en": "not in its archive", "tr": "arşivinde yok"},
+    "drv_fail_size_mismatch": {"en": "size mismatch", "tr": "boyut uyuşmuyor"},
+    "drv_fail_corrupt": {"en": "unreadable", "tr": "okunamıyor"},
+    "drv_fail_hash_mismatch": {"en": "fingerprint mismatch", "tr": "parmak izi uyuşmuyor"},
+    "drv_fail_disk_full": {"en": "not enough disk space", "tr": "yeterli disk alanı yok"},
+    "drv_fail_library_conflict": {
+        "en": "a different file with this name is in the Library (left as it is)",
+        "tr": "Library'de bu adla farklı bir dosya var (olduğu gibi bırakıldı)"},
+    "job_drive_restore": {"en": "Restore from Drive", "tr": "Drive'dan Geri Al"},
+    "job_step_drive_fetch": {"en": "Download + verify", "tr": "İndir + doğrula"},
+    "job_step_drive_import": {"en": "Import into the Library", "tr": "Library'e aktar"},
+
+    # -- v1.8: update check, report tracking, crash reports ----------------------
+    "update_whats_new": {"en": "What's new", "tr": "Yenilikler"},
+    "report_sent_track": {
+        "en": "Follow its status here (the link is also on your clipboard — keep it "
+              "private):<br>{link}",
+        "tr": "Durumunu buradan takip edebilirsin (bağlantı panoya da kopyalandı — gizli "
+              "tut):<br>{link}"},
+    "set_crash_reports": {"en": "Send anonymous crash reports",
+                          "tr": "Anonim çökme raporları gönder"},
+    "tip_crash_reports": {
+        "en": "Off by default. When on, an unexpected error sends its type, a short message "
+              "with file paths and e-mail addresses removed, and the names of the code "
+              "locations involved, plus the Rosu version and your OS. No files, no library "
+              "contents, no usernames. Details: rosu-web.vercel.app/privacy",
+        "tr": "Varsayılan olarak kapalı. Açıkken beklenmedik bir hata; türünü, dosya yolları "
+              "ve e-posta adresleri temizlenmiş kısa bir mesajı ve ilgili kod konumlarının "
+              "adlarını, Rosu sürümü ve işletim sisteminle birlikte gönderir. Dosya, "
+              "kütüphane içeriği veya kullanıcı adı gönderilmez. Ayrıntı: "
+              "rosu-web.vercel.app/privacy"},
 }
 
 

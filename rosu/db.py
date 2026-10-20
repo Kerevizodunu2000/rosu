@@ -18,7 +18,7 @@ from pathlib import Path
 
 from .models import ParsedPack, ParsedTrack
 
-SCHEMA_VERSION = 11
+SCHEMA_VERSION = 12
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta (
@@ -99,6 +99,18 @@ CREATE TABLE IF NOT EXISTS difficulties (
     star_mods      TEXT DEFAULT '', -- '' = nomod (v1.5 computes nomod only)
     UNIQUE(track_id, filename)
 );
+-- v1.10: one Chromaprint fingerprint per Library file, keyed on its name, size
+-- and modification time so a changed file is fingerprinted again. An empty
+-- fp marks a set whose audio could not be read (not retried until it changes).
+CREATE TABLE IF NOT EXISTS audio_fingerprints (
+    track_id    INTEGER PRIMARY KEY REFERENCES tracks(id) ON DELETE CASCADE,
+    filename    TEXT NOT NULL,
+    size        INTEGER NOT NULL,
+    mtime_ns    INTEGER NOT NULL,
+    duration    REAL,
+    fp          BLOB NOT NULL,
+    computed_at TEXT
+);
 CREATE INDEX IF NOT EXISTS idx_tracks_display ON tracks(display_name);
 CREATE INDEX IF NOT EXISTS idx_tracks_lib ON tracks(in_library);
 CREATE INDEX IF NOT EXISTS idx_packs_series ON packs(series);
@@ -164,6 +176,14 @@ _MIGRATIONS = {
 }
 
 
+def _wordstart(text, token) -> int:
+    if not text or not token:
+        return 0
+    from .search import tokenize
+    t = str(token).casefold()
+    return int(any(w.startswith(t) for w in tokenize(str(text))))
+
+
 class Database:
     def __init__(self, db_path: Path):
         self.path = Path(db_path)
@@ -176,6 +196,10 @@ class Database:
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute("PRAGMA foreign_keys=ON")
+        # rosu_wordstart(text, token): does ``token`` start a word of ``text``,
+        # by the ranker's own word rule (search.tokenize)? Used by the search
+        # recall's first pass; deterministic so SQLite may cache it.
+        self._conn.create_function("rosu_wordstart", 2, _wordstart, deterministic=True)
         self._init_schema()
 
     def _init_schema(self) -> None:
@@ -845,6 +869,35 @@ class Database:
                 "SELECT * FROM tracks WHERE in_library=1")
             return [dict(r) for r in cur.fetchall()]
 
+    # -- audio fingerprints (v1.10) ----------------------------------------
+    def audio_fingerprint_stamps(self) -> dict[int, tuple[str, int, int]]:
+        """``{track_id: (filename, size, mtime_ns)}`` of every stored fingerprint."""
+        with self._lock:
+            cur = self._conn.execute(
+                "SELECT track_id, filename, size, mtime_ns FROM audio_fingerprints")
+            return {int(r["track_id"]): (r["filename"], int(r["size"]), int(r["mtime_ns"]))
+                    for r in cur.fetchall()}
+
+    def save_audio_fingerprint(self, track_id: int, filename: str, size: int,
+                               mtime_ns: int, duration: float, fp: bytes) -> None:
+        import datetime as _dt
+        when = _dt.datetime.now().replace(microsecond=0).isoformat()
+        with self._lock:
+            self._conn.execute(
+                "INSERT INTO audio_fingerprints (track_id, filename, size, mtime_ns, duration,"
+                " fp, computed_at) VALUES (?,?,?,?,?,?,?)"
+                " ON CONFLICT(track_id) DO UPDATE SET filename=excluded.filename,"
+                " size=excluded.size, mtime_ns=excluded.mtime_ns, duration=excluded.duration,"
+                " fp=excluded.fp, computed_at=excluded.computed_at",
+                (track_id, filename, size, mtime_ns, duration, sqlite3.Binary(fp), when))
+            self._conn.commit()
+
+    def audio_fingerprints(self) -> dict[int, bytes]:
+        """``{track_id: packed fingerprint}`` (empty bytes = unreadable audio)."""
+        with self._lock:
+            cur = self._conn.execute("SELECT track_id, fp FROM audio_fingerprints")
+            return {int(r["track_id"]): bytes(r["fp"]) for r in cur.fetchall()}
+
     def library_records(self) -> list[dict]:
         """Every track that is part of the Library's *memory* — physically
         present (``in_library=1``) OR intentionally memory-only / already-gone
@@ -905,12 +958,36 @@ class Database:
             parts.append(f"({filter_where})")
         if not parts:
             return []       # nothing searchable (no tokens, no id, no filters)
-        params = params + filter_params + [limit]
         final_where = " AND ".join(parts)
+
+        # The recall is capped, and SQLite returns capped rows in table order, so
+        # a common word could cut the best hit before ranking ever saw it. Rows
+        # where every word starts a word of a strong field (the ranker's top
+        # tiers) are therefore recalled first, under the same cap.
+        pre_clauses: list[str] = []
+        pre_params: list = []
+        for tok in tokens:
+            # The substring LIKE is the cheap C-level filter; the word rule is
+            # then checked only on rows that contain the token at all.
+            pre_clauses.append("(" + " OR ".join(
+                f"({f} LIKE ? COLLATE NOCASE AND rosu_wordstart({f}, ?))"
+                for f in ("display_name", "artist", "title")) + ")")
+            pre_params.extend([f"%{tok}%", tok] * 3)
         with self._lock:
-            cur = self._conn.execute(
-                f"SELECT * FROM tracks WHERE {final_where} LIMIT ?", params)
-            return [dict(r) for r in cur.fetchall()]
+            rows: list[dict] = []
+            if pre_clauses:
+                pre_where = " AND ".join(pre_clauses + parts[1:])
+                cur = self._conn.execute(
+                    f"SELECT * FROM tracks WHERE {pre_where} LIMIT ?",
+                    pre_params + filter_params + [limit])
+                rows = [dict(r) for r in cur.fetchall()]
+            if len(rows) < limit:
+                seen = {r["id"] for r in rows}
+                cur = self._conn.execute(
+                    f"SELECT * FROM tracks WHERE {final_where} LIMIT ?",
+                    params + filter_params + [limit])
+                rows += [dict(r) for r in cur.fetchall() if r["id"] not in seen]
+            return rows[:limit]
 
     def _build_filter_sql(self, filters: list) -> tuple[str, list]:
         """Turn structured query filters into (where_fragment, params).

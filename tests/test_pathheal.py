@@ -128,3 +128,26 @@ def test_apply_fix_mutates_config(tmp_path):
     # derived paths follow automatically
     assert cfg.db_path == base / "data" / "memory.db"
     assert cfg.excel_path == base / "data" / "tracking.xlsx"
+
+
+def test_a_moved_library_is_never_healed_back(tmp_path):
+    # v1.9: the Library was moved to another drive; the old copies next to the
+    # exe were kept (or deleted), and the new drive may be offline.
+    base = tmp_path / "rosu"
+    _make_dirs(base, ["Packs", "Output", "Library", "data", "logs"], with_data=["Library", "data"])
+    elsewhere = tmp_path / "Ext" / "Library"          # offline: does not exist now
+    cfg = _cfg(base, library_dir=str(elsewhere))
+    assert diagnose(cfg, base).status == "healthy"   # the app did not move
+    _make_dirs(tmp_path / "Ext", ["Library"])         # online but smaller than the old copy
+    assert diagnose(cfg, base).status == "healthy"
+
+
+def test_when_the_app_moves_a_custom_library_stays(tmp_path):
+    old = tmp_path / "Old"
+    base = tmp_path / "rosu"
+    _make_dirs(base, ["Packs", "Output", "Library", "data", "logs"], with_data=["Library", "data"])
+    custom = tmp_path / "Ext" / "Library"             # outside the old app folder, offline
+    cfg = _cfg(old, library_dir=str(custom))
+    diag = diagnose(cfg, base)
+    assert "library_dir" not in {f.attr for f in diag.fixes}
+    assert {f.attr for f in diag.fixes} == {"packs_dir", "output_dir", "data_dir", "logs_dir"}

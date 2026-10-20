@@ -48,6 +48,10 @@ ACTIONS: dict[str, tuple[tuple[str, ...], str]] = {
     "EXCEL_WRITE":   (("path", "sheets"), "Regenerated the Excel tracking report"),
     "SEARCH":        (("query", "results"), "User searched the music memory"),
     "SETTINGS_SAVE": (("changed",), "User saved settings"),
+    "AUDIO_FINGERPRINT": (("computed", "cached", "failed", "cancelled"), "Fingerprinted Library audio for same-song detection"),
+    "STAGE_OUTPUT":  (("copied", "already", "skipped"), "Copied chosen Library sets into Output for Import to osu!"),
+    "WATCH_IMPORT":  (("files", "new"), "Added new .osz files from the watched folder to the Library"),
+    "LIBRARY_MOVE":  (("old", "new", "files", "bytes"), "Moved the Library to another folder (copied, verified, switched)"),
     "ERROR":         (("where", "detail"), "An error occurred"),
 }
 
@@ -90,6 +94,62 @@ class LogService:
 
     def error(self, where: str, detail: str) -> str:
         return self.log("ERROR", "ERROR", "", where=where, detail=detail)
+
+
+# --- Reading logs back (Logs tab, v1.9) ---------------------------------------
+_LOG_NAME = "app-"
+_ERROR_LEVELS = ("ERROR", "WARN")
+
+
+def parse_line(line: str) -> dict:
+    """One log line → ``{"time","level","action","fields","message","raw"}``.
+
+    Timestamp, level and action never contain the separator; a field value may
+    (it is quoted), so the message is taken from the LAST separator. A line that
+    does not have the shape (a stray traceback line) keeps its text as the
+    message with empty columns, so nothing in the file is ever hidden."""
+    raw = line.rstrip("\r\n")
+    head = raw.split(FIELD_SEP, 3)
+    if len(head) == 4 and head[0][:4].isdigit():
+        fields, _sep, message = head[3].rpartition(FIELD_SEP)
+        if not _sep:
+            fields, message = head[3], ""
+        return {"time": head[0], "level": head[1].strip(), "action": head[2].strip(),
+                "fields": fields, "message": message, "raw": raw}
+    return {"time": "", "level": "", "action": "", "fields": "", "message": raw, "raw": raw}
+
+
+def entry_matches(entry: dict, words: list[str], errors_only: bool = False) -> bool:
+    """Every word (lowercase) appears somewhere in the line; ``errors_only``
+    keeps ERROR/WARN lines only."""
+    if errors_only and entry.get("level") not in _ERROR_LEVELS:
+        return False
+    hay = entry.get("raw", "").lower()
+    return all(w in hay for w in words)
+
+
+def log_days(logs_dir: Path, limit: int = 60) -> list[str]:
+    """The days (``YYYY-MM-DD``) that have a log file, newest first."""
+    days = []
+    try:
+        for f in Path(logs_dir).glob(f"{_LOG_NAME}*.log"):
+            day = f.stem[len(_LOG_NAME):]
+            if len(day) == 10 and day[4] == "-" and day[7] == "-" and \
+                    day.replace("-", "").isdigit():
+                days.append(day)
+    except OSError:
+        return []
+    return sorted(days, reverse=True)[:limit]
+
+
+def read_day(logs_dir: Path, day: str, max_lines: int = 5000) -> list[dict]:
+    """The last ``max_lines`` entries of one day's log (empty when missing)."""
+    path = Path(logs_dir) / f"{_LOG_NAME}{day}.log"
+    try:
+        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return []
+    return [parse_line(ln) for ln in lines[-max_lines:] if ln.strip()]
 
 
 def _fmt(value: Any) -> str:

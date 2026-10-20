@@ -52,9 +52,13 @@ Rosu bulk-extracts `.zip`/`.7z`/`.tar` beatmap packs into a deduplicated `.osz` 
 
 **Shortcuts (one-click flows)**
 - A dedicated **Shortcuts** tab with an installed-music summary (osu!lazer / osu!(stable) / Library / Drive set counts) and one-tap actions: **transfer** sets between osu!lazer ↔ osu!(stable) (skipping what the target already has), **save** an installed client straight into the Library, **unpack Packs and import** to either/both clients (with a skip-duplicates choice), **export** {Library | Drive-backed | a client | all-merged} to **zip/7z** (single or split into 1 GB / 500 MB volumes, with optional **★≥ / ★≤** star bounds on Library sets, optionally uploaded to Drive with a shareable link), and **dedupe** the Library (preview + confirm, Recycle Bin). Long operations are cancellable and show live progress in the job queue.
+- **Remove from osu!** — take sets out of osu!(stable) (folders go to the Recycle Bin) with a preview of every set, its size and whether the Library already holds it; **Save and Remove** copies sets into the Library first and only removes the ones whose Library copy holds every difficulty byte for byte. osu!lazer support (through lazer's own database, never by deleting its files, always saved first) is built and ships once verified on a real install.
+- **Same song, different sets…** — finds Library sets that use the same song (re-encodes, re-uploads, TV-size cuts) by fingerprinting the audio itself with Chromaprint, and recycles only the ones you pick (one set of every song always stays).
+- **Move Library…** — move the whole Library to another folder or drive: a preview (files, size, free space, anything in the way), then every file is copied and SHA-256-checked before Rosu switches over; the old copies can go to the Recycle Bin afterwards. A cancel or a failed copy changes nothing.
 
 **Cloud backup (Google Drive)**
 - **Back up your Library to Google Drive** — log in once (loopback OAuth + PKCE, the minimal `drive.file` scope so Rosu only ever sees the files it creates). New `.osz` are uploaded incrementally as fixed-size, append-only chunk archives; re-running uploads only what's new. A pre-backup dialog previews the new-set count and total size and lets you cap how many sets to send this run and pick the chunk size — including an **Individual (one file per set)** mode.
+- **Browse and restore the backup** (Shortcuts → *Browse Drive backup…*) — every set your Drive backup holds, from this PC and any other that backs up into it, with a filter; select sets and Rosu downloads just the archives that hold them, checks every file against the SHA-256 recorded at backup time and imports them into the Library.
 - **Location tracking** — Rosu records which Drive chunk holds each backed-up set, and the Search table shows where every map lives: 🎮 osu!lazer · 🕹️ osu!(stable) · 💾 Library · ☁️ Drive.
 - Optionally, a processed pack archive can be **uploaded to Drive and removed locally** right after unpacking, to reclaim disk space.
 - The OAuth refresh token is stored in the **OS keyring** (Windows Credential Manager), never in `config.json`.
@@ -64,6 +68,7 @@ Rosu bulk-extracts `.zip`/`.7z`/`.tar` beatmap packs into a deduplicated `.osz` 
 
 **Search, metadata & reporting**
 - Relevance-ranked **Music Search** (tokenized AND on artist/title/name; optional tag/mapper search) with per-difficulty **Star** and **Keys** columns, a **Skill** column for mania (overall + dominant skillset, e.g. `5.42 CJ`), and location badges (🎮 lazer · 🕹️ stable · 💾 Library · ☁️ Drive).
+- **Browse your way** — hide or show any Search column (right-click a header; remembered), **★ Saved** searches, ◀ ▶ through the last 16 searches (Alt+←/→), a **▦ Gallery** of cover art, and **Export…** of the listed sets to CSV or JSON. Right-click sets → *Copy to Output* to send exactly those to osu!.
 - **Query-syntax filters** — combine free text with `star>5`, `mode=mania`, `key=7`, `bpm>=180`, `length=4:03`, `status=ranked`, `pruned=yes`, `artist=`/`mapper=`/`name=`, and CS/AR/OD/HP bounds; diff-level filters must match on the *same* difficulty. Results are never silently truncated — if a query hits the display ceiling the count line says so.
 - **Visual Filters panel** — a collapsible Search sidebar with a dual-handle star slider, ruleset toggles (disabled when you own no maps of that mode), mania key picker, and BPM/length/AR/OD fields; writes the query syntax for you.
 - **Map Details** (double-click a result) — every difficulty's mode, keys, star, CS·AR·OD·HP, and (for mania) a **skillset radar**; plus osu!-API metadata when enriched.
@@ -76,9 +81,13 @@ Rosu bulk-extracts `.zip`/`.7z`/`.tar` beatmap packs into a deduplicated `.osz` 
 
 **Library health & settings**
 - **Library Health** (Settings) — read-only disk-usage total + biggest sets, a DB↔disk scrub (orphans / dead links / memory-only), and a cancellable off-thread **SHA-256 verify** against backup-time hashes.
+- **Watch a folder** (Settings, opt-in) — new `.osz` downloads that land in a chosen folder are added to the Library (ones that arrive while Rosu is closed, at the next start); what was already there is left alone and your files are never moved or deleted.
+- **Logs** — any day's log as a filterable table (errors only, word filter), growing live.
 - Per-client **enable/disable** toggles (lazer on, stable off by default) — a disabled client vanishes app-wide (Settings path row, Dashboard import, Shortcuts).
 - **Save ⇄ Auto-Save** for Settings; **Report a problem** posts to the hosted form (with e-mail / web-form fallback).
-- Optional startup **update check** against GitHub Releases with a one-click download banner (on by default, fails silently offline).
+- Optional startup **update check** (Rosu's site first, GitHub as the fallback) with a banner linking the new `.exe` directly (on by default, fails silently offline).
+- **Report a problem** shows a private link to follow your report's status (received → in review → fixed in vX).
+- Opt-in **anonymous crash reports** (off by default): the error type, a scrubbed message and the code locations involved — no files, no library data, no usernames.
 
 **Shortcuts job queue**
 - Long Shortcuts actions run as queued **jobs** with named sub-steps, live status, per-item cancel, and **DISK/DRIVE concurrency** (a disk export can run while a Drive upload proceeds). Double-click an archive row to reveal it in the file manager.
@@ -170,6 +179,7 @@ config.json   Application settings (osu! API key kept here; Drive token in the O
 
 ```bash
 pip install -r requirements.txt
+python tools/fetch_fpcalc.py   # optional: the audio-fingerprint tool for "Same song, different sets"
 python run.py
 ```
 
@@ -191,13 +201,15 @@ python -m pytest tests/ -q
 
 ## Roadmap
 
-**Shipped through v1.7:** public essentials (v1.0) · Library Health & disk insight (v1.1) · Shortcuts tab
+**Shipped through v1.10:** public essentials (v1.0) · Library Health & disk insight (v1.1) · Shortcuts tab
 (v1.2) · job queue (v1.3) · Settings overhaul + hosted bug report (v1.4) · per-difficulty star ratings,
 query-syntax search & osu!-API enrichment (v1.5) · mania skillset ratings, visual Filters panel & star-range
-export (v1.6) · space-saving (Prune), collection sync & mirror-based map repair (v1.7).
+export (v1.6) · space-saving (Prune), collection sync & mirror-based map repair (v1.7) · remove from osu!,
+Drive backup browser + restore, report tracking & opt-in crash reports (v1.8) · browsing depth (saved
+searches, column choice, cover gallery, search history, CSV/JSON export, Logs table), Library move across
+drives & the opt-in watch folder (v1.9) · same-song detection by audio fingerprint (v1.10).
 
-**Next on the Library Maturity line:** audio-fingerprint dedup and deeper browsing UX — then the v2.0
-capstone. Later lines add a music player, collections, sync hardening, an AI coach, streamer overlays, and
+**Next:** the v2.0 capstone — a whole-app review and polish pass, no new feature scope. Later lines add a music player, collections, sync hardening, an AI coach, streamer overlays, and
 cross-platform builds (macOS/Linux).
 
 Extra numbered pack series (ST/SC/T/L/P/A and beyond) are already auto-supported by the gap-detection logic as

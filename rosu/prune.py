@@ -24,6 +24,8 @@ import zipfile
 import tempfile
 from pathlib import Path
 
+from .zipread import TooBig, read_capped
+
 
 def _discard(path) -> None:
     """Delete a temp/working file, best effort.
@@ -150,7 +152,10 @@ def _essential_assets(zf, mode: str) -> set[str] | None:
         if info.file_size > _MAX_ENTRY_BYTES:
             return None   # suspicious .osu size — fail closed, don't prune
         found_osu = True
-        text = zf.read(info.filename).decode("utf-8", errors="replace")
+        try:
+            text = read_capped(zf, info, _MAX_ENTRY_BYTES).decode("utf-8", errors="replace")
+        except TooBig:
+            return None   # the declared size lied — fail closed, don't prune
         for asset in get_osu_assets(text):
             essential.add(asset.lower().replace("\\", "/"))
     return essential if found_osu else None
@@ -223,7 +228,7 @@ def prune_osz(osz_path: Path | str, mode: str = 'video_only', max_unessential_si
                             # than return) so the outer handler still cleans up the
                             # partially-written temp file.
                             raise ValueError(f"entry too large: {info.filename}")
-                        zf_out.writestr(info, zf_in.read(info.filename))
+                        zf_out.writestr(info, read_capped(zf_in, info, _MAX_ENTRY_BYTES))
                     else:
                         freed += info.file_size
 

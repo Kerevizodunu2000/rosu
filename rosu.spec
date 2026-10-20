@@ -49,6 +49,8 @@ _datas = [
     ('rosu/assets/splash.png', 'rosu/assets'),
     # self-contained .NET helper that re-exports osu!lazer beatmapsets (item 15)
     ('rosu/assets/lazer_export/RosuLazerExport.exe', 'rosu/assets/lazer_export'),
+    # Chromaprint fpcalc (audio fingerprints, v1.10) is appended below when
+    # tools/fetch_fpcalc.py has fetched it; without it the feature says so.
     # legal notices shown in the in-app About / Licenses screen
     ('LICENSE', '.'),
     ('THIRD-PARTY-LICENSES.md', '.'),
@@ -58,6 +60,9 @@ if os.path.exists(_oauth_client):
     _datas.append((_oauth_client, 'rosu/drive'))
 if os.path.exists(_report_token):
     _datas.append((_report_token, 'rosu'))
+_fpcalc = os.path.join('rosu', 'assets', 'fpcalc', 'fpcalc.exe')
+if os.path.exists(_fpcalc):
+    _datas.append((_fpcalc, 'rosu/assets/fpcalc'))
 
 a = Analysis(
     ['run.py'],

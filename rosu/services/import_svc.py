@@ -5,11 +5,7 @@ import threading
 import time
 from pathlib import Path
 
-from .. import (
-    archives, config, excel_report, extractor, gaps, jobs, library, osu_api,
-    osu_import, parsing, search, db, msd, ratings
-)
-from ..models import ExtractPlan, ParsedPack
+from .. import config, osu_import, parsing
 
 _CLIENT_LABEL = {"lazer": "osu!lazer", "stable": "osu!(stable)"}
 
@@ -22,6 +18,18 @@ def _sample_export(files, limit):
     import random
     return random.sample(files, limit)
 
+
+
+def _export_line(line: str) -> tuple[int, int | None]:
+    """One line of the lazer helper's stdout → ``(exported, total)``: an
+    ``EXPORT`` line counts one set; ``TOTAL <n>`` (newer helpers) says how many
+    to expect. Anything else → ``(0, None)``."""
+    parts = line.split()
+    if parts[:1] == ["EXPORT"]:
+        return 1, None
+    if len(parts) == 2 and parts[0] == "TOTAL" and parts[1].isdigit():
+        return 0, int(parts[1])
+    return 0, None
 
 class ImportMixin:
         def import_plan(self, target: str = "lazer") -> dict:
@@ -121,24 +129,38 @@ class ImportMixin:
         def _run_lazer_export(self, data, out, progress=None, cancel=None):
             """Run the bundled osu!lazer export helper into ``out``, polling ``cancel``
             so a long export can be interrupted (the subprocess is terminated). stderr
-            is captured to a temp file (no pipe-buffer deadlock). Returns
-            ``(ok: bool, detail: str)`` — detail is ``"cancelled"`` / ``"helper_missing"``
-            / the helper's stderr on failure, ``""`` on success."""
+            is captured to a temp file and stdout is read by a thread (no pipe-buffer
+            deadlock); its ``TOTAL``/``EXPORT`` lines become ``{"kind": "export",
+            "done", "total"}`` progress. Returns ``(ok: bool, detail: str)`` —
+            detail is ``"cancelled"`` / ``"helper_missing"`` / the helper's stderr
+            on failure, ``""`` on success."""
             import subprocess
             import tempfile
-            import time
             helper = self._lazer_helper()
             if not helper:
                 return False, "helper_missing"
             if progress:
                 progress({"kind": "phase", "key": "sc_exporting_lazer"})
-            errf = tempfile.TemporaryFile(mode="w+")
+            errf = tempfile.TemporaryFile(mode="w+", encoding="utf-8", errors="replace")
             try:
                 proc = subprocess.Popen([str(helper), str(data), str(out)],
-                                        stdout=subprocess.DEVNULL, stderr=errf, text=True)
+                                        stdout=subprocess.PIPE, stderr=errf,
+                                        text=True, encoding="utf-8", errors="replace",
+                                        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
             except OSError as exc:
                 errf.close()
                 return False, str(exc)[:300]
+            seen = {"done": 0, "total": None}
+
+            def read_stdout():
+                for line in proc.stdout:
+                    done, total = _export_line(line)
+                    seen["done"] += done
+                    if total is not None:
+                        seen["total"] = total
+            reader = threading.Thread(target=read_stdout, daemon=True)
+            reader.start()
+            reported = (0, None)
             try:
                 while proc.poll() is None:
                     if cancel is not None and cancel():
@@ -148,7 +170,16 @@ class ImportMixin:
                         except subprocess.TimeoutExpired:
                             proc.kill()
                         return False, "cancelled"
+                    now = (seen["done"], seen["total"])
+                    if progress and now[1] and now != reported:
+                        progress({"kind": "export", "done": min(now[0], now[1]),
+                                  "total": now[1]})
+                        reported = now
                     time.sleep(0.2)
+                reader.join(timeout=5)
+                now = (seen["done"], seen["total"])   # the last sets may land after the last look
+                if progress and now[1] and now != reported and proc.returncode == 0:
+                    progress({"kind": "export", "done": min(now[0], now[1]), "total": now[1]})
                 errf.seek(0)
                 err = errf.read()
             finally:

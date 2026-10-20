@@ -21,6 +21,24 @@ def test_all_keys_have_en_and_tr():
     assert missing == []
 
 
+def test_no_key_is_defined_twice():
+    """A repeated key in the STRINGS literal silently keeps only the last value:
+    v1.8's "Remove" step label replaced the dedup job's "Recycle duplicates"
+    that way. Read the source, since the dict itself cannot show it."""
+    import ast
+    tree = ast.parse((_SRC / "i18n.py").read_text(encoding="utf-8"))
+    dupes = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Dict) and len(node.keys) > 50:   # the STRINGS table
+            seen = set()
+            for k in node.keys:
+                if isinstance(k, ast.Constant):
+                    if k.value in seen:
+                        dupes.append(k.value)
+                    seen.add(k.value)
+    assert dupes == []
+
+
 def test_every_literal_t_key_in_the_source_exists():
     """Guard against the v1.7.0 failure mode: ~15 new UI strings were written
     assuming ``t(key, default="…")`` was a supported fallback. It isn't — a

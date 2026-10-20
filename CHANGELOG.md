@@ -10,6 +10,187 @@ the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.10.0] - 2026-10-20
+
+**Find the same song across different sets — by listening to it.**
+
+### Added
+- **Same song, different sets…** (Shortcuts). Rosu fingerprints each Library set's audio
+  (the first two minutes, with Chromaprint's `fpcalc`) and groups the sets whose songs
+  match — re-encodes, re-uploads, TV-size cuts — whatever their names or set ids say. A
+  candidate index keeps this fast on large Libraries, and fingerprints are cached per file,
+  so a second scan only listens to new or changed sets.
+  - Nothing is selected for you (different sets of one song are often different maps);
+    **Select extras** ticks all but the set with the most difficulties in each group.
+  - One set of every song always stays; the chosen ones go to the Recycle Bin after a
+    countdown confirmation, through the same queued job as the Library dedup.
+- Chromaprint `fpcalc` 1.6.2 (LGPL-2.1-or-later, with FFmpeg inside) is bundled with the
+  exe. It is not kept in git: `tools/fetch_fpcalc.py` downloads the official release and
+  checks a pinned SHA-256 (CI runs it before building).
+
+### Fixed
+Found by the v1.10 code and security review (before release):
+- A same-song scan whose fpcalc was blocked (an antivirus), timed out or could not write its
+  temp file no longer marks those sets "unreadable" for good: only audio fpcalc really could
+  not read is remembered; the rest is tried again next scan, and a fpcalc that does not start
+  at all is reported before anything is scanned.
+- Sets recycled from the same-song list are marked as no longer in the Library (they kept
+  showing as present until a Library refresh).
+- Grouping keeps its memory proportional to the Library size (it held every candidate pair at
+  once) and stores fingerprints compactly — large Libraries scan without a memory spike.
+- Fingerprints of sets that left the Library no longer take part in grouping.
+- The same-song dialog stops its scan however it is closed, and its Recycle button waits for
+  a fresh list after "Scan again".
+- fpcalc decodes each file as the format its name says, and gets no input stream.
+- Watch folder: one import batch at a time (saving other settings no longer queues the same
+  files twice), a cancelled import counts as failed, failed imports wait 5 min, then 10, 20 …
+  up to 2 h, and nothing is staged while the Library's drive is unplugged.
+- Move Library and Copy to Output never replace a file that appears at the very last moment
+  (an exclusive rename/link instead of a check-then-replace); the move preview tests whether
+  the destination is writable by creating a throw-away file (Windows ignores the old check);
+  a source that cannot be opened no longer leaks a file handle and a stray temp file.
+
+Found by the v1.9 code and security review:
+- **Move Library** is safer end to end: each file is written to a private temp file,
+  synced and hash-checked before it takes its real name; Output, Packs, `data` and `logs`
+  are refused as destinations, as is a folder Rosu cannot write to; links in the way count
+  as conflicts; if the new setting cannot be saved, the Library stays where it was; files
+  added during the move are carried over afterwards (any that could not be are listed);
+  and the old copies are only recycled after a fresh check that they still match.
+- **Watch folder**: a big catch-up is imported in batches (100 files / 2 GB); a file is
+  marked handled only after the import reports it done, so a failed or interrupted import
+  is retried (after a five-minute pause, so a full disk is not retried every few seconds);
+  files that are not archives are skipped once; the import checks free space first;
+  downloads that arrive while Rosu is closed are added at the next start, once settled.
+- "Copy to Output" writes through a temp file, so a failed copy never leaves a half-written
+  `.osz` for Import to osu! to pick up.
+- Archives are read with a size cap everywhere (set details, prune, covers, the client
+  removal fingerprint), so a crafted `.osz` cannot exhaust memory.
+- Cover thumbnails only decode JPEG, PNG and BMP data and are cached atomically; closing
+  Rosu waits for background work (and the thumbnailer) to stop first.
+- Path repair no longer "repairs" a healthy root, and only rewrites paths that were inside
+  the old root.
+- A Library on a drive that is offline no longer stops Rosu from starting.
+- Search recall: a word after punctuation (`(TV Size)`, `feat.Artist`) now counts as the
+  start of a word when ranking candidates.
+- Search ◀ ▶: going back and then typing before that result arrived kept the new search
+  out of the history.
+- Logs tab: details are shown literally in tooltips, and after midnight a live line is
+  only added to the day it belongs to.
+- A hand-edited `config.json` with `"false"` (a string) for an on/off setting no longer
+  reads as on.
+
+## [1.9.0] - 2026-10-20
+
+**Browse the Library your way, move it anywhere, and let new downloads come in by themselves.**
+
+### Added
+- **Search, your way.**
+  - Right-click a column header to hide or show columns; the choice is remembered (the
+    name column always stays).
+  - **★ Saved** keeps the current search (text, filters and the tags toggle) under a
+    name; one click runs it again (up to 50).
+  - **◀ ▶** (Alt+←/→) step back and forward through the last 16 searches; a burst of
+    live-search typing counts as one step.
+  - **▦ Gallery** shows the results as cover art (each set's background, the first 500);
+    double-click a cover for its details. Thumbnails are made in the background and
+    cached under `data/covers`.
+  - **Export…** writes the listed sets to CSV (opens in Excel; spreadsheet formulas in
+    titles are neutralised) or JSON.
+  - Right-click sets → **Copy to Output (for Import to osu!)** stages exactly those Library
+    sets for the Dashboard's Import to osu!.
+- **Move Library…** (Shortcuts): move the Library to another folder or drive. The preview
+  shows the files, their size, the free space there and anything in the way (a different
+  file with the same name blocks the move; it is never overwritten). Every file is
+  copied and checked against its SHA-256 before Rosu switches to the new folder;
+  afterwards the old copies can go to the Recycle Bin (left alone on a drive without
+  one). A cancel or a failed copy changes nothing.
+- **Watch a folder** (Settings, opt-in): new `.osz` files that land in the chosen folder
+  (say, Downloads) are added to the Library by a quiet background job (ones that arrive
+  while Rosu is closed, at the next start). Files already there when watching starts are
+  left alone, a file is taken only once it has stopped changing, and your files are never
+  moved or deleted.
+- **Logs tab as a table**: any day's log in columns (time, level, action, details,
+  message), with "Errors only" and a word filter; today's grows live.
+
+### Changed
+- The osu!lazer export shows real progress (sets done / total) with the updated helper
+  (it now prints the total first); an older helper keeps the moving bar.
+
+### Fixed
+- **Searching a common word could miss the best match.** The candidate list was capped
+  in table order before ranking; matches where every word starts a word of the name,
+  artist or title are now collected first.
+- **Library verify's progress bar never filled** when some files were missing or pruned
+  (only hashed files counted).
+- The v1.8 "Remove" job step label replaced the dedup job's "Recycle duplicates" text
+  (both used one translation key); a test now fails on any repeated key.
+- Turning crash reports on in Auto-Save mode left Settings looking unsaved.
+
+## [1.8.0] - 2026-10-20
+
+**Take sets out of osu!, and get sets back from your Drive backup.**
+
+### Added
+- **Remove from osu!** (Shortcuts → *Remove from osu!…*). Pick a client and see every
+  set in it — its size and whether the Library already holds it — filtered (all /
+  already in the Library / not in the Library), ordered and capped, before a countdown
+  confirmation. Two modes:
+  - **Save to Library, then remove** copies each set into the Library first (always as a
+    real file, even with memory-only imports) and removes only the sets whose Library
+    `.osz` holds every one of their difficulties byte for byte. A matching set id is not
+    enough: a local edit, an extra difficulty or an unrelated map sharing the id stays in
+    osu! and is listed. A Library file is never overwritten.
+  - **Remove only** (osu!(stable) only) says up front how many of the chosen sets have
+    no Library copy, and is refused when the Songs folder is on a drive without a
+    Recycle Bin (removable or network), where Windows would delete for good.
+
+  Refused while osu! is running — and when that cannot be checked.
+  osu!(stable): each set's `Songs/` folder goes to the Recycle Bin; every name is
+  resolved inside the detected Songs folder first (and must hold a `.osu`), anything
+  else is refused.
+  osu!lazer: never touched on disk (lazer shares one stored copy between every set with
+  a byte-identical file), and always saved to the Library first, since lazer purges
+  removed sets on its next start. The bundled helper gains `list` and `delete` commands
+  that flip lazer's own `DeletePending` flag, after proving the database opens read-only
+  with this helper's Realm (so the write cannot upgrade the file format) and after
+  copying `client.realm` aside (newest three kept). **The shipped helper binary is
+  unchanged**, so lazer removal shows as "not available yet" until the helper is rebuilt
+  and verified on a real lazer install (`tools/RosuLazerExport/README.md`).
+- **Drive backup browser + restore** (Shortcuts → *Browse Drive backup…*). Lists every
+  set the Google Drive backup holds — merging the manifest of every PC that backs up
+  into it — with a filter, which PC backed it up, and whether the Library already has
+  it; flags archives that are no longer on Drive and backup files no manifest lists.
+  Restoring downloads only the archives that hold the chosen sets, extracts just those
+  members (plain `.osz` names only, size-capped, after a free-space check), verifies each
+  against the SHA-256 recorded at backup time and imports them through the normal dedup
+  pipeline — download on the Drive lane, import on the disk lane. A restore never
+  replaces a Library file: a same-named file with other bytes is left alone and
+  reported. One unreadable archive member or malformed manifest entry is skipped, not
+  fatal.
+- **Report tracking link.** After "Report a problem", Rosu shows (and copies) the
+  report's private status link from rosu-web.
+- **Opt-in anonymous crash reports** (Settings, off by default). An unexpected error —
+  uncaught, or caught by a background task — sends its type, a short message with file
+  paths, quoted text and e-mail addresses removed, and the `module:function` names of
+  the stack, plus
+  the Rosu version and OS. Disk/network errors, cancellations and Rosu's own handled
+  errors are never sent; each distinct crash is sent once per session.
+
+### Changed
+- The update check asks Rosu's site (`/api/latest-version`) first and falls back to
+  GitHub; the banner links the new `.exe` directly (plus "What's new"), with the
+  release-notes excerpt as its tooltip. Every link must match this project's release
+  pages or assets exactly (no `..`, `%`-escapes or foreign hosts); the report status
+  link is rebuilt from rosu-web's own address.
+- The lazer helper writes UTF-8 output and gives two sets that share an id separate
+  export files instead of overwriting one with the other.
+- A dialog closed while its background scan still runs no longer has to wait for it.
+- The collection sync has its own cancel token, like every other long scan.
+
+### Removed
+- A dead `_clear_osz` re-export from `rosu.services`.
+
 ### Fixed
 - **Search "Mode" column showed only one mode for mixed sets.** It read the mode of
   the alphabetically-first difficulty, stored once and never refreshed, while
@@ -25,6 +206,8 @@ the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   "disappeared") in the Turkish UI; it is now translated.
 - **Where column sorting** grouped osu!(stable)-only sets with osu!lazer ones; the sort
   now follows the icons shown.
+- Zipping a Songs folder that holds a file dated before 1980 (zip's earliest date) no
+  longer fails; the date is stored as 1980.
 
 ## [1.7.1] - 2026-07-27
 
@@ -1069,7 +1252,8 @@ Initial release. The core archive-management pipeline.
 - **EN/TR** localization; English-only code/logs.
 - Single-file **PyInstaller** build (`osu-archiver.spec`) + GitHub Actions build workflow.
 
-[Unreleased]: https://github.com/Kerevizodunu2000/rosu/compare/v1.7.1...HEAD
+[Unreleased]: https://github.com/Kerevizodunu2000/rosu/compare/v1.8.0...HEAD
+[1.8.0]: https://github.com/Kerevizodunu2000/rosu/compare/v1.7.1...v1.8.0
 [1.7.1]: https://github.com/Kerevizodunu2000/rosu/compare/v1.6.3...v1.7.1
 [1.6.3]: https://github.com/Kerevizodunu2000/rosu/compare/v1.6.2...v1.6.3
 [1.6.2]: https://github.com/Kerevizodunu2000/rosu/compare/v1.6.0...v1.6.2

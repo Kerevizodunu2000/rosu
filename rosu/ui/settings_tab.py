@@ -1,8 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Settings tab: language, theme, folders, osu! path, toggles and API reference."""
+"""Settings tab: language, theme, folders, osu! path, toggles and API reference.
+
+The maintenance actions live in :mod:`.settings_actions` and the Google Drive
+section in :mod:`.settings_drive` (mixins of :class:`SettingsTab`)."""
 from __future__ import annotations
 
-import html
 from pathlib import Path
 
 from PySide6.QtCore import Qt
@@ -17,12 +19,11 @@ from .. import config
 from ..workers import Worker
 from . import wheel_guard
 from .countdown_dialog import CountdownConfirmDialog
-from .links import wire_link_hover
+from .settings_actions import SettingsActionsMixin
+from .settings_drive import SettingsDriveMixin
 
-_ZIP_ORDER = ["recycle", "move", "delete"]
 
-
-class SettingsTab(QWidget):
+class SettingsTab(SettingsActionsMixin, SettingsDriveMixin, QWidget):
     def __init__(self, main_window):
         super().__init__()
         self.mw = main_window
@@ -85,12 +86,18 @@ class SettingsTab(QWidget):
         self.cb_stable_enabled = QCheckBox(); self.cb_stable_enabled.setChecked(cfg.stable_enabled)
         self.osu_stable = self._path_row(form, cfg.osu_stable_exe, is_dir=False,
                                          label_widget=self.cb_stable_enabled)
+        # v1.9 watch folder: the "Watch …" checkbox is the row's label, like the
+        # client rows above; new .osz files there are added to the Library.
+        self.cb_watch = QCheckBox(); self.cb_watch.setChecked(cfg.watch_enabled)
+        self.watch = self._path_row(form, cfg.watch_folder, is_dir=True,
+                                    label_widget=self.cb_watch)
         self._sync_client_rows()
 
         self.cb_physical = QCheckBox(); self.cb_physical.setChecked(cfg.library_physical_copy)
         self.cb_clear_before = QCheckBox(); self.cb_clear_before.setChecked(cfg.clear_output_before_extract)
         self.cb_auto_backup = QCheckBox(); self.cb_auto_backup.setChecked(cfg.auto_backup_after_extract)
         self.cb_check_updates = QCheckBox(); self.cb_check_updates.setChecked(cfg.check_updates)
+        self.cb_crash_reports = QCheckBox(); self.cb_crash_reports.setChecked(getattr(cfg, "crash_reports", False))
         self.cb_auto_refresh = QCheckBox(); self.cb_auto_refresh.setChecked(cfg.auto_refresh_on_tab)
         self.cb_auto_prune = QCheckBox(); self.cb_auto_prune.setChecked(getattr(cfg, "auto_prune", False))
         self.cb_export_prune = QCheckBox(); self.cb_export_prune.setChecked(getattr(cfg, "export_prune", False))
@@ -100,7 +107,8 @@ class SettingsTab(QWidget):
         self.cb_autosave = QCheckBox(); self.cb_autosave.setChecked(cfg.settings_autosave)
         for cb in (self.cb_physical,
                    self.cb_auto_backup, self.cb_clear_before, self.cb_auto_prune,
-                   self.cb_export_prune, self.cb_check_updates, self.cb_auto_refresh, self.cb_autosave):
+                   self.cb_export_prune, self.cb_check_updates, self.cb_crash_reports,
+                   self.cb_auto_refresh, self.cb_autosave):
             root.addWidget(cb)
             
         prune_row = QHBoxLayout()
@@ -124,6 +132,7 @@ class SettingsTab(QWidget):
         # effect you need to SEE to choose. Physical-copy keeps its own guarded
         # confirm flow because turning it off deletes files.)
         for cb in (self.cb_auto_backup, self.cb_clear_before, self.cb_check_updates,
+                   self.cb_crash_reports, self.cb_watch,
                    self.cb_auto_refresh, self.cb_auto_prune, self.cb_export_prune):
             cb.toggled.connect(self._on_setting_changed)
         self.cb_physical.toggled.connect(self._on_physical_toggled)
@@ -359,6 +368,9 @@ class SettingsTab(QWidget):
                 "auto_backup": self.cb_auto_backup.isChecked(),
                 "clear_before": self.cb_clear_before.isChecked(),
                 "check_updates": self.cb_check_updates.isChecked(),
+                "crash_reports": self.cb_crash_reports.isChecked(),
+                "watch_enabled": self.cb_watch.isChecked(),
+                "watch_folder": self.watch.text(),
                 "auto_refresh": self.cb_auto_refresh.isChecked(),
                 "enrich": self.cb_enrich.isChecked(),
                 "lazer_enabled": self.cb_lazer_enabled.isChecked(),
@@ -374,11 +386,14 @@ class SettingsTab(QWidget):
         self.osu_stable.setText(snap["osu_stable"])
         self.client_id.setText(snap["client_id"])
         self.client_secret.setText(snap["client_secret"])
+        self.watch.setText(snap["watch_folder"])
         # Restore the deferred toggles WITHOUT re-triggering their handlers
         # (they'd re-mark the tab dirty, or re-commit in auto mode).
         boxes = ((self.cb_auto_backup, "auto_backup"),
                  (self.cb_clear_before, "clear_before"),
                  (self.cb_check_updates, "check_updates"),
+                 (self.cb_crash_reports, "crash_reports"),
+                 (self.cb_watch, "watch_enabled"),
                  (self.cb_auto_refresh, "auto_refresh"),
                  (self.cb_enrich, "enrich"),
                  (self.cb_lazer_enabled, "lazer_enabled"),
@@ -444,7 +459,11 @@ class SettingsTab(QWidget):
         # (translated below); the fields explain themselves via placeholder.
         self.osu.setPlaceholderText(t("set_osu_lazer_exe"))
         self.osu_stable.setPlaceholderText(t("set_osu_stable_exe"))
-        for f in (self.packs, self.output, self.library, self.osu, self.osu_stable):
+        self.cb_watch.setText(t("set_watch"))
+        self.cb_watch.setToolTip(t("tip_watch"))
+        self.watch.setPlaceholderText(t("set_watch_folder"))
+        self.watch.setToolTip(t("tip_watch"))
+        for f in (self.packs, self.output, self.library, self.osu, self.osu_stable, self.watch):
             f._browse.setText(t("btn_browse"))
         # Match the combo spacers to the (localized) Browse button width (item 22).
         bw = self.packs._browse.sizeHint().width()
@@ -455,6 +474,8 @@ class SettingsTab(QWidget):
         self.cb_clear_before.setText(t("set_clear_output_before"))
         self.cb_check_updates.setText(t("set_check_updates"))
         self.cb_check_updates.setToolTip(t("tip_check_updates"))
+        self.cb_crash_reports.setText(t("set_crash_reports"))
+        self.cb_crash_reports.setToolTip(t("tip_crash_reports"))
         self.cb_auto_refresh.setText(t("set_auto_refresh"))
         self.cb_auto_refresh.setToolTip(t("tip_auto_refresh"))
         self.cb_auto_prune.setText(t("set_auto_prune"))
@@ -521,40 +542,6 @@ class SettingsTab(QWidget):
         self._refresh_lost_status()
         self._refresh_drive_status()
 
-    def _refresh_reference_status(self) -> None:
-        from .. import osu_api
-        ref = osu_api.load_reference(self.ctx.cfg.reference_path)
-        if ref:
-            self.lbl_ref_status.setText(self.ctx.t(
-                "reference_status", n=ref.get("count", 0), when=ref.get("fetched_at", "")))
-        else:
-            self.lbl_ref_status.setText(self.ctx.t("reference_none"))
-
-    # -- Google Drive (item 11) ---------------------------------------------
-    def _reload_zip_options(self) -> None:
-        """Rebuild the Processed-.zip-action combo. The 'Upload to Drive & remove'
-        option is offered only while Drive is connected; rebuilt on retranslate and
-        whenever the Drive connection changes. If the current pick is dropped
-        (Drive disconnected while 'drive' was selected), don't lose it silently:
-        commit the fallback in Auto mode, mark the tab dirty in manual mode."""
-        t = self.ctx.t
-        cur = self.zip.currentData() or self.ctx.cfg.zip_disposal
-        try:
-            connected = self.ctx.services.drive_status().get("connected")
-        except Exception:
-            connected = False
-        order = ["recycle", "move", "delete"] + (["drive"] if connected else [])
-        dropped = cur not in order
-        self.zip.blockSignals(True)
-        self.zip.clear()
-        for v in order:
-            self.zip.addItem(t(f"zip_{v}"), v)
-        idx = self.zip.findData(cur if cur in order else "recycle")
-        self.zip.setCurrentIndex(idx if idx >= 0 else 0)
-        self.zip.blockSignals(False)
-        if dropped and getattr(self, "_ui_ready", False):
-            self._on_setting_changed()   # commit (auto) or flag unsaved (manual)
-
     def _reload_prune_mode_options(self) -> None:
         """Rebuild the Prune-mode combo's translated labels (init + retranslate)."""
         t = self.ctx.t
@@ -571,93 +558,6 @@ class SettingsTab(QWidget):
         idx = self.cbo_prune_mode.findData(cur)
         self.cbo_prune_mode.setCurrentIndex(idx if idx >= 0 else 0)
         self.cbo_prune_mode.blockSignals(False)
-
-    def _refresh_drive_folder(self) -> None:
-        """Show the Drive folder Rosu backs up into, as a link, plus why a folder
-        it did not create is invisible to it."""
-        t = self.ctx.t
-        fid = (self.ctx.cfg.drive_folder_id or "").strip()
-        # Only while connected: after Disconnect there is nothing backing up, so
-        # "Backing up into this Drive folder" would be describing something that
-        # is not happening. The id itself is kept, so reconnecting reuses it.
-        connected = bool(self.ctx.services.drive_status().get("connected"))
-        if not fid or not connected:
-            self.lbl_drive_folder.setVisible(False)
-            return
-        url = f"https://drive.google.com/drive/folders/{fid}"
-        self.lbl_drive_folder.setText(
-            f'{html.escape(t("drive_folder_line"))} '
-            f'<a href="{html.escape(url, quote=True)}">{html.escape(fid)}</a>'
-            f'<br>{html.escape(t("drive_folder_scope_note"))}')
-        self.lbl_drive_folder.setVisible(True)
-
-    def _refresh_drive_status(self) -> None:
-        t = self.ctx.t
-        self._reload_zip_options()   # offer/remove the Drive disposal option
-        self._refresh_drive_folder()
-        st = self.ctx.services.drive_status()
-        if not st["configured"]:
-            self.btn_drive.setEnabled(False)
-            self.btn_drive.setText(t("btn_drive_connect"))
-            self.lbl_drive_status.setText(t("drive_not_configured"))
-            return
-        if st["connected"]:
-            self.btn_drive.setEnabled(True)
-            self.btn_drive.setText(t("btn_drive_disconnect"))
-            self.lbl_drive_status.setText(t("drive_connected"))
-        elif not st.get("can_store", True):
-            # Configured, but no keyring backend to store the token — guard the whole
-            # OAuth flow up front instead of failing after consent (item 1b).
-            self.btn_drive.setEnabled(False)
-            self.btn_drive.setText(t("btn_drive_connect"))
-            self.lbl_drive_status.setText(t("drive_no_keyring"))
-        else:
-            self.btn_drive.setEnabled(True)
-            self.btn_drive.setText(t("btn_drive_connect"))
-            self.lbl_drive_status.setText(t("drive_disconnected"))
-
-    def _toggle_drive(self) -> None:
-        t = self.ctx.t
-        if self.ctx.services.drive_status()["connected"]:
-            if self.mw._operation_running():
-                reply = QMessageBox.question(self, self.ctx.t("app_title"),
-                    self.ctx.t("drive_disconnect_busy_body"),
-                    QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
-                if reply != QMessageBox.Yes:
-                    return
-            self.ctx.services.disconnect_drive()
-            self._refresh_drive_status()
-            self.lbl_drive_status.setText(t("drive_disconnected_done"))
-            return
-        self.btn_drive.setEnabled(False)
-        self.lbl_drive_status.setText(t("drive_connecting"))
-        w = Worker(lambda progress=None: self.ctx.services.connect_drive(progress))
-        self._threads.append(w)
-        w.succeeded.connect(self._drive_connected)
-        w.failed.connect(self._drive_failed)
-        w.finished.connect(lambda: self._threads.remove(w) if w in self._threads else None)
-        w.start()
-
-    def _drive_connected(self, res) -> None:
-        self._refresh_drive_status()
-        if res.get("error"):
-            if res["error"] == "not_configured":
-                self.lbl_drive_status.setText(self.ctx.t("drive_not_configured"))
-            elif res.get("detail"):
-                self.lbl_drive_status.setText(res["detail"])
-            else:
-                self.lbl_drive_status.setText(self.ctx.t("drive_login_failed"))
-            return
-        # Success: the browser had focus — bring Rosu back to the front so the user
-        # "returns to the app" automatically. (The OAuth tab can't be reliably
-        # script-closed — browsers only let a script close tabs it opened — so we
-        # rely on this raise; the result page just says the tab can be closed.)
-        self.mw.raise_()
-        self.mw.activateWindow()
-
-    def _drive_failed(self, msg) -> None:
-        self._refresh_drive_status()
-        QMessageBox.critical(self, self.ctx.t("app_title"), msg)
 
     # -- About / licenses ----------------------------------------------------
     def _show_about(self) -> None:
@@ -701,272 +601,6 @@ class SettingsTab(QWidget):
             return True
         return False
 
-    # -- reference sync ------------------------------------------------------
-    def _update_reference(self) -> None:
-        # The button doubles as Cancel while a sync runs — a network sync that
-        # cannot be stopped just leaves the user staring at a disabled button.
-        if getattr(self, "_ref_syncing", False):
-            self.ctx.services.cancel_reference_sync()
-            self.lbl_ref_status.setText(self.ctx.t("cancelling"))
-            return
-        if not self._commit_api_creds():
-            QMessageBox.information(self, self.ctx.t("app_title"),
-                                    self.ctx.t("reference_help"))
-            return
-        self._ref_syncing = True
-        self.btn_reference.setText(self.ctx.t("btn_cancel"))
-        self.lbl_ref_status.setText(self.ctx.t("working"))
-        w = Worker(lambda progress=None: self.ctx.services.update_reference(progress))
-        self._threads.append(w)
-        w.progressed.connect(lambda m: self.lbl_ref_status.setText(str(m)))
-        w.succeeded.connect(self._reference_done)
-        w.failed.connect(self._reference_failed)
-        w.finished.connect(lambda: self._threads.remove(w) if w in self._threads else None)
-        w.start()
-
-    def _reference_idle(self) -> None:
-        self._ref_syncing = False
-        self.btn_reference.setText(self.ctx.t("btn_update_reference"))
-
-    def _reference_done(self, ref) -> None:
-        self._reference_idle()
-        if ref.get("cancelled"):
-            # Deliberately NOT saved: a half-fetched reference would turn real
-            # packs into "missing" reds. Say so instead of implying success.
-            self.lbl_ref_status.setText(self.ctx.t("reference_cancelled"))
-            return
-        self.lbl_ref_status.setText(self.ctx.t("reference_done", n=ref.get("count", 0)))
-        self.mw.dashboard._update_banner()
-        self.mw.packs.reload()
-
-    def _reference_failed(self, msg) -> None:
-        self._reference_idle()
-        self._refresh_reference_status()
-        QMessageBox.critical(self, self.ctx.t("app_title"), msg)
-
-    # -- lost-map detection (item F) -----------------------------------------
-    def _refresh_lost_status(self) -> None:
-        n = self.ctx.services.lost_map_count()
-        self.lbl_lost_status.setText(self.ctx.t("lost_maps_count", n=n) if n else "")
-
-    def _scan_lost_maps(self) -> None:
-        # Doubles as Cancel: the scan now walks the WHOLE library (no 500-per-run
-        # cap), so being able to stop it is what makes that safe.
-        if getattr(self, "_lost_scanning", False):
-            self.ctx.services.cancel_lost_scan()
-            self.lbl_lost_status.setText(self.ctx.t("cancelling"))
-            return
-        if not self._commit_api_creds():
-            QMessageBox.information(self, self.ctx.t("app_title"),
-                                    self.ctx.t("lost_maps_needs_api"))
-            return
-        self._lost_scanning = True
-        self.btn_lost.setText(self.ctx.t("btn_cancel"))
-        self.lbl_lost_status.setText(self.ctx.t("working"))
-        w = Worker(lambda progress=None: self.ctx.services.scan_lost_maps(progress))
-        self._threads.append(w)
-        w.progressed.connect(self._on_lost_progress)
-        w.succeeded.connect(self._lost_done)
-        w.failed.connect(self._lost_failed)
-        w.finished.connect(lambda: self._threads.remove(w) if w in self._threads else None)
-        w.start()
-
-    def _on_lost_progress(self, msg) -> None:
-        if isinstance(msg, dict) and msg.get("kind") == "lostmap":
-            self.lbl_lost_status.setText(f"{msg['done']}/{msg['total']}")
-
-    def _lost_idle(self) -> None:
-        self._lost_scanning = False
-        self.btn_lost.setText(self.ctx.t("btn_scan_lost"))
-
-    def _lost_done(self, res) -> None:
-        self._lost_idle()
-        if res.get("error") == "no_api":
-            self.lbl_lost_status.setText(self.ctx.t("lost_maps_needs_api"))
-            return
-        # Say exactly where the scan stands: how many of the library's sets were
-        # checked this run, and how many have never been checked yet (the scan
-        # goes in batches — run again to continue).
-        if res.get("remaining"):
-            # Only reachable now by cancelling — the scan no longer stops on its own.
-            self.lbl_lost_status.setText(self.ctx.t(
-                "lost_maps_result_more", checked=res["checked"], gone=res["gone"],
-                remaining=res["remaining"]))
-        else:
-            self.lbl_lost_status.setText(self.ctx.t(
-                "lost_maps_result_all", checked=res["checked"], gone=res["gone"],
-                total=res.get("total", res["checked"])))
-        self.mw.search.reload()
-
-    def _lost_failed(self, msg) -> None:
-        self._lost_idle()
-        self._refresh_lost_status()
-        QMessageBox.critical(self, self.ctx.t("app_title"), msg)
-
-    # -- osu! API metadata enrichment (v1.5) ---------------------------------
-    def _enrich_metadata(self) -> None:
-        if getattr(self, "_enriching", False):   # button doubles as Cancel mid-run
-            self.ctx.services.cancel_enrich()
-            self.lbl_enrich_status.setText(self.ctx.t("cancelling"))
-            return
-        if not self.cb_enrich.isChecked():
-            QMessageBox.information(self, self.ctx.t("app_title"),
-                                    self.ctx.t("enrich_disabled_msg"))
-            return
-        if not self._commit_api_creds():
-            QMessageBox.information(self, self.ctx.t("app_title"),
-                                    self.ctx.t("enrich_no_api_msg"))
-            return
-        self.ctx.cfg.enrich_from_api_enabled = True   # an explicit click opts in
-        self._enriching = True
-        self.btn_enrich.setText(self.ctx.t("btn_cancel"))
-        self.lbl_enrich_status.setText(self.ctx.t("working"))
-        # max_calls=None → enrich the WHOLE library in one run (paced ~2-3/s); it's
-        # cancellable and shows progress, so there's no need for an artificial cap.
-        w = Worker(lambda progress=None:
-                   self.ctx.services.enrich_metadata(progress, max_calls=None))
-        self._threads.append(w)
-        w.progressed.connect(self._on_enrich_progress)
-        w.succeeded.connect(self._enrich_done)
-        w.failed.connect(self._enrich_failed)
-        w.finished.connect(lambda: self._threads.remove(w) if w in self._threads else None)
-        w.start()
-
-    def _on_enrich_progress(self, msg) -> None:
-        if isinstance(msg, dict) and msg.get("kind") == "enrich":
-            self.lbl_enrich_status.setText(f"{msg['done']}/{msg['total']}")
-
-    def _enrich_done(self, res) -> None:
-        self._enriching = False
-        self.btn_enrich.setText(self.ctx.t("btn_enrich_api"))
-        err = res.get("error")
-        if err == "no_api":
-            self.lbl_enrich_status.setText(self.ctx.t("enrich_no_api"))
-            return
-        if err == "disabled":
-            self.lbl_enrich_status.setText(self.ctx.t("enrich_disabled"))
-            return
-        self.lbl_enrich_status.setText(self.ctx.t(
-            "enrich_done", checked=res["checked"], updated=res["updated"],
-            remaining=res["remaining"]))
-        self.mw.search.reload()
-
-    def _enrich_failed(self, msg) -> None:
-        self._enriching = False
-        self.btn_enrich.setText(self.ctx.t("btn_enrich_api"))
-        QMessageBox.critical(self, self.ctx.t("app_title"), msg)
-
-    # -- Library health (v1.1, moved from Dashboard in v1.5) -----------------
-    def _library_health(self) -> None:
-        self.btn_health.setEnabled(False)
-        self.lbl_health_status.setText(self.ctx.t("working"))
-        w = Worker(self.ctx.services.library_health)
-        self._threads.append(w)
-        w.succeeded.connect(self._health_done)
-        w.failed.connect(self._health_failed)
-        w.finished.connect(lambda: self._threads.remove(w) if w in self._threads else None)
-        w.start()
-
-    def _health_done(self, report) -> None:
-        self.btn_health.setEnabled(True)
-        self.lbl_health_status.setText(self.ctx.t(
-            "health_done", files=report["usage"]["files"]))
-        from .health_dialog import HealthDialog
-        HealthDialog(self.ctx, report, self).exec()
-
-    def _health_failed(self, msg) -> None:
-        self.btn_health.setEnabled(True)
-        QMessageBox.critical(self, self.ctx.t("app_title"), msg)
-
-    # -- Mania skillset (Rosu Skillset Rating) whole-library scan (v1.6) ------
-    def _compute_msd(self) -> None:
-        if getattr(self, "_msd_running", False):   # button doubles as Cancel mid-run
-            self.ctx.services.cancel_msd()
-            self.lbl_msd_status.setText(self.ctx.t("cancelling"))
-            return
-        status = self.ctx.services.msd_status()
-        if status["in_library"] == 0:
-            QMessageBox.information(self, self.ctx.t("app_title"),
-                                    self.ctx.t("msd_no_library"))
-            return
-        self._msd_running = True
-        self.btn_msd.setText(self.ctx.t("btn_cancel"))
-        self.lbl_msd_status.setText(self.ctx.t("working"))
-        w = Worker(self.ctx.services.compute_msd)
-        self._threads.append(w)
-        w.progressed.connect(self._on_msd_progress)
-        w.succeeded.connect(self._msd_done)
-        w.failed.connect(self._msd_failed)
-        w.finished.connect(lambda: self._threads.remove(w) if w in self._threads else None)
-        w.start()
-
-    def _on_msd_progress(self, msg) -> None:
-        if isinstance(msg, dict) and msg.get("kind") == "msd":
-            self.lbl_msd_status.setText(f"{msg['done']}/{msg['total']}")
-
-    def _msd_done(self, res) -> None:
-        self._msd_running = False
-        self.btn_msd.setText(self.ctx.t("btn_compute_msd"))
-        if not (res["scanned"] or res["rated"] or res["remaining"]):
-            # Re-running after a completed scan legitimately reports 0/0/0 (already
-            # scanned sets are skipped). "0 rated, 0 scanned, 0 remaining" read as a
-            # failure, so say what actually happened instead.
-            self.lbl_msd_status.setText(self.ctx.t("msd_nothing_new"))
-        else:
-            self.lbl_msd_status.setText(self.ctx.t(
-                "msd_done", rated=res["rated"], scanned=res["scanned"],
-                remaining=res["remaining"]))
-        self.mw.search.reload()
-
-    def _msd_failed(self, msg) -> None:
-        self._msd_running = False
-        self.btn_msd.setText(self.ctx.t("btn_compute_msd"))
-        QMessageBox.critical(self, self.ctx.t("app_title"), msg)
-
-    # -- auto-import from installed osu! clients (item 15) -------------------
-    def _run_import(self, client: str) -> None:
-        self.btn_import_stable.setEnabled(False)
-        self.btn_import_lazer.setEnabled(False)
-        self.import_bar.setVisible(True)
-        self.lbl_import_status.setText(self.ctx.t("working"))
-        fn = (self.ctx.services.import_from_lazer if client == "lazer"
-              else self.ctx.services.import_from_stable)
-        w = Worker(fn)
-        self._threads.append(w)
-        w.progressed.connect(self._on_import_progress)
-        w.succeeded.connect(self._on_import_done)
-        w.failed.connect(self._on_import_failed)
-        w.finished.connect(lambda: self._threads.remove(w) if w in self._threads else None)
-        w.start()
-
-    def _on_import_progress(self, msg) -> None:
-        if isinstance(msg, dict) and msg.get("kind") == "import" and "done" in msg:
-            self.lbl_import_status.setText(f"{msg['done']}/{msg['total']}")
-        elif isinstance(msg, str):
-            self.lbl_import_status.setText(msg)
-
-    def _on_import_done(self, res) -> None:
-        self.import_bar.setVisible(False)
-        self._sync_client_import_buttons()   # re-show per-toggle, re-enable
-        t = self.ctx.t
-        client = "osu!lazer" if res.get("source") == "lazer" else "osu!(stable)"
-        if not res.get("found"):
-            self.lbl_import_status.setText(t("import_client_none", client=client))
-            return
-        if res.get("error"):
-            self.lbl_import_status.setText(t("import_lazer_error"))
-            return
-        self.lbl_import_status.setText(t("import_client_result", client=client,
-                                       new=res.get("new", 0), dup=res.get("duplicates", 0)))
-        self.mw.dashboard.refresh_scan()
-        self.mw.packs.reload()
-        self.mw.search.reload()          # reflect the new library rows live (item 7)
-
-    def _on_import_failed(self, msg) -> None:
-        self.import_bar.setVisible(False)
-        self._sync_client_import_buttons()   # re-show per-toggle, re-enable
-        QMessageBox.critical(self, self.ctx.t("app_title"), msg)
-
     # -- physical-copy toggle (guarded delete) -------------------------------
     def _set_saved_text(self, text: str) -> None:
         """Show a status on the shared saved-label WITHOUT hiding a live
@@ -1002,7 +636,8 @@ class SettingsTab(QWidget):
         w.start()
 
     # -- toggle commit model (v1.4.1) ----------------------------------------
-    _TOGGLE_KEYS = ("auto_backup", "clear_before", "check_updates",
+    _TOGGLE_KEYS = ("auto_backup", "clear_before", "check_updates", "crash_reports",
+                    "watch_enabled",
                     "auto_refresh", "enrich", "lazer_enabled", "stable_enabled",
                     "zip")
 
@@ -1049,6 +684,8 @@ class SettingsTab(QWidget):
         cfg.auto_prune = self.cb_auto_prune.isChecked()
         cfg.export_prune = self.cb_export_prune.isChecked()
         cfg.check_updates = self.cb_check_updates.isChecked()
+        cfg.crash_reports = self.cb_crash_reports.isChecked()
+        cfg.watch_enabled = self.cb_watch.isChecked()
         cfg.auto_refresh_on_tab = self.cb_auto_refresh.isChecked()
         cfg.enrich_from_api_enabled = self.cb_enrich.isChecked()
         cfg.lazer_enabled = self.cb_lazer_enabled.isChecked()
@@ -1058,6 +695,7 @@ class SettingsTab(QWidget):
         cfg.prune_mode = self.cbo_prune_mode.currentData() or "video_only"
         self.ctx.save_config()
         self.saved_label.setText(self.ctx.t("saved"))
+        self._rewatch()
         # auto-copy toggle changes whether the Dashboard shows its Copy button.
         self.mw.dashboard._sync_auto_copy()
 
@@ -1111,7 +749,7 @@ class SettingsTab(QWidget):
         auto = bool(self.ctx.cfg.settings_autosave)
         self.btn_save.setVisible(not auto)
         fields = (self.packs, self.output, self.library, self.osu,
-                  self.osu_stable, self.client_id, self.client_secret)
+                  self.osu_stable, self.watch, self.client_id, self.client_secret)
         if self._live_connected:                    # only disconnect what we connected
             for f in fields:
                 f.editingFinished.disconnect(self._commit_live)
@@ -1130,33 +768,24 @@ class SettingsTab(QWidget):
         if self.ctx.cfg.settings_autosave:
             self._save(silent=True)
 
-    def _sync_collections(self) -> None:
-        db_path = self.ctx.services.locate_stable_collection_db()
-        if db_path is None:
-            QMessageBox.warning(self, self.ctx.t("app_title"),
-                                self.ctx.t("sync_coll_no_stable"))
-            return
-        self.btn_sync_coll.setEnabled(False)
-        self.lbl_import_status.setText(self.ctx.t("working"))
-        w = Worker(lambda progress=None: self.ctx.services.sync_collections(db_path))
-        self._threads.append(w)
-        w.succeeded.connect(self._sync_collections_done)
-        w.failed.connect(self._sync_collections_failed)
-        w.finished.connect(lambda: self._threads.remove(w) if w in self._threads else None)
-        w.start()
-
-    def _sync_collections_done(self, res) -> None:
-        self.btn_sync_coll.setEnabled(True)
-        self.lbl_import_status.setText(self.ctx.t(
-            "sync_coll_done", tagged=res.get("tagged", 0),
-            collections=res.get("collections", 0)))
-        self.mw.search.reload()
-
-    def _sync_collections_failed(self, msg) -> None:
-        self.btn_sync_coll.setEnabled(True)
-        QMessageBox.critical(self, self.ctx.t("app_title"), msg)
-
     # -- save (paths + API) --------------------------------------------------
+    def _rewatch(self) -> None:
+        """Re-point the watch folder at the saved settings (the watcher is
+        created after this tab, so it may not exist yet)."""
+        fw = getattr(self.mw, "folder_watch", None)
+        if fw is not None:
+            fw.reconfigure()
+
+    def library_moved(self, path: str) -> None:
+        """A Library move switched ``cfg.library_dir``: show it, and count it as
+        saved — a later Save must not write the old folder back."""
+        if not path:
+            return
+        self.library.blockSignals(True)
+        self.library.setText(path)
+        self.library.blockSignals(False)
+        self._baseline["library"] = path
+
     def _save(self, silent: bool = False) -> bool:
         cfg = self.ctx.cfg
         packs = self.packs.text().strip()
@@ -1188,10 +817,12 @@ class SettingsTab(QWidget):
         cfg.osu_exe = cfg.osu_lazer_exe   # keep the legacy field mirrored
         cfg.osu_client_id = self.client_id.text().strip()
         cfg.osu_client_secret = self.client_secret.text().strip()
+        cfg.watch_folder = self.watch.text().strip()
         cfg.ensure_dirs()   # create the derived data/logs dirs (user dirs already made)
         self.ctx.save_config()   # persist the path/API unit (toggles saved above)
         self.ctx.log.info("SETTINGS_SAVE", changed="paths,toggles,api")
         self.saved_label.setText(self.ctx.t("saved"))
         self._baseline = self._snapshot()   # edits are now saved — clear dirty (item 11)
+        self._rewatch()
         self.mw.dashboard.refresh_scan()
         return True

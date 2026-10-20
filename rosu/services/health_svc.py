@@ -1,15 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 from __future__ import annotations
 import datetime as _dt
-import threading
-import time
-from pathlib import Path
 
-from .. import (
-    archives, config, excel_report, extractor, gaps, jobs, library, osu_api,
-    osu_import, parsing, search, db, msd, ratings
-)
-from ..models import ExtractPlan, ParsedPack
 
 _CLIENT_LABEL = {"lazer": "osu!lazer", "stable": "osu!(stable)"}
 
@@ -43,50 +35,53 @@ class HealthMixin:
             """Re-hash each physical Library ``.osz`` and compare to the SHA-256 that
             was recorded when it was backed up to Drive. Read-only — flags corruption
             or drift, never repairs. Sets without a stored hash count as ``unhashed``
-            (nothing to check against). ``max_files`` caps the run; cancellable."""
+            (nothing to check against). ``max_files`` caps how many Library rows
+            are visited; cancellable."""
             from .. import health
             from ..drive import bundle
             self._verify_cancel.clear()   # own token: never collides with import/Drive
             lib = self.cfg.library_path
             rows = [r for r in self.db.library_tracks()
                     if r.get("in_library") and r.get("filename")]
-            total = len(rows) if max_files is None else min(len(rows), max_files)
+            if max_files is not None:
+                rows = rows[:max_files]
+            total = len(rows)
             checked = ok = mismatch = unhashed = missing = pruned = 0
             mismatches: list[str] = []
             cancelled = False
-            for r in rows:
+            # Progress counts every row visited — a missing or pruned file is
+            # skipped, not hashed, but it still moves the bar to its total.
+            for seen, r in enumerate(rows, 1):
                 if self._verify_cancel.is_set():
                     cancelled = True
-                    break
-                if max_files is not None and checked >= max_files:
                     break
                 p = lib / r["filename"]
                 if not p.exists():
                     missing += 1
-                    continue
-                if r.get("is_pruned"):
+                elif r.get("is_pruned"):
                     # Pruning intentionally changes the file's bytes, so a hash
                     # taken at backup time is expected to no longer match — that
                     # is not corruption. Count it separately instead of raising
                     # a false "mismatch" alarm.
                     pruned += 1
-                    continue
-                try:
-                    computed = bundle.sha256_file(p)
-                except OSError:
-                    missing += 1
-                    continue
-                status = health.verify_classify(computed, r.get("drive_hash"))
-                checked += 1
-                if status == "ok":
-                    ok += 1
-                elif status == "mismatch":
-                    mismatch += 1
-                    mismatches.append(r["filename"])
                 else:
-                    unhashed += 1
+                    try:
+                        computed = bundle.sha256_file(p)
+                    except OSError:
+                        computed = None
+                        missing += 1
+                    if computed is not None:
+                        status = health.verify_classify(computed, r.get("drive_hash"))
+                        checked += 1
+                        if status == "ok":
+                            ok += 1
+                        elif status == "mismatch":
+                            mismatch += 1
+                            mismatches.append(r["filename"])
+                        else:
+                            unhashed += 1
                 if progress:
-                    progress({"kind": "verify", "done": checked, "total": total,
+                    progress({"kind": "verify", "done": seen, "total": total,
                               "name": r["filename"]})
             self.log.info("LIBRARY_VERIFY", checked=checked, ok=ok, mismatch=mismatch,
                           unhashed=unhashed, missing=missing, pruned=pruned,

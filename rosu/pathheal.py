@@ -79,6 +79,20 @@ def _weight(p: Path) -> int:
     return total
 
 
+def _same_path(a: Path, b: Path) -> bool:
+    try:
+        return os.path.normcase(os.path.abspath(a)) == os.path.normcase(os.path.abspath(b))
+    except (OSError, ValueError):
+        return False
+
+
+def _inside(p: Path, root: Path) -> bool:
+    """Is ``p`` the folder ``root`` or somewhere under it (by path, no I/O)?"""
+    a = os.path.normcase(os.path.abspath(p))
+    r = os.path.normcase(os.path.abspath(root))
+    return a == r or a.startswith(r.rstrip("\\/") + os.sep)
+
+
 def diagnose(cfg, base) -> Diagnosis:
     """Inspect configured paths vs. the exe-adjacent folders and propose fixes.
 
@@ -87,6 +101,13 @@ def diagnose(cfg, base) -> Diagnosis:
     """
     base = Path(base)
     fixes: dict[str, PathFix] = {}
+    old_root = Path(cfg.root)
+    if _same_path(old_root, base):
+        # The app did not move, so every configured path is deliberate — a
+        # Library moved to another drive (v1.9), even one that is offline right
+        # now, must never be "healed" back next to the exe.
+        return Diagnosis(status="healthy", base=str(base), root_old=cfg.root,
+                         root_new=cfg.root)
 
     # Pass 1 — data wins: re-point a folder only when the exe-adjacent copy holds
     # strictly more data than the configured one (recovers real data after a move).
@@ -95,6 +116,8 @@ def diagnose(cfg, base) -> Diagnosis:
         cand = base / name
         if cand == old_p:
             continue  # already the exe-adjacent default (ensure_dirs will create it)
+        if not _inside(old_p, old_root):
+            continue  # a custom location outside the old app folder: never moved with it
 
         w_old = _weight(old_p)
         w_cand = _weight(cand)
@@ -118,8 +141,8 @@ def diagnose(cfg, base) -> Diagnosis:
                 continue
             old_p = Path(getattr(cfg, attr))
             cand = base / name
-            if cand == old_p or _weight(old_p) > 0:
-                continue  # already home, or holds real data -> keep
+            if cand == old_p or _weight(old_p) > 0 or not _inside(old_p, old_root):
+                continue  # already home, holds real data, or a custom location -> keep
             fixes[attr] = PathFix(attr=attr, label=name, old=str(old_p),
                                   new=str(cand), new_exists=cand.exists(),
                                   new_has_data=_weight(cand) > 0)

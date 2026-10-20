@@ -24,6 +24,7 @@ from collections import Counter
 from pathlib import Path
 
 from .models import MODE_NAMES, DiffMeta, TrackMeta
+from .zipread import TooBig, read_capped
 
 # A real .osu is text and well under 1 MB even for dense marathon maps; cap the
 # uncompressed read so a crafted .osz can't decompression-bomb us into OOM now
@@ -249,10 +250,11 @@ def read_osz_full(osz_path: Path) -> tuple[TrackMeta, list[DiffMeta], dict[str, 
             diffs: list[DiffMeta] = []
             for name in osu_names:
                 try:
-                    if zf.getinfo(name).file_size > _MAX_OSU_BYTES:
-                        continue   # implausibly large .osu — skip (bomb guard)
-                    raw = zf.read(name)
-                except (KeyError, zipfile.BadZipFile, OSError):
+                    # Bounded read: the declared size alone can be forged.
+                    raw = read_capped(zf, zf.getinfo(name), _MAX_OSU_BYTES)
+                except TooBig:
+                    continue   # implausibly large .osu — skip (bomb guard)
+                except Exception:   # corrupt member: zlib error, CRC, EOF…
                     continue
                 raw_by_name[name] = raw
                 diffs.append(read_osu_diff(raw, name))
