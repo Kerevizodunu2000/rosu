@@ -116,3 +116,22 @@ def test_import_osz_files_reports_each_file(tmp_path, monkeypatch):
     res = svc.import_osz_files([good])
     assert res["failed"] == [str(good)] and res["imported"] == []
     db.close()
+
+
+def test_import_waits_while_the_library_folder_is_unavailable(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "save_config", lambda cfg: None)
+    cfg = config._fill_defaults(config.Config(root=str(tmp_path / "app"),
+                                              library_dir=str(tmp_path / "unplugged" / "Library")))
+    cfg.ensure_dirs()
+    (tmp_path / "unplugged" / "Library").rmdir()     # the drive went away
+    db = Database(cfg.db_path)
+    svc = Services(cfg, db, DummyLog())
+    downloads = tmp_path / "Downloads"
+    downloads.mkdir()
+    a = _osz(downloads / "1 A - T.osz")
+    staged = []
+    import tempfile
+    monkeypatch.setattr(tempfile, "mkdtemp", lambda **k: staged.append(k) or str(tmp_path / "x"))
+    res = svc.import_osz_files([a])
+    assert res["failed"] == [str(a)] and res["imported"] == [] and staged == []
+    db.close()

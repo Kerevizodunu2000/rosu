@@ -3,7 +3,7 @@
 
 Finds the same song across different beatmap sets: re-encodes, re-uploads,
 TV-size cuts. Each set's audio is summarised by Chromaprint's ``fpcalc`` (an
-LGPL tool bundled with the app; see ``THIRD_PARTY_NOTICES.md``) into a "raw"
+LGPL tool bundled with the app; see ``THIRD-PARTY-LICENSES.md``) into a "raw"
 fingerprint — one 32-bit value per ~0.124 s of sound. Two recordings of the
 same song share long runs of near-identical values, so:
 
@@ -68,16 +68,42 @@ def parse_fpcalc(text: str) -> tuple[float, list[int]] | None:
     return duration, values
 
 
-def compute(audio: Path, fpcalc: Path, timeout: float = 60) -> tuple[float, list[int]] | None:
-    """Fingerprint one audio file (None when fpcalc cannot read it)."""
+class ToolError(Exception):
+    """fpcalc could not be run, or did not finish (blocked, missing, timed
+    out): nothing is known about the audio, so the attempt is not remembered."""
+
+
+_FORMATS = {".mp3": "mp3", ".ogg": "ogg", ".wav": "wav", ".flac": "flac"}
+
+
+def _run(args: list[str], timeout: float) -> subprocess.CompletedProcess:
     try:
-        proc = subprocess.run(
-            [str(fpcalc), "-json", "-raw", "-length", str(FP_SECONDS), str(audio)],
-            capture_output=True, text=True, timeout=timeout,
+        return subprocess.run(
+            args, capture_output=True, text=True, timeout=timeout, stdin=subprocess.DEVNULL,
             encoding="utf-8", errors="replace",
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-    except (OSError, subprocess.SubprocessError, ValueError):
-        return None
+    except (OSError, subprocess.SubprocessError, ValueError) as exc:
+        raise ToolError(str(exc)[:200]) from exc
+
+
+def probe(fpcalc: Path, timeout: float = 20) -> bool:
+    """Whether ``fpcalc`` starts and answers at all (an antivirus block, a
+    damaged or wrong-architecture binary all fail here, once, up front)."""
+    try:
+        proc = _run([str(fpcalc), "-version"], timeout)
+    except ToolError:
+        return False
+    return proc.returncode == 0 and "fpcalc" in (proc.stdout + proc.stderr).lower()
+
+
+def compute(audio: Path, fpcalc: Path, timeout: float = 60) -> tuple[float, list[int]] | None:
+    """Fingerprint one audio file: None when fpcalc ran but could not read it
+    (worth remembering); :class:`ToolError` when fpcalc itself failed."""
+    args = [str(fpcalc), "-json", "-raw", "-length", str(FP_SECONDS)]
+    fmt = _FORMATS.get(Path(audio).suffix.lower())
+    if fmt:   # decode as what the set says it is, never as whatever it sniffs
+        args += ["-format", fmt]
+    proc = _run(args + [str(audio)], timeout)
     return parse_fpcalc(proc.stdout) if proc.returncode == 0 else None
 
 
@@ -90,13 +116,15 @@ def pack(values: list[int]) -> bytes:
     return a.tobytes()
 
 
-def unpack(blob: bytes) -> list[int]:
+def unpack(blob: bytes):
+    """The stored values as a compact ``array("I")`` (indexes and slices like a
+    list, at a tenth of the memory — a big Library holds many of these)."""
     from array import array
     a = array("I")
     a.frombytes(blob[: len(blob) - len(blob) % a.itemsize])
     if sys.byteorder != "little":
         a.byteswap()
-    return a.tolist()
+    return a
 
 
 # --- comparison --------------------------------------------------------------------
@@ -131,25 +159,20 @@ def match(a: list[int], b: list[int], min_overlap: int = MIN_OVERLAP) -> tuple[f
 def same_song_groups(fps: dict, threshold: float = SAME_SONG) -> list[list]:
     """Groups (2+ members, by key) of fingerprints that are the same song.
 
-    ``fps`` maps any key (a track id) to its raw values. Pairs are found
+    ``fps`` maps any key (a track id) to its raw values. Candidates are found
     through an inverted index of value prefixes, scored with :func:`match`,
-    and joined transitively."""
+    and joined transitively. Candidates are counted one set at a time, so the
+    memory stays proportional to the Library, not to the number of pairs."""
+    keys = list(fps)
+    order = {k: i for i, k in enumerate(keys)}
     index: dict[int, list] = defaultdict(list)
-    for key, values in fps.items():
-        seen = set()
-        for v in values[:_INDEX_ITEMS:_INDEX_STEP]:
-            k = v >> _KEY_SHIFT
-            if k not in seen:
-                seen.add(k)
-                index[k].append(key)
-    shared: Counter = Counter()
-    for keys in index.values():
-        if len(keys) < 2 or len(keys) > _COMMON:
-            continue
-        for i, x in enumerate(keys):
-            for y in keys[i + 1:]:
-                shared[(x, y)] += 1
-    parent = {k: k for k in fps}
+    prefixes: dict = {}
+    for key in keys:
+        own = {v >> _KEY_SHIFT for v in fps[key][:_INDEX_ITEMS:_INDEX_STEP]}
+        prefixes[key] = own
+        for k in own:
+            index[k].append(key)
+    parent = {k: k for k in keys}
 
     def root(k):
         while parent[k] != k:
@@ -157,13 +180,21 @@ def same_song_groups(fps: dict, threshold: float = SAME_SONG) -> list[list]:
             k = parent[k]
         return k
 
-    for (x, y), n in shared.items():
-        if n < _MIN_SHARED or root(x) == root(y):
-            continue
-        if match(fps[x], fps[y])[0] >= threshold:
-            parent[root(y)] = root(x)
+    for x in keys:
+        shared: Counter = Counter()
+        for k in prefixes[x]:
+            members = index[k]
+            if 2 <= len(members) <= _COMMON:
+                for y in members:
+                    if order[y] > order[x]:
+                        shared[y] += 1
+        for y, n in shared.items():
+            if n < _MIN_SHARED or root(x) == root(y):
+                continue
+            if match(fps[x], fps[y])[0] >= threshold:
+                parent[root(y)] = root(x)
     groups: dict = defaultdict(list)
-    for k in fps:
+    for k in keys:
         groups[root(k)].append(k)
     return sorted((sorted(g, key=str) for g in groups.values() if len(g) > 1),
                   key=lambda g: str(g[0]))

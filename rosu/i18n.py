@@ -1913,6 +1913,13 @@ STRINGS: dict[str, dict[str, str]] = {
               "edildi."},
     "ss_unreadable": {"en": "{n} sets have audio that could not be read.",
                       "tr": "{n} setin sesi okunamadı."},
+    "ss_retry": {"en": "{n} sets could not be checked this time (they are tried again next scan).",
+                 "tr": "{n} set bu sefer kontrol edilemedi (bir sonraki taramada yeniden denenir)."},
+    "ss_fpcalc_broken": {
+        "en": "The audio fingerprint tool (fpcalc) does not start. An antivirus may have blocked "
+              "or quarantined it — allow it, or reinstall Rosu, then scan again.",
+        "tr": "Ses parmak izi aracı (fpcalc) başlamıyor. Bir antivirüs onu engellemiş ya da "
+              "karantinaya almış olabilir — izin ver ya da Rosu'yu yeniden kur, sonra yeniden tara."},
     "ss_group": {"en": "{name} — {n} sets", "tr": "{name} — {n} set"},
     "ss_col_diffs": {"en": "Difficulties", "tr": "Zorluklar"},
     "ss_select_extras": {"en": "Select extras", "tr": "Fazlalıkları seç"},

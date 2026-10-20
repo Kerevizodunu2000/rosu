@@ -116,6 +116,12 @@ class LibraryMixin:
                     need += src.stat().st_size
                 except OSError:
                     pass
+            if not self.cfg.library_path.is_dir():
+                # The Library's drive is unplugged (or the folder is gone): do not
+                # stage anything; the watcher waits and tries again later.
+                res["failed"] = [str(p) for p in srcs]
+                self.log.error("watch:library", f"Library folder not available: {self.cfg.library_path}")
+                return res
             stage = Path(tempfile.mkdtemp(prefix="rosu_watch_"))
             try:
                 margin = 256 * 1024 * 1024
@@ -167,6 +173,7 @@ class LibraryMixin:
             import os
             import shutil
             import tempfile
+            from ..fsutil import place_new
             lib = self.cfg.library_path.resolve()
             out = self.cfg.output_path
             out.mkdir(parents=True, exist_ok=True)
@@ -195,9 +202,7 @@ class LibraryMixin:
                     tmp = Path(tmp_name)
                     shutil.copyfile(src, tmp)
                     shutil.copystat(src, tmp)
-                    if dest.exists():   # appeared while copying: never replace it
-                        raise FileExistsError(f"{dest.name} appeared in Output")
-                    os.replace(tmp, dest)
+                    place_new(tmp, dest)   # never replaces a file that appeared meanwhile
                     tmp = None
                     res["copied"] += 1
                 except OSError as exc:

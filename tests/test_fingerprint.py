@@ -27,7 +27,7 @@ def test_parse_and_pack_round_trip():
     assert fpm.parse_fpcalc("not json") is None
     assert fpm.parse_fpcalc('{"duration": 1, "fingerprint": []}') is None
     values = _song(3, 50)
-    assert fpm.unpack(fpm.pack(values)) == values
+    assert list(fpm.unpack(fpm.pack(values))) == values
 
 
 def test_match_scores_same_song_high_and_aligns_offsets():

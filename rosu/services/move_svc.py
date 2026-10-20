@@ -28,6 +28,7 @@ import tempfile
 from pathlib import Path
 
 from .. import jobs
+from ..fsutil import dir_writable, place_new
 
 _BUF = 1024 * 1024
 _FREE_MARGIN = 512 * 1024 * 1024
@@ -90,7 +91,9 @@ def _copy_verified(src: Path, dest: Path, cancel) -> bool | None:
     tmp = Path(tmp_name)
     h = hashlib.sha256()
     try:
-        with open(src, "rb") as fin, open(fd, "wb") as fout:
+        # The temp file's handle is taken over first, so it is closed even
+        # when the source cannot be opened.
+        with open(fd, "wb") as fout, open(src, "rb") as fin:
             for block in iter(lambda: fin.read(_BUF), b""):
                 if cancel():
                     raise InterruptedError
@@ -101,9 +104,10 @@ def _copy_verified(src: Path, dest: Path, cancel) -> bool | None:
         if _sha256(tmp) != h.hexdigest() or tmp.stat().st_size != src.stat().st_size:
             raise OSError(f"{src.name}: the copy does not match the original")
         shutil.copystat(src, tmp)
-        if dest.exists():   # appeared while copying: never replace it
-            raise OSError(f"{dest.name}: a file with this name appeared at the destination")
-        os.replace(tmp, dest)
+        try:
+            place_new(tmp, dest)   # never replaces a file that appeared meanwhile
+        except FileExistsError:
+            raise OSError(f"{dest.name}: a file with this name appeared at the destination") from None
         return True
     except InterruptedError:
         _unlink(tmp)
@@ -149,7 +153,7 @@ class LibraryMoveMixin:
             existing = dest
             while not existing.exists() and existing.parent != existing:
                 existing = existing.parent
-            if not existing.is_dir() or not os.access(existing, os.W_OK):
+            if not existing.is_dir() or not dir_writable(existing):
                 return {**base, "error": "not_writable"}
             files, dirs, links = _library_files(lib)
             total = same = 0

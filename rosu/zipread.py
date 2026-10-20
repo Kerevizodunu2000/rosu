@@ -1,9 +1,11 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Bounded reads of zip members (v1.9 review).
 
-``ZipFile.read`` trusts the size a member *declares*: a forged header can claim
-1 KB and inflate to gigabytes before the length check ever runs. These helpers
-read through the decompressor in bounded steps and stop past ``cap``.
+``ZipFile.read`` reads a whole member into memory in one go, and a member's
+header may declare any size up to its real one. These helpers refuse a member
+that declares more than ``cap``, read through the decompressor in bounded
+steps, and stop past ``cap`` whatever the header said — so one crafted ``.osz``
+cannot make Rosu hold gigabytes in memory.
 """
 from __future__ import annotations
 

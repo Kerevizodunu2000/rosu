@@ -29,6 +29,27 @@ the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   checks a pinned SHA-256 (CI runs it before building).
 
 ### Fixed
+Found by the v1.10 code and security review (before release):
+- A same-song scan whose fpcalc was blocked (an antivirus), timed out or could not write its
+  temp file no longer marks those sets "unreadable" for good: only audio fpcalc really could
+  not read is remembered; the rest is tried again next scan, and a fpcalc that does not start
+  at all is reported before anything is scanned.
+- Sets recycled from the same-song list are marked as no longer in the Library (they kept
+  showing as present until a Library refresh).
+- Grouping keeps its memory proportional to the Library size (it held every candidate pair at
+  once) and stores fingerprints compactly — large Libraries scan without a memory spike.
+- Fingerprints of sets that left the Library no longer take part in grouping.
+- The same-song dialog stops its scan however it is closed, and its Recycle button waits for
+  a fresh list after "Scan again".
+- fpcalc decodes each file as the format its name says, and gets no input stream.
+- Watch folder: one import batch at a time (saving other settings no longer queues the same
+  files twice), a cancelled import counts as failed, failed imports wait 5 min, then 10, 20 …
+  up to 2 h, and nothing is staged while the Library's drive is unplugged.
+- Move Library and Copy to Output never replace a file that appears at the very last moment
+  (an exclusive rename/link instead of a check-then-replace); the move preview tests whether
+  the destination is writable by creating a throw-away file (Windows ignores the old check);
+  a source that cannot be opened no longer leaks a file handle and a stray temp file.
+
 Found by the v1.9 code and security review:
 - **Move Library** is safer end to end: each file is written to a private temp file,
   synced and hash-checked before it takes its real name; Output, Packs, `data` and `logs`

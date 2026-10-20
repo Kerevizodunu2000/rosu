@@ -92,6 +92,10 @@ class SameSongDialog(QDialog):
         if self._worker is not None and self._worker.isRunning():
             return
         self.btn_scan.setEnabled(False)
+        # The list on screen is about to be replaced: nothing in it can be
+        # recycled until the new one is in.
+        self.btn_recycle.setEnabled(False)
+        self.btn_extras.setEnabled(False)
         self.bar.setRange(0, 0)
         self.bar.setVisible(True)
         self.lbl_status.setText(self.ctx.t("ss_scanning"))
@@ -120,13 +124,15 @@ class SameSongDialog(QDialog):
         self.bar.setVisible(False)
         self.btn_scan.setEnabled(True)
         self.lbl_status.setText(msg)
+        self._fill()
 
     def _on_scanned(self, res: dict) -> None:
         t = self.ctx.t
         self.bar.setVisible(False)
         self.btn_scan.setEnabled(True)
-        if res.get("error") == "no_fpcalc":
-            self.lbl_status.setText(t("ss_no_fpcalc"))
+        if res.get("error") in ("no_fpcalc", "fpcalc_broken"):
+            self.lbl_status.setText(t(f"ss_{res['error']}"))
+            self._fill()
             return
         if res.get("cancelled"):
             return
@@ -135,6 +141,8 @@ class SameSongDialog(QDialog):
                  sets=sum(len(g) for g in self._groups), checked=res.get("fingerprinted", 0))
         if res.get("failed"):
             text += " " + t("ss_unreadable", n=res["failed"])
+        if res.get("retry"):
+            text += " " + t("ss_retry", n=res["retry"])
         self.lbl_status.setText(text)
         self._fill()
 
@@ -209,6 +217,8 @@ class SameSongDialog(QDialog):
         self.plan = chosen
         self.accept()
 
-    def reject(self) -> None:
-        self._stop = True   # the scan stops at its next set; the Worker keeps itself alive
-        super().reject()
+    def done(self, result: int) -> None:
+        # However the dialog closes, a running scan stops at its next set (the
+        # Worker keeps itself alive until then).
+        self._stop = True
+        super().done(result)

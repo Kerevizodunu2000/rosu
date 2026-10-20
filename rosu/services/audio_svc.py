@@ -12,11 +12,13 @@ from __future__ import annotations
 import shutil
 import tempfile
 import zipfile
+import zlib
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from .. import fingerprint, jobs
-from ..zipread import copy_capped, read_capped
+from .core import now_iso
+from ..zipread import TooBig, copy_capped, read_capped
 from ..columns import has_library_copy
 
 _AUDIO_CAP = 64 * 1024 * 1024     # no beatmap audio is this big
@@ -38,8 +40,17 @@ def _audio_member(zf: zipfile.ZipFile) -> zipfile.ZipInfo | None:
     return None
 
 
+# What a broken archive raises (remembered as "no readable audio"); an OSError
+# — the file locked by another program, a full temp disk — is not remembered.
+_BAD_ARCHIVE = (zipfile.BadZipFile, zipfile.LargeZipFile, TooBig, NotImplementedError,
+                RuntimeError, EOFError, zlib.error, ValueError)
+
+
 def _fingerprint_osz(osz: Path, fpcalc: Path, work: Path) -> tuple[float, list[int]] | None:
-    """Extract one set's audio to ``work`` and fingerprint it."""
+    """Extract one set's audio to ``work`` and fingerprint it. None when the set
+    has no readable audio; :class:`fingerprint.ToolError` when this attempt
+    says nothing about the set (fpcalc failed, or a file could not be read or
+    written), so it is tried again next time."""
     tmp = None
     try:
         with zipfile.ZipFile(osz) as zf:
@@ -50,10 +61,14 @@ def _fingerprint_osz(osz: Path, fpcalc: Path, work: Path) -> tuple[float, list[i
             tmp = Path(name)
             with open(fd, "wb") as out:
                 copy_capped(zf, info, out, _AUDIO_CAP)
-    except Exception:   # unreadable / truncated / encrypted archive
+    except _BAD_ARCHIVE:
         if tmp is not None:
             tmp.unlink(missing_ok=True)
         return None
+    except OSError as exc:
+        if tmp is not None:
+            tmp.unlink(missing_ok=True)
+        raise fingerprint.ToolError(str(exc)[:200]) from exc
     try:
         return fingerprint.compute(tmp, fpcalc)
     finally:
@@ -63,12 +78,17 @@ def _fingerprint_osz(osz: Path, fpcalc: Path, work: Path) -> tuple[float, list[i
 class AudioMixin:
         def fingerprint_library(self, progress=None, cancel=None) -> dict:
             """Fingerprint every Library set that has no up-to-date fingerprint.
-            ``{"computed","cached","failed","cancelled"}`` or ``{"error":
-            "no_fpcalc"}``. Several fpcalc processes run side by side; the
-            results are written to the database from this thread."""
+            ``{"computed","cached","failed","retry","cancelled"}`` or ``{"error":
+            "no_fpcalc" | "fpcalc_broken"}``. Several fpcalc processes run side
+            by side; the results are written to the database from this thread.
+            A set without readable audio is remembered (``failed``); one whose
+            attempt failed for another reason is not (``retry``)."""
             fpcalc = fingerprint.fpcalc_path()
             if fpcalc is None:
                 return {"error": "no_fpcalc"}
+            if not fingerprint.probe(fpcalc):
+                self.log.error("fingerprint", f"fpcalc does not run: {fpcalc}")
+                return {"error": "fpcalc_broken"}
             _eff = cancel if cancel is not None else (lambda: False)
             lib = self.cfg.library_path
             known = self.db.audio_fingerprint_stamps()
@@ -88,7 +108,7 @@ class AudioMixin:
                     cached += 1
                 else:
                     todo.append((int(r["id"]), p, st.st_size, st.st_mtime_ns))
-            res = {"computed": 0, "cached": cached, "failed": 0, "cancelled": False}
+            res = {"computed": 0, "cached": cached, "failed": 0, "retry": 0, "cancelled": False}
             work = Path(tempfile.mkdtemp(prefix="rosu_fp_"))
             try:
                 with ThreadPoolExecutor(fingerprint.cpu_budget()) as pool:
@@ -101,8 +121,14 @@ class AudioMixin:
                             for _item, f in futures:
                                 f.cancel()
                             break
-                        out = fut.result()
-                        if out is None:
+                        try:
+                            out = fut.result()
+                        except fingerprint.ToolError:
+                            res["retry"] += 1     # not remembered: tried again next run
+                            out = False
+                        if out is False:
+                            pass
+                        elif out is None:
                             res["failed"] += 1
                             # Remember the miss too, so a set without readable
                             # audio is not retried on every run.
@@ -123,8 +149,13 @@ class AudioMixin:
         def same_song_report(self, progress=None) -> dict:
             """Groups of Library sets whose songs match, each set with what the
             UI shows. ``{"groups": [[set, …], …], "fingerprinted": n}``."""
+            # Only sets still in the Library take part: a stale row could
+            # otherwise join two unrelated groups through a set that is gone.
+            in_library = {int(r["id"]) for r in self.db.library_tracks()
+                          if r.get("filename") and has_library_copy(r)}
             fps = {tid: fingerprint.unpack(blob)
-                   for tid, blob in self.db.audio_fingerprints().items() if blob}
+                   for tid, blob in self.db.audio_fingerprints().items()
+                   if blob and tid in in_library}
             groups = fingerprint.same_song_groups(fps)
             rows = {int(r["id"]): r for r in self.db.library_tracks()}
             lib = self.cfg.library_path
@@ -159,7 +190,16 @@ class AudioMixin:
             job.ctx["options"] = {"sets": len(names)}
 
             def s_remove(ctx, progress, cancel):
-                ctx["result"] = self.dedup_library(names=names, progress=progress, cancel=cancel)
+                res = self.dedup_library(names=names, progress=progress, cancel=cancel)
+                # Unlike a duplicate, each of these sets is its own Library entry:
+                # once its file is gone, the Library no longer has it.
+                ids = {r["filename"]: int(r["id"]) for r in self.db.library_tracks()
+                       if r.get("filename") in names}
+                when = now_iso()
+                for name in names:
+                    if name in ids and not (lib / name).exists():
+                        self.db.set_library_state(ids[name], False, "disappeared", when)
+                ctx["result"] = res
 
             job.steps = [jobs.Step("job_step_remove", jobs.Lane.DISK, s_remove)]
             job.finalize = lambda ctx: ctx.get("result", {"removed": 0, "freed_bytes": 0, "groups": 0})

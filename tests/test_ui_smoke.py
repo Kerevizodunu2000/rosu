@@ -8,6 +8,7 @@ lost-map button, Output view, update banner). No network is used: the startup
 update check is disabled for the test.
 """
 import os
+from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -910,7 +911,10 @@ def test_autosaved_crash_report_toggle_leaves_settings_clean(qapp, tmp_path, mon
 
 def test_folder_watcher_queues_new_downloads_only(qapp, tmp_path, monkeypatch):
     import zipfile
+    from types import SimpleNamespace
+    from rosu import jobs
     from rosu.ui.main_window import MainWindow
+    import rosu.ui.folder_watch as fw_mod
     ctx = _ctx(tmp_path, monkeypatch)
     downloads = tmp_path / "Downloads"
     downloads.mkdir()
@@ -918,41 +922,73 @@ def test_folder_watcher_queues_new_downloads_only(qapp, tmp_path, monkeypatch):
         zf.writestr("a.osu", "x")
     win = MainWindow(ctx, qapp)
     queued = []
-    monkeypatch.setattr(win.shortcuts, "queue_watch_import", lambda paths: queued.append(paths))
+
+    def queue(paths):
+        job = SimpleNamespace(state=jobs.State.PENDING, paths=[str(p) for p in paths])
+        queued.append(job)
+        return job
+    monkeypatch.setattr(win.shortcuts, "queue_watch_import", queue)
+    clock = [1000.0]
+    monkeypatch.setattr(fw_mod.time, "monotonic", lambda: clock[0])
+    fw = win.folder_watch
     ctx.cfg.watch_enabled = True
     ctx.cfg.watch_folder = str(downloads)
-    win.folder_watch.reconfigure()
-    assert win.folder_watch.folder == downloads
+    fw.reconfigure()
+    assert fw.folder == downloads
     with zipfile.ZipFile(downloads / "2 new.osz", "w") as zf:
         zf.writestr("b.osu", "y")
-    win.folder_watch.scan()          # first look: new file seen, not settled
-    win.folder_watch.scan()          # unchanged since: taken
-    assert [[p.name for p in batch] for batch in queued] == [["2 new.osz"]]
-    win.folder_watch.scan()
-    assert len(queued) == 1          # queued once while the import runs
-    new = str(downloads / "2 new.osz")
-    win.folder_watch.job_done({"failed": [new]})
-    win.folder_watch.scan()
+    fw.scan()                        # first look: new file seen, not settled
+    fw.scan()                        # unchanged since: taken
+    assert [[Path(p).name for p in j.paths] for j in queued] == [["2 new.osz"]]
+    fw.scan()
+    assert len(queued) == 1          # one batch at a time, never queued twice
+    fw.reconfigure()                 # saving other settings leaves the watch alone
+    fw.scan()
+    assert len(queued) == 1 and fw._job is queued[0]
+    new = queued[0].paths[0]
+    queued[0].state = jobs.State.FAILED
+    fw.job_failed([new])
+    fw.scan()
     assert len(queued) == 1          # a failed import waits before it is retried
-    assert win.folder_watch._retry.isActive()
-    import rosu.ui.folder_watch as fw_mod
-    monkeypatch.setattr(fw_mod.time, "monotonic", lambda: 10**9)
-    win.folder_watch.scan()
+    assert fw._retry.isActive()
+    clock[0] += fw_mod.RETRY_S + 1
+    fw.scan()
     assert len(queued) == 2          # retried after the pause
-    win.folder_watch.job_done({"imported": [new]})
-    win.folder_watch.reconfigure()   # restart: the handled file is remembered
-    win.folder_watch.scan()
-    win.folder_watch.scan()
+    fw.job_done({"failed": [new]})   # failed again: the pause doubles
+    clock[0] += fw_mod.RETRY_S + 1
+    fw.scan()
     assert len(queued) == 2
+    clock[0] += fw_mod.RETRY_S
+    fw.scan()
+    assert len(queued) == 3
+    queued[-1].state = jobs.State.CANCELLED   # cancelled in the queue: like a failure
+    fw.scan()
+    assert fw._job is None and len(queued) == 3
+    clock[0] += 4 * fw_mod.RETRY_S + 1
+    fw.scan()
+    assert len(queued) == 4
+    fw.job_done({"imported": [new]})
+    ctx.cfg.watch_folder = str(tmp_path)          # another folder, then back again
+    fw.reconfigure()
+    ctx.cfg.watch_folder = str(downloads)
+    fw.reconfigure()                 # restart: the handled file is remembered
+    fw.scan()
+    fw.scan()
+    assert len(queued) == 4
     with zipfile.ZipFile(downloads / "3 while closed.osz", "w") as zf:
         zf.writestr("c.osu", "z")
-    win.folder_watch.reconfigure()   # a download that arrived while Rosu was closed
-    win.folder_watch.scan()
-    win.folder_watch.scan()
-    assert [p.name for p in queued[-1]] == ["3 while closed.osz"]
     ctx.cfg.watch_enabled = False
-    win.folder_watch.reconfigure()
-    assert win.folder_watch.folder is None
+    fw.reconfigure()
+    ctx.cfg.watch_enabled = True
+    fw.reconfigure()                 # a download that arrived while Rosu was closed
+    fw.scan()
+    fw.scan()
+    assert queued[-1].paths[0].endswith("3 while closed.osz")
+    fw.job_done({"imported": ["somewhere/else.osz"]})   # a stale result changes nothing
+    assert fw._job is queued[-1]
+    ctx.cfg.watch_enabled = False
+    fw.reconfigure()
+    assert fw.folder is None
     win.close()
     ctx.db.close()
 

@@ -819,14 +819,20 @@ class ShortcutsTab(QWidget):
         recycle the ones picked — preview + countdown in the dialog (v1.10)."""
         from .same_song_dialog import SameSongDialog
         dlg = SameSongDialog(self.ctx, self)
-        if dlg.exec() != QDialog.Accepted or not dlg.plan:
+        accepted = dlg.exec() == QDialog.Accepted
+        plan = dlg.plan
+        dlg.deleteLater()
+        if not accepted or not plan:
             return
-        self._enqueue(self.services.build_recycle_sets_job(dlg.plan),
-                      ("same_song", tuple(sorted(dlg.plan))))
+        self._enqueue(self.services.build_recycle_sets_job(plan),
+                      ("same_song", tuple(sorted(plan))))
 
-    def queue_watch_import(self, paths) -> None:
-        """New files in the watched folder (v1.9) → a quiet disk-lane import."""
-        self._enqueue(self.services.build_watch_import_job(paths))
+    def queue_watch_import(self, paths):
+        """New files in the watched folder (v1.9) → a quiet disk-lane import.
+        Returns the queued job (the watcher follows its state)."""
+        job = self.services.build_watch_import_job(paths)
+        self._enqueue(job)
+        return job
 
     def on_lazer_slim(self) -> None:
         """The guided osu!lazer round-trip (see :mod:`rosu.ui.lazer_slim_dialog`)."""
