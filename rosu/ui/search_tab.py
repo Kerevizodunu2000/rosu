@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
 )
 
 from .. import query
+from ..columns import has_library_copy, library_status_text, mode_text, where_marks
 from ..i18n import human_duration
 from ..workers import Worker
 from .copy_table import CopyTable, SortItem
@@ -283,9 +284,7 @@ class SearchTab(QWidget):
         try:
             self.table.setRowCount(len(rows))
             for r, row in enumerate(rows):
-                status = row.get("library_status") or "-"
-                if status == "disappeared" and row.get("status_changed_at"):
-                    status = f"disappeared @ {row['status_changed_at']}"
+                status = library_status_text(row, self.ctx.t)
                 # `is_pruned` used to exist ONLY to decide whether the row got a
                 # repair context-menu entry — invisible otherwise. And it is
                 # per-LOCATION: a set can be stripped in the Library and/or in
@@ -298,22 +297,7 @@ class SearchTab(QWidget):
                 length = row.get("length_seconds")
                 attempts = row.get("copy_attempts", 0)
                 bid = row.get("beatmapset_id")
-                loc_marks = []
-                in_lazer = row.get("in_osu_lazer")
-                in_stable = row.get("in_osu_stable")
-                if in_lazer:
-                    loc_marks.append("🎮")           # osu!lazer
-                if in_stable:
-                    loc_marks.append("🕹️")           # osu!(stable)
-                if not in_lazer and not in_stable and row.get("in_osu"):
-                    loc_marks.append("🎮")           # legacy flag, client unknown
-                if row.get("in_library"):
-                    loc_marks.append("💾")           # Library
-                if row.get("in_drive"):
-                    loc_marks.append("☁️")           # Drive backup
-                loc_weight = ((4 if row.get("in_osu") else 0)
-                              + (2 if row.get("in_library") else 0)
-                              + (1 if row.get("in_drive") else 0))
+                loc_marks, loc_weight = where_marks(row)
                 diffs = row.get("difficulties") or []
                 star_text, star_sort, star_tip = _star_cell(diffs)
                 key_text, key_sort = _key_cell(diffs)
@@ -328,7 +312,7 @@ class SearchTab(QWidget):
                     (f"{bpm:g}" if bpm else "", bpm or 0.0),
                     (human_duration(length), length or 0),
                     (row.get("creator") or "", None),
-                    (row.get("mode") or "", None),
+                    (mode_text(diffs, row.get("mode")), None),  # every diff's mode
                     (star_text, star_sort),    # each diff's exact star; sort on hardest
                     (key_text, key_sort),      # mania key counts (blank for other modes)
                     (skill_text, skill_sort),  # mania Rosu Skillset overall + dominant
@@ -365,7 +349,7 @@ class SearchTab(QWidget):
                 is_missing = not row.get("in_library")
                 is_pruned = row.get("is_pruned")
                 if row.get("filename"):
-                    if not is_missing:
+                    if has_library_copy(row):   # never point at a memory-only set
                         self.table.set_row_path(r, self.ctx.cfg.library_path / row["filename"])
                     if is_missing or is_pruned:
                         self.table.set_repair_filename(r, row["filename"])

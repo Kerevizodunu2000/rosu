@@ -10,6 +10,22 @@ the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+- **Search "Mode" column showed only one mode for mixed sets.** It read the mode of
+  the alphabetically-first difficulty, stored once and never refreshed, while
+  `mode=mania` and the Filters panel match any difficulty. A set with an osu! and a
+  7K chart read "osu!" yet appeared under `mode=mania`. Mode (Search and Artists) now
+  lists every difficulty's mode, e.g. "osu!, osu!mania".
+- **Sets imported straight from osu!(stable) / osu!lazer had blank Mode, Keys, Star,
+  BPM and length** until a "Refresh Library", and permanently with physical copies
+  off. The import now reads each new set's difficulties once, like unpacking does.
+- **Memory-only sets showed the 💾 Library marker** and offered "Open location" for a
+  file that was never kept. The Library Health check also counted them as dead links.
+- **The Library status column showed raw English tokens** ("present", "memory",
+  "disappeared") in the Turkish UI; it is now translated.
+- **Where column sorting** grouped osu!(stable)-only sets with osu!lazer ones; the sort
+  now follows the icons shown.
+
 ## [1.7.1] - 2026-07-27
 
 > **First published release of the v1.7 line.** v1.7.0 was tagged in the changelog but never released, so this build carries both: the v1.7.0 work below and everything in this section. Upgrading from v1.6.3 gets all of it at once.

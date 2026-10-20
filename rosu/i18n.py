@@ -185,6 +185,11 @@ STRINGS: dict[str, dict[str, str]] = {
     "browse_all": {"en": "Showing all {n} tracks in your library.",
                    "tr": "Kütüphanendeki {n} müzik listeleniyor."},
     "lib_status_pruned": {"en": "pruned ✂", "tr": "prune edildi ✂"},
+    "lib_status_present": {"en": "present", "tr": "mevcut"},
+    "lib_status_memory": {"en": "memory only", "tr": "yalnızca hafıza"},
+    "lib_status_disappeared": {"en": "disappeared", "tr": "kayboldu"},
+    "lib_status_disappeared_at": {"en": "disappeared @ {when}",
+                                  "tr": "kayboldu @ {when}"},
     "pruned_tip": {
         "en": "Pruned in: {where}. Copies of this set anywhere else — including "
               "osu!lazer — were NOT touched.\n\nPrune removed the heavy files "

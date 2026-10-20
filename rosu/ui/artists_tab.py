@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout, QWidget,
 )
 
+from ..columns import mode_text
 from ..i18n import human_duration
 from . import wheel_guard
 from .copy_table import CopyTable, SortItem
@@ -201,7 +202,7 @@ class ArtistsTab(QWidget):
                     (f"{bpm:g}" if bpm else "", bpm or 0.0),
                     (human_duration(length), length or 0),
                     (row.get("creator") or "", None),
-                    (row.get("mode") or "", None),
+                    (mode_text(row.get("difficulties") or [], row.get("mode")), None),
                     (", ".join(row.get("sources", [])), None),
                 ]
                 for c, (text, sort_val) in enumerate(cells):
