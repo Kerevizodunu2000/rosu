@@ -410,6 +410,10 @@ class ShortcutsTab(QWidget):
         self.btn_move_library = QPushButton(objectName="secondary")
         self.btn_move_library.clicked.connect(self.on_move_library)
         crow.addWidget(self.btn_move_library)
+        # v1.10: the same song in different sets (audio fingerprints).
+        self.btn_same_song = QPushButton(objectName="secondary")
+        self.btn_same_song.clicked.connect(self.on_same_song)
+        crow.addWidget(self.btn_same_song)
         crow.addStretch(1)
         root.addLayout(crow)
 
@@ -488,6 +492,8 @@ class ShortcutsTab(QWidget):
         self.btn_drive_browse.setToolTip(t("tip_drive_browse"))
         self.btn_move_library.setText(t("btn_move_library"))
         self.btn_move_library.setToolTip(t("tip_move_library"))
+        self.btn_same_song.setText(t("btn_same_song"))
+        self.btn_same_song.setToolTip(t("tip_same_song"))
         self.jobqueue_box.setTitle(t("sc_jobqueue_title"))
         self.btn_clear_finished.setText(t("job_clear_finished"))
         self.queue_empty.setText(t("queue_empty"))
@@ -808,6 +814,16 @@ class ShortcutsTab(QWidget):
         self._enqueue(self.services.build_library_move_job(plan["dest"], plan["remove_old"]),
                       ("library_move", plan["dest"]))
 
+    def on_same_song(self) -> None:
+        """Find the same song in different Library sets (audio fingerprints) and
+        recycle the ones picked — preview + countdown in the dialog (v1.10)."""
+        from .same_song_dialog import SameSongDialog
+        dlg = SameSongDialog(self.ctx, self)
+        if dlg.exec() != QDialog.Accepted or not dlg.plan:
+            return
+        self._enqueue(self.services.build_recycle_sets_job(dlg.plan),
+                      ("same_song", tuple(sorted(dlg.plan))))
+
     def queue_watch_import(self, paths) -> None:
         """New files in the watched folder (v1.9) → a quiet disk-lane import."""
         self._enqueue(self.services.build_watch_import_job(paths))
@@ -1091,6 +1107,8 @@ class ShortcutsTab(QWidget):
         (the queue row shows the × and carries the detail as a tooltip)."""
         t = self.ctx.t
         err = job.error or ""
+        if job.kind == "watch_import":
+            self.mw.folder_watch.job_failed(job.ctx.get("paths") or [])
         if job.kind == "export" and job.ctx.get("written"):
             archives = [str(a) for a in job.ctx["written"]]
             location = str(Path(archives[0]).parent)
@@ -1175,6 +1193,7 @@ class ShortcutsTab(QWidget):
 
     def _present_watch_import(self, res) -> None:
         # Auto-import is background work: a status line, never a popup.
+        self.mw.folder_watch.job_done(res)
         self._set_status("watch_done", new=res.get("new", 0), files=res.get("files", 0))
         self.mw.search.reload()
 
@@ -1190,8 +1209,15 @@ class ShortcutsTab(QWidget):
             _plain_message(self, t("app_title"), msg + "\n\n" + t("mv_nothing_changed"))
             return
         lines = [t("mv_done", n=res.get("moved", 0) + res.get("same", 0), dest=res.get("dest", ""))]
+        if res.get("late"):
+            lines.append(t("mv_done_late", n=res["late"]))
+        if res.get("left_behind"):
+            lines.append(t("mv_done_left_behind", n=len(res["left_behind"]),
+                           names=", ".join(res["left_behind"][:5])))
         if res.get("old_removed"):
             lines.append(t("mv_done_recycled", n=res["old_removed"]))
+        if res.get("old_failed"):
+            lines.append(t("mv_done_old_failed", n=res["old_failed"]))
         elif res.get("old_kept"):
             lines.append(t("mv_done_old_kept_no_bin"))
         _plain_message(self, t("app_title"), "\n".join(lines))

@@ -824,6 +824,12 @@ def test_logs_tab_filters_and_appends_live(qapp, tmp_path, monkeypatch):
     ctx.log.info("SEARCH", query="live", results=0)
     qapp.processEvents()
     assert tab.table.rowCount() == total + 1
+    tab._on_live_line("1999-01-01T00:00:01 | INFO  | OLD | <b>x</b> | yesterday")
+    assert tab.table.rowCount() == total + 1          # another day's line stays out
+    tab._on_live_line("Traceback line with <b>markup</b>")
+    assert tab.table.rowCount() == total + 2
+    tip = tab.table.item(total + 1, 4).toolTip()
+    assert "&lt;b&gt;" in tip and "<b>" not in tip   # shown literally
     win.close()
     ctx.db.close()
 
@@ -876,9 +882,14 @@ def test_move_library_dialog_previews_and_the_result_updates_settings(qapp, tmp_
     win = MainWindow(ctx, qapp)
     shown = []
     monkeypatch.setattr("rosu.ui.shortcuts_tab._plain_message", lambda *a: shown.append(a[2]))
-    win.shortcuts._present_library_move({"moved": 1, "same": 0, "dest": str(tmp_path / "NewLib")})
-    assert win.settings.library.text() == str(tmp_path / "NewLib")
-    assert not win.settings._is_dirty() or win.settings._baseline["library"] == str(tmp_path / "NewLib")
+    new_lib = tmp_path / "NewLib"
+    new_lib.mkdir()
+    ctx.cfg.library_dir = str(new_lib)          # what move_library switched to
+    win.shortcuts._present_library_move({"moved": 1, "same": 0, "dest": str(new_lib)})
+    assert win.settings.library.text() == str(new_lib)
+    assert not win.settings._is_dirty()
+    win.settings._save(silent=True)             # a later Save keeps the new folder
+    assert ctx.cfg.library_dir == str(new_lib)
     win.shortcuts._present_library_move({"error": "conflicts", "conflicts": ["a.osz"]})
     assert ctx.t("mv_nothing_changed") in shown[-1]
     win.close()
@@ -918,12 +929,60 @@ def test_folder_watcher_queues_new_downloads_only(qapp, tmp_path, monkeypatch):
     win.folder_watch.scan()          # unchanged since: taken
     assert [[p.name for p in batch] for batch in queued] == [["2 new.osz"]]
     win.folder_watch.scan()
-    assert len(queued) == 1          # handled once
+    assert len(queued) == 1          # queued once while the import runs
+    new = str(downloads / "2 new.osz")
+    win.folder_watch.job_done({"failed": [new]})
+    win.folder_watch.scan()
+    assert len(queued) == 1          # a failed import waits before it is retried
+    assert win.folder_watch._retry.isActive()
+    import rosu.ui.folder_watch as fw_mod
+    monkeypatch.setattr(fw_mod.time, "monotonic", lambda: 10**9)
+    win.folder_watch.scan()
+    assert len(queued) == 2          # retried after the pause
+    win.folder_watch.job_done({"imported": [new]})
+    win.folder_watch.reconfigure()   # restart: the handled file is remembered
+    win.folder_watch.scan()
+    win.folder_watch.scan()
+    assert len(queued) == 2
+    with zipfile.ZipFile(downloads / "3 while closed.osz", "w") as zf:
+        zf.writestr("c.osu", "z")
+    win.folder_watch.reconfigure()   # a download that arrived while Rosu was closed
+    win.folder_watch.scan()
+    win.folder_watch.scan()
+    assert [p.name for p in queued[-1]] == ["3 while closed.osz"]
     ctx.cfg.watch_enabled = False
     win.folder_watch.reconfigure()
     assert win.folder_watch.folder is None
     win.close()
     ctx.db.close()
+
+
+class _Sig:
+    def __init__(self):
+        self._slots = []
+
+    def connect(self, fn):
+        self._slots.append(fn)
+
+    def emit(self, *a):
+        for fn in self._slots:
+            fn(*a)
+
+
+class _ManualWorker:
+    """A Worker stand-in whose result is delivered when the test says so."""
+    started: list = []
+
+    def __init__(self, fn, *a, **k):
+        self.fn, self.a, self.k = fn, a, k
+        self.succeeded, self.failed, self.finished = _Sig(), _Sig(), _Sig()
+
+    def start(self):
+        _ManualWorker.started.append(self)
+
+    def deliver(self):
+        self.succeeded.emit(self.fn(*self.a, **self.k))
+        self.finished.emit()
 
 
 def test_search_history_goes_back_and_forward(qapp, tmp_path, monkeypatch):
@@ -933,20 +992,30 @@ def test_search_history_goes_back_and_forward(qapp, tmp_path, monkeypatch):
     tab = win.search
     clock = iter(range(0, 1000, 10))
     monkeypatch.setattr("rosu.ui.search_tab.time.monotonic", lambda: next(clock))
+    monkeypatch.setattr("rosu.ui.search_tab.Worker", _ManualWorker)
+    _ManualWorker.started = []
 
-    def run(q):
-        tab._search_seq += 1
-        tab._on_results({"rows": [], "total": 0, "truncated": False}, tab._search_seq, q)
-    run("alpha")
-    run("beta")
+    def search(q):
+        tab.box.setText(q)
+        tab.do_search()
+        return _ManualWorker.started[-1]
+    search("alpha").deliver()
+    search("beta").deliver()
     assert tab.btn_back.isEnabled() and not tab.btn_fwd.isEnabled()
-    searched = []
-    monkeypatch.setattr(tab, "do_search", lambda: (searched.append(tab.box.text()),
-                                                   run(tab.box.text())))
     tab._go_history(-1)
-    assert searched == ["alpha"] and tab.btn_fwd.isEnabled() and not tab.btn_back.isEnabled()
+    _ManualWorker.started[-1].deliver()
+    assert tab.box.text() == "alpha"
+    assert tab.btn_fwd.isEnabled() and not tab.btn_back.isEnabled()
     tab._go_history(1)
-    assert searched == ["alpha", "beta"]
+    _ManualWorker.started[-1].deliver()
+    assert tab.box.text() == "beta" and not tab.btn_fwd.isEnabled()
+    # Going back, then typing before that result arrives: the stale result is
+    # dropped and the typed search still lands in the history.
+    tab._go_history(-1)
+    stale = _ManualWorker.started[-1]
+    search("gamma").deliver()
+    stale.deliver()
+    assert tab._history.back() == ("alpha", tab.chk_tags.isChecked())
     win.close()
     ctx.db.close()
 
@@ -963,4 +1032,49 @@ def test_stage_to_output_copies_library_files_only(tmp_path, monkeypatch):
     assert res == {"copied": 1, "already": 0, "skipped": 2}
     assert (ctx.cfg.output_path / "1 A.osz").read_bytes() == b"a"
     assert (ctx.cfg.output_path / "2 B.osz").read_bytes() == b"different"   # not replaced
+    import shutil
+
+    def broken_copy(src, dst, **_k):
+        with open(dst, "wb") as fh:
+            fh.write(b"half")
+        raise OSError("disk full")
+    (lib / "3 C.osz").write_bytes(b"c")
+    monkeypatch.setattr(shutil, "copyfile", broken_copy)
+    res = ctx.services.stage_to_output([lib / "3 C.osz"])
+    assert res["skipped"] == 1
+    assert sorted(p.name for p in ctx.cfg.output_path.iterdir()) == ["1 A.osz", "2 B.osz"]
+    ctx.db.close()
+
+
+def test_same_song_dialog_lists_groups_and_keeps_one_per_song(qapp, tmp_path, monkeypatch):
+    from PySide6.QtCore import Qt
+    from rosu.ui.same_song_dialog import SameSongDialog, extras
+    ctx = _ctx(tmp_path, monkeypatch)
+    group = [
+        {"track_id": 1, "filename": "1 A - S.osz", "beatmapset_id": 1, "artist": "A", "title": "S",
+         "creator": "m1", "diff_count": 3, "size": 100},
+        {"track_id": 2, "filename": "2 A - S (TV).osz", "beatmapset_id": 2, "artist": "A", "title": "S",
+         "creator": "m2", "diff_count": 5, "size": 50},
+        {"track_id": 3, "filename": "3 A - S.osz", "beatmapset_id": 3, "artist": "A", "title": "S",
+         "creator": "m3", "diff_count": 5, "size": 80},
+    ]
+    assert extras(group) == ["1 A - S.osz", "2 A - S (TV).osz"]     # keeps 5 diffs, larger
+    monkeypatch.setattr(type(ctx.services), "fingerprint_library",
+                        lambda self, progress=None, cancel=None: {"computed": 3, "cached": 0,
+                                                                  "failed": 0, "cancelled": False})
+    monkeypatch.setattr(type(ctx.services), "same_song_report",
+                        lambda self, progress=None: {"groups": [group], "fingerprinted": 3})
+    dlg = SameSongDialog(ctx)
+    dlg._worker.wait(5000)
+    qapp.processEvents()
+    assert dlg.tree.topLevelItemCount() == 1 and dlg.tree.topLevelItem(0).childCount() == 3
+    assert not dlg.btn_recycle.isEnabled()                            # nothing pre-selected
+    dlg._select_extras()
+    assert sorted(dlg._checked()) == ["1 A - S.osz", "2 A - S (TV).osz"]
+    top = dlg.tree.topLevelItem(0)
+    for j in range(top.childCount()):
+        top.child(j).setCheckState(0, Qt.Checked)
+    dlg._confirm()                                                    # every copy: refused
+    assert dlg.plan is None and dlg.lbl_status.text() == ctx.t("ss_keep_one")
+    dlg.reject()
     ctx.db.close()

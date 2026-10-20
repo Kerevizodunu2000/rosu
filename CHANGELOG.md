@@ -10,6 +10,55 @@ the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.10.0] - 2026-10-20
+
+**Find the same song across different sets — by listening to it.**
+
+### Added
+- **Same song, different sets…** (Shortcuts). Rosu fingerprints each Library set's audio
+  (the first two minutes, with Chromaprint's `fpcalc`) and groups the sets whose songs
+  match — re-encodes, re-uploads, TV-size cuts — whatever their names or set ids say. A
+  candidate index keeps this fast on large Libraries, and fingerprints are cached per file,
+  so a second scan only listens to new or changed sets.
+  - Nothing is selected for you (different sets of one song are often different maps);
+    **Select extras** ticks all but the set with the most difficulties in each group.
+  - One set of every song always stays; the chosen ones go to the Recycle Bin after a
+    countdown confirmation, through the same queued job as the Library dedup.
+- Chromaprint `fpcalc` 1.6.2 (LGPL-2.1-or-later, with FFmpeg inside) is bundled with the
+  exe. It is not kept in git: `tools/fetch_fpcalc.py` downloads the official release and
+  checks a pinned SHA-256 (CI runs it before building).
+
+### Fixed
+Found by the v1.9 code and security review:
+- **Move Library** is safer end to end: each file is written to a private temp file,
+  synced and hash-checked before it takes its real name; Output, Packs, `data` and `logs`
+  are refused as destinations, as is a folder Rosu cannot write to; links in the way count
+  as conflicts; if the new setting cannot be saved, the Library stays where it was; files
+  added during the move are carried over afterwards (any that could not be are listed);
+  and the old copies are only recycled after a fresh check that they still match.
+- **Watch folder**: a big catch-up is imported in batches (100 files / 2 GB); a file is
+  marked handled only after the import reports it done, so a failed or interrupted import
+  is retried (after a five-minute pause, so a full disk is not retried every few seconds);
+  files that are not archives are skipped once; the import checks free space first;
+  downloads that arrive while Rosu is closed are added at the next start, once settled.
+- "Copy to Output" writes through a temp file, so a failed copy never leaves a half-written
+  `.osz` for Import to osu! to pick up.
+- Archives are read with a size cap everywhere (set details, prune, covers, the client
+  removal fingerprint), so a crafted `.osz` cannot exhaust memory.
+- Cover thumbnails only decode JPEG, PNG and BMP data and are cached atomically; closing
+  Rosu waits for background work (and the thumbnailer) to stop first.
+- Path repair no longer "repairs" a healthy root, and only rewrites paths that were inside
+  the old root.
+- A Library on a drive that is offline no longer stops Rosu from starting.
+- Search recall: a word after punctuation (`(TV Size)`, `feat.Artist`) now counts as the
+  start of a word when ranking candidates.
+- Search ◀ ▶: going back and then typing before that result arrived kept the new search
+  out of the history.
+- Logs tab: details are shown literally in tooltips, and after midnight a live line is
+  only added to the day it belongs to.
+- A hand-edited `config.json` with `"false"` (a string) for an on/off setting no longer
+  reads as on.
+
 ## [1.9.0] - 2026-10-20
 
 **Browse the Library your way, move it anywhere, and let new downloads come in by themselves.**
@@ -35,10 +84,11 @@ the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   copied and checked against its SHA-256 before Rosu switches to the new folder;
   afterwards the old copies can go to the Recycle Bin (left alone on a drive without
   one). A cancel or a failed copy changes nothing.
-- **Watch a folder** (Settings, opt-in): while Rosu runs, new `.osz` files that land in the
-  chosen folder (say, Downloads) are added to the Library by a quiet background job. Files
-  already there when watching starts are left alone, a file is taken only once it has
-  stopped changing, and your files are never moved or deleted.
+- **Watch a folder** (Settings, opt-in): new `.osz` files that land in the chosen folder
+  (say, Downloads) are added to the Library by a quiet background job (ones that arrive
+  while Rosu is closed, at the next start). Files already there when watching starts are
+  left alone, a file is taken only once it has stopped changing, and your files are never
+  moved or deleted.
 - **Logs tab as a table**: any day's log in columns (time, level, action, details,
   message), with "Errors only" and a word filter; today's grows live.
 

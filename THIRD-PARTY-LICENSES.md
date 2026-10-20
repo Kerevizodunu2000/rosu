@@ -23,6 +23,8 @@ same list is shown in-app under **Settings → About / Licenses**.
 | [backports.zstd](https://github.com/rogdham/backports.zstd) | py7zr dependency — zstd decompression backport for Python < 3.14 | PSF-2.0 |
 | [Realm .NET](https://github.com/realm/realm-dotnet) | used by the bundled `RosuLazerExport` helper to read osu!lazer's `client.realm` | Apache-2.0 |
 | [.NET Runtime](https://github.com/dotnet/runtime) | self-contained .NET 8 runtime embedded in the single-file `RosuLazerExport.exe` publish | MIT |
+| [Chromaprint](https://github.com/acoustid/chromaprint) `fpcalc` 1.6.2 | audio fingerprints for "same song" detection — the official release binary, run as a separate program (sources: [v1.6.2 release](https://github.com/acoustid/chromaprint/releases/tag/v1.6.2)) | LGPL-2.1-or-later |
+| [FFmpeg](https://ffmpeg.org/) (inside `fpcalc`) | audio decoding for Chromaprint, statically built into the official `fpcalc` binary (sources: [ffmpeg.org/download](https://ffmpeg.org/download.html)) | LGPL-2.1-or-later |
 
 **License compatibility:** GPL-3.0 is compatible with every component above. LGPL-3.0 and LGPL-2.1-or-later
 are deliberately structured to permit use by programs under any license (including GPL) without imposing

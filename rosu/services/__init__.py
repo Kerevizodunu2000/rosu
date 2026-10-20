@@ -10,6 +10,7 @@ from .collection_svc import CollectionMixin
 from .removal_svc import RemovalMixin
 from .drive_restore_svc import DriveRestoreMixin
 from .move_svc import LibraryMoveMixin
+from .audio_svc import AudioMixin
 
 class Services(
     BaseServices,
@@ -23,5 +24,6 @@ class Services(
     RemovalMixin,
     DriveRestoreMixin,
     LibraryMoveMixin,
+    AudioMixin,
 ):
     pass

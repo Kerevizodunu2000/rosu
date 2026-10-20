@@ -80,6 +80,9 @@ coverage.xml
 *.exe
 # ...but DO keep the bundled lazer-export helper (a build input for rosu.exe).
 !rosu/assets/lazer_export/RosuLazerExport.exe
+# Chromaprint's fpcalc (audio fingerprints): fetched and SHA-256-checked by
+# tools/fetch_fpcalc.py (CI runs it before building), never committed.
+rosu/assets/fpcalc/
 
 # --- .NET build output for the bundled lazer helper --------------------------
 tools/RosuLazerExport/bin/

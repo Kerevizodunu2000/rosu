@@ -53,6 +53,7 @@ Rosu bulk-extracts `.zip`/`.7z`/`.tar` beatmap packs into a deduplicated `.osz` 
 **Shortcuts (one-click flows)**
 - A dedicated **Shortcuts** tab with an installed-music summary (osu!lazer / osu!(stable) / Library / Drive set counts) and one-tap actions: **transfer** sets between osu!lazer ↔ osu!(stable) (skipping what the target already has), **save** an installed client straight into the Library, **unpack Packs and import** to either/both clients (with a skip-duplicates choice), **export** {Library | Drive-backed | a client | all-merged} to **zip/7z** (single or split into 1 GB / 500 MB volumes, with optional **★≥ / ★≤** star bounds on Library sets, optionally uploaded to Drive with a shareable link), and **dedupe** the Library (preview + confirm, Recycle Bin). Long operations are cancellable and show live progress in the job queue.
 - **Remove from osu!** — take sets out of osu!(stable) (folders go to the Recycle Bin) with a preview of every set, its size and whether the Library already holds it; **Save and Remove** copies sets into the Library first and only removes the ones whose Library copy holds every difficulty byte for byte. osu!lazer support (through lazer's own database, never by deleting its files, always saved first) is built and ships once verified on a real install.
+- **Same song, different sets…** — finds Library sets that use the same song (re-encodes, re-uploads, TV-size cuts) by fingerprinting the audio itself with Chromaprint, and recycles only the ones you pick (one set of every song always stays).
 - **Move Library…** — move the whole Library to another folder or drive: a preview (files, size, free space, anything in the way), then every file is copied and SHA-256-checked before Rosu switches over; the old copies can go to the Recycle Bin afterwards. A cancel or a failed copy changes nothing.
 
 **Cloud backup (Google Drive)**
@@ -80,7 +81,7 @@ Rosu bulk-extracts `.zip`/`.7z`/`.tar` beatmap packs into a deduplicated `.osz` 
 
 **Library health & settings**
 - **Library Health** (Settings) — read-only disk-usage total + biggest sets, a DB↔disk scrub (orphans / dead links / memory-only), and a cancellable off-thread **SHA-256 verify** against backup-time hashes.
-- **Watch a folder** (Settings, opt-in) — while Rosu runs, new `.osz` downloads that land in a chosen folder are added to the Library; what was already there is left alone and your files are never moved or deleted.
+- **Watch a folder** (Settings, opt-in) — new `.osz` downloads that land in a chosen folder are added to the Library (ones that arrive while Rosu is closed, at the next start); what was already there is left alone and your files are never moved or deleted.
 - **Logs** — any day's log as a filterable table (errors only, word filter), growing live.
 - Per-client **enable/disable** toggles (lazer on, stable off by default) — a disabled client vanishes app-wide (Settings path row, Dashboard import, Shortcuts).
 - **Save ⇄ Auto-Save** for Settings; **Report a problem** posts to the hosted form (with e-mail / web-form fallback).
@@ -178,6 +179,7 @@ config.json   Application settings (osu! API key kept here; Drive token in the O
 
 ```bash
 pip install -r requirements.txt
+python tools/fetch_fpcalc.py   # optional: the audio-fingerprint tool for "Same song, different sets"
 python run.py
 ```
 
@@ -199,15 +201,15 @@ python -m pytest tests/ -q
 
 ## Roadmap
 
-**Shipped through v1.9:** public essentials (v1.0) · Library Health & disk insight (v1.1) · Shortcuts tab
+**Shipped through v1.10:** public essentials (v1.0) · Library Health & disk insight (v1.1) · Shortcuts tab
 (v1.2) · job queue (v1.3) · Settings overhaul + hosted bug report (v1.4) · per-difficulty star ratings,
 query-syntax search & osu!-API enrichment (v1.5) · mania skillset ratings, visual Filters panel & star-range
 export (v1.6) · space-saving (Prune), collection sync & mirror-based map repair (v1.7) · remove from osu!,
 Drive backup browser + restore, report tracking & opt-in crash reports (v1.8) · browsing depth (saved
 searches, column choice, cover gallery, search history, CSV/JSON export, Logs table), Library move across
-drives & the opt-in watch folder (v1.9).
+drives & the opt-in watch folder (v1.9) · same-song detection by audio fingerprint (v1.10).
 
-**Next on the Library Maturity line:** audio-fingerprint dedup — then the v2.0 capstone. Later lines add a music player, collections, sync hardening, an AI coach, streamer overlays, and
+**Next:** the v2.0 capstone — a whole-app review and polish pass, no new feature scope. Later lines add a music player, collections, sync hardening, an AI coach, streamer overlays, and
 cross-platform builds (macOS/Linux).
 
 Extra numbered pack series (ST/SC/T/L/P/A and beyond) are already auto-supported by the gap-detection logic as

@@ -100,30 +100,62 @@ class LibraryMixin:
             """Add these ``.osz`` files to the Library (the watch folder, v1.9).
             They are copied to a temp stage first, so the import never reads a
             file that is still changing — and never moves or deletes the user's
-            own copies."""
+            own copies. ``{"new","duplicates","files","imported","rejected",
+            "failed","cancelled"}``: ``imported`` / ``rejected`` (not an archive)
+            are done with; ``failed`` (copy error, no space) may be retried."""
             import shutil
             import tempfile
+            import zipfile
             _eff = cancel if cancel is not None else (lambda: False)
+            srcs = [Path(p) for p in (paths or [])]
+            res = {"new": 0, "duplicates": 0, "files": 0, "imported": [], "rejected": [],
+                   "failed": [], "cancelled": False}
+            need = 0
+            for src in srcs:
+                try:
+                    need += src.stat().st_size
+                except OSError:
+                    pass
             stage = Path(tempfile.mkdtemp(prefix="rosu_watch_"))
             try:
-                staged = 0
-                for p in paths or []:
+                margin = 256 * 1024 * 1024
+                for where in (stage, self.cfg.library_path):
+                    try:
+                        if shutil.disk_usage(where).free < need + margin:
+                            res["failed"] = [str(p) for p in srcs]
+                            self.log.error("watch:space", f"not enough free space in {where}")
+                            return res
+                    except OSError:
+                        pass
+                staged: list[Path] = []
+                for src in srcs:
                     if _eff():
+                        res["cancelled"] = True
                         break
-                    src = Path(p)
                     if src.suffix.lower() != ".osz" or not src.is_file():
+                        res["rejected"].append(str(src))
                         continue
                     try:
                         shutil.copy2(src, stage / src.name)
-                        staged += 1
                     except OSError as exc:
+                        res["failed"].append(str(src))
                         self.log.error("watch:copy", f"{src.name}: {str(exc)[:150]}")
-                if not staged or _eff():
-                    return {"new": 0, "duplicates": 0, "files": staged, "cancelled": _eff()}
-                res = self.import_osz_folder(stage, progress, source_label="watch_folder")
-                self.log.info("WATCH_IMPORT", files=staged, new=res.get("new", 0))
-                return {"new": int(res.get("new", 0)), "duplicates": int(res.get("duplicates", 0)),
-                        "files": staged, "cancelled": False}
+                        continue
+                    if not zipfile.is_zipfile(stage / src.name):
+                        (stage / src.name).unlink(missing_ok=True)
+                        res["rejected"].append(str(src))
+                        continue
+                    staged.append(src)
+                res["files"] = len(staged)
+                if not staged or res["cancelled"]:
+                    res["failed"] += [str(p) for p in staged]   # not imported: try again later
+                    return res
+                out = self.import_osz_folder(stage, progress, source_label="watch_folder")
+                res["new"] = int(out.get("new", 0))
+                res["duplicates"] = int(out.get("duplicates", 0))
+                res["imported"] = [str(p) for p in staged]
+                self.log.info("WATCH_IMPORT", files=len(staged), new=res["new"])
+                return res
             finally:
                 shutil.rmtree(stage, ignore_errors=True)
 
@@ -132,7 +164,9 @@ class LibraryMixin:
             sends exactly those. Only files directly in the Library are taken;
             an Output file with the same name is never replaced. ``{"copied",
             "already", "skipped"}``."""
+            import os
             import shutil
+            import tempfile
             lib = self.cfg.library_path.resolve()
             out = self.cfg.output_path
             out.mkdir(parents=True, exist_ok=True)
@@ -152,12 +186,26 @@ class LibraryMixin:
                     same = dest.is_file() and dest.stat().st_size == src.stat().st_size
                     res["already" if same else "skipped"] += 1
                     continue
+                # Through a temp file next to it, so a failed copy never leaves a
+                # half-written .osz in Output for "Import to osu!" to pick up.
+                tmp = None
                 try:
-                    shutil.copy2(src, dest)
+                    fd, tmp_name = tempfile.mkstemp(dir=out, prefix=".rosu-stage-", suffix=".part")
+                    os.close(fd)
+                    tmp = Path(tmp_name)
+                    shutil.copyfile(src, tmp)
+                    shutil.copystat(src, tmp)
+                    if dest.exists():   # appeared while copying: never replace it
+                        raise FileExistsError(f"{dest.name} appeared in Output")
+                    os.replace(tmp, dest)
+                    tmp = None
                     res["copied"] += 1
                 except OSError as exc:
                     res["skipped"] += 1
                     self.log.error("stage:output", f"{src.name}: {str(exc)[:150]}")
+                finally:
+                    if tmp is not None:
+                        tmp.unlink(missing_ok=True)
                 if progress:
                     progress({"kind": "stage", "done": i, "total": len(paths)})
             self.log.info("STAGE_OUTPUT", **res)
@@ -168,6 +216,7 @@ class LibraryMixin:
             paths = [str(p) for p in (paths or [])]
             job = jobs.Job(jobs.new_id(), "job_watch_import", kind="watch_import")
             job.ctx["options"] = {"files": len(paths)}
+            job.ctx["paths"] = paths
 
             def s_import(ctx, progress, cancel):
                 ctx["result"] = self.import_osz_files(paths, progress, cancel)

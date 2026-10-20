@@ -27,6 +27,7 @@ import zlib
 from pathlib import Path
 
 from . import client_import
+from .zipread import read_capped
 
 FILTERS = ("all", "backed_up", "not_backed_up")
 SORTS = ("largest", "smallest", "name")
@@ -174,7 +175,7 @@ def osz_fingerprint(path: Path) -> dict[str, tuple[int, int]] | None:
                     continue
                 if info.file_size > _OSU_CAP:
                     return None
-                data = zf.read(info)
+                data = read_capped(zf, info, _OSU_CAP)
                 out[_osu_key(info.filename)] = (len(data), zlib.crc32(data))
     except Exception:   # BadZipFile, zlib.error, encrypted, EOF, unsupported method…
         return None

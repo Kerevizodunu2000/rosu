@@ -177,6 +177,9 @@ class ImportMixin:
                         reported = now
                     time.sleep(0.2)
                 reader.join(timeout=5)
+                now = (seen["done"], seen["total"])   # the last sets may land after the last look
+                if progress and now[1] and now != reported and proc.returncode == 0:
+                    progress({"kind": "export", "done": min(now[0], now[1]), "total": now[1]})
                 errf.seek(0)
                 err = errf.read()
             finally:

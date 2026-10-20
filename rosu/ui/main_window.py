@@ -194,13 +194,17 @@ class MainWindow(QMainWindow):
                     q.cancel_all()
         except Exception:
             pass
-        for holder in self._ordered_tabs + [self]:   # include our own update worker
-            for w in list(getattr(holder, "_threads", [])):
-                try:
-                    if w.isRunning():
-                        w.wait(5000)  # give each worker up to 5s to finish
-                except RuntimeError:
-                    pass  # C++ object already gone
+        self.search.gallery.stop()   # thumbnails: stop at the next cover
+        from .. import workers
+        holders = [getattr(h, "_threads", []) for h in self._ordered_tabs + [self]]
+        # Plus every Worker still alive anywhere (a closed dialog's scan, the
+        # gallery loader) — a QThread destroyed while running aborts the app.
+        for w in {id(x): x for group in holders + [list(workers._live)] for x in group}.values():
+            try:
+                if w.isRunning():
+                    w.wait(5000)  # give each worker up to 5s to finish
+            except RuntimeError:
+                pass  # C++ object already gone
         for tab in self._ordered_tabs:   # remove any queued job's temp stage dir
             q = getattr(tab, "queue", None)
             if q is not None:

@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 
 from .. import logsvc
 from .copy_table import CopyTable
+from .links import plain_tip
 
 MAX_ROWS = 5000
 _ERROR_FG = QColor("#e5534b")   # readable on both the dark and the light theme
@@ -135,7 +136,7 @@ class LogsTab(QWidget):
         for c, key in enumerate(("time", "level", "action", "fields", "message")):
             item = QTableWidgetItem(e[key])
             if c in (3, 4) and e[key]:
-                item.setToolTip(e[key])
+                item.setToolTip(plain_tip(e[key]))   # log text is data, never markup
             if c == 1 and e["level"] in ("ERROR", "WARN"):
                 item.setForeground(QBrush(_ERROR_FG))
             self.table.setItem(r, c, item)
@@ -151,9 +152,11 @@ class LogsTab(QWidget):
         self.line_logged.emit(line)
 
     def _on_live_line(self, line: str) -> None:
-        if self._day() != self._today():
-            return
         e = logsvc.parse_line(line)
+        # A line belongs to the day in its own timestamp (past midnight the
+        # table may still show yesterday); a stray line without one, to today.
+        if (e["time"][:10] if e["time"] else self._today()) != self._day():
+            return
         self._entries.append(e)
         if len(self._entries) > MAX_ROWS:
             del self._entries[0]

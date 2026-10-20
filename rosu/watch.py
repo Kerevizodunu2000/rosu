@@ -3,9 +3,11 @@
 
 Opt-in: while Rosu runs, new ``.osz`` files that appear in one chosen folder
 (say, Downloads) are added to the Library. The files themselves are never
-moved or deleted. What was already in the folder when watching started is left
-alone, and a file is taken only once its size and time have stopped changing
-between two looks (a download still being written is not ready).
+moved or deleted. What was already in the folder when watching was turned on
+is left alone; downloads that arrive while Rosu is closed are added the next
+time it runs. A file is taken only once its size and time have stopped
+changing between two looks (a download still being written is not ready), and
+only marked as handled once the import reports it done.
 
 State (which files were handled) lives in ``data/watch_state.json`` for the
 folder it belongs to; pointing the watcher at another folder starts afresh.
@@ -16,6 +18,8 @@ import json
 from pathlib import Path
 
 MAX_SEEN = 20000
+BATCH_FILES = 100                  # per import job; the rest follow in the next
+BATCH_BYTES = 2 * 1024 ** 3
 
 
 def key(name: str, size: int, mtime_ns: int) -> str:
@@ -37,30 +41,37 @@ def list_osz(folder: Path) -> dict[str, tuple[int, int]]:
     return out
 
 
-def ready(folder: Path, seen: set[str], previous: dict) -> tuple[list[Path], dict, bool]:
-    """Files to import now, the listing to compare against next time, and
-    whether some new file is still changing (look again soon)."""
+def ready(folder: Path, seen, previous: dict, busy=()) -> tuple[list[Path], dict, bool]:
+    """Files to import now (one batch), the listing to compare against next
+    time, and whether more is waiting (a file still changing, or the rest of a
+    big catch-up) so the caller looks again soon. Keys in ``busy`` are being
+    imported already."""
     now = list_osz(folder)
     take: list[Path] = []
     pending = False
+    total = 0
     for name, (size, mtime) in sorted(now.items()):
-        if key(name, size, mtime) in seen:
+        k = key(name, size, mtime)
+        if k in seen or k in busy:
             continue
-        if size > 0 and previous.get(name) == (size, mtime):
+        if size > 0 and previous.get(name) == (size, mtime) and len(take) < BATCH_FILES \
+                and (not take or total + size <= BATCH_BYTES):
             take.append(Path(folder) / name)
+            total += size
         else:
             pending = True
     return take, now, pending
 
 
-def baseline(folder: Path) -> set[str]:
+def baseline(folder: Path) -> dict[str, None]:
     """Everything already in the folder, as handled (watching starts now)."""
-    return {key(n, s, m) for n, (s, m) in list_osz(folder).items()}
+    return dict.fromkeys(key(n, s, m) for n, (s, m) in sorted(list_osz(folder).items()))
 
 
-def load_state(path: Path, folder: Path) -> set[str] | None:
-    """The handled-file keys for ``folder``; None when the state is missing,
-    unreadable or belongs to another folder."""
+def load_state(path: Path, folder: Path) -> dict[str, None] | None:
+    """The handled-file keys for ``folder``, oldest first (an ordered dict used
+    as a set); None when the state is missing, unreadable or belongs to
+    another folder."""
     try:
         data = json.loads(Path(path).read_text(encoding="utf-8"))
     except (OSError, ValueError):
@@ -68,11 +79,11 @@ def load_state(path: Path, folder: Path) -> set[str] | None:
     if not isinstance(data, dict) or data.get("folder") != str(folder):
         return None
     seen = data.get("seen")
-    return {s for s in seen if isinstance(s, str)} if isinstance(seen, list) else None
+    return dict.fromkeys(s for s in seen if isinstance(s, str)) if isinstance(seen, list) else None
 
 
-def save_state(path: Path, folder: Path, seen: set[str]) -> None:
-    items = sorted(seen)[-MAX_SEEN:]
+def save_state(path: Path, folder: Path, seen) -> None:
+    items = list(seen)[-MAX_SEEN:]          # the oldest handled files go first
     path = Path(path)
     try:
         path.parent.mkdir(parents=True, exist_ok=True)

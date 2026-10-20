@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import os
 import sys
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 
 # --- Enumerated option values (stored in config, compared in code) ----------
@@ -158,8 +158,15 @@ class Config:
         return self.data_path / "drive"
 
     def ensure_dirs(self) -> None:
-        for p in (self.packs_path, self.output_path, self.library_path,
-                  self.data_path, self.logs_path):
+        # data/logs must exist (the database lives there). The user's own
+        # folders may sit on a drive that is offline right now (a Library moved
+        # to an external disk): that must not stop the app from starting.
+        for p in (self.packs_path, self.output_path, self.library_path):
+            try:
+                p.mkdir(parents=True, exist_ok=True)
+            except OSError:
+                pass
+        for p in (self.data_path, self.logs_path):
             p.mkdir(parents=True, exist_ok=True)
 
 
@@ -200,11 +207,36 @@ def _fill_defaults(cfg: Config) -> Config:
         cfg.drive_chunk_bytes = 1024 * 1024
     from . import presets
     hidden = cfg.search_hidden_columns if isinstance(cfg.search_hidden_columns, list) else []
-    cfg.search_hidden_columns = [c for c in hidden if isinstance(c, str)][:50]
+    cfg.search_hidden_columns = [c for c in hidden if isinstance(c, str) and len(c) <= 64][:50]
     cfg.saved_searches = presets.normalize(cfg.saved_searches)
     if cfg.search_view not in ("table", "gallery"):
         cfg.search_view = "table"
+    if not isinstance(cfg.watch_folder, str):
+        cfg.watch_folder = ""
+    _coerce_bools(cfg)
     return cfg
+
+
+_TRUE_WORDS = ("1", "true", "yes", "on")
+
+
+def _coerce_bools(cfg: Config) -> None:
+    """A hand-edited ``"false"`` is a non-empty string, so it would read as on:
+    every on/off setting is turned back into a real bool (anything unreadable
+    falls back to the default)."""
+    for f in fields(cfg):
+        if not isinstance(f.default, bool):
+            continue
+        value = getattr(cfg, f.name)
+        if isinstance(value, bool):
+            continue
+        if isinstance(value, str):
+            value = value.strip().lower() in _TRUE_WORDS
+        elif isinstance(value, (int, float)):
+            value = bool(value)
+        else:
+            value = f.default
+        setattr(cfg, f.name, value)
 
 
 def load_config() -> Config:

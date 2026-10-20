@@ -32,6 +32,19 @@ def cover_crop(img: QImage, w: int = THUMB_W, h: int = THUMB_H) -> QImage:
     return scaled.copy(x, y, w, h)
 
 
+def image_format(data: bytes) -> str | None:
+    """JPEG / PNG / BMP by their magic bytes — the only formats a background
+    is decoded as. Qt would otherwise sniff the content and hand an archive's
+    "bg.png" to its SVG or PDF reader."""
+    if data[:3] == b"\xff\xd8\xff":
+        return "JPG"
+    if data[:8] == b"\x89PNG\r\n\x1a\n":
+        return "PNG"
+    if data[:2] == b"BM":
+        return "BMP"
+    return None
+
+
 def thumbnail(osz_path: Path, cache_dir: Path) -> QImage | None:
     """The cached thumbnail for ``osz_path``, made (and cached) when missing."""
     name = covers.cache_name(osz_path)
@@ -47,15 +60,20 @@ def thumbnail(osz_path: Path, cache_dir: Path) -> QImage | None:
                 pass
             return img
     data = covers.cover_bytes(osz_path)
-    if not data:
+    fmt = image_format(data) if data else None
+    if fmt is None:
         return None
-    img = QImage.fromData(data)
+    img = QImage.fromData(data, fmt)
     if img.isNull() or img.width() * img.height() > _MAX_PIXELS:
         return None
     img = cover_crop(img)
     try:
         cache_dir.mkdir(parents=True, exist_ok=True)
-        img.save(str(cached), "JPG", 85)
+        part = cached.with_name(cached.name + ".part")
+        if img.save(str(part), "JPG", 85):
+            os.replace(part, cached)   # never a half-written thumbnail
+        else:
+            part.unlink(missing_ok=True)
     except OSError:
         pass
     return img

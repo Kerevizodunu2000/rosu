@@ -122,6 +122,8 @@ class MoveLibraryDialog(QDialog):
             lines.append(t("mv_plan_same", n=res["same"]))
         if res["subfolders"]:
             lines.append(t("mv_plan_subfolders", names=", ".join(res["subfolders"][:5])))
+        if res.get("links"):
+            lines.append(t("mv_plan_links", n=len(res["links"])))
         if res["conflicts"]:
             lines.append(t("mv_err_conflicts", n=len(res["conflicts"]),
                            names=", ".join(res["conflicts"][:5])))

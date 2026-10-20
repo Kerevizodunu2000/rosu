@@ -1879,16 +1879,70 @@ STRINGS: dict[str, dict[str, str]] = {
         "tr": "{n} set Output'a kopyalandı ({already} tanesi zaten oradaydı, {skipped} "
               "atlandı). Göndermek için Gösterge Paneli'nde osu!'ya Aktar'ı kullan."},
 
+    # -- v1.10: same song, different sets ---------------------------------------------
+    "btn_same_song": {"en": "Same song, different sets…", "tr": "Aynı şarkı, farklı setler…"},
+    "tip_same_song": {
+        "en": "Find Library sets that use the same song — re-encodes, re-uploads, TV-size "
+              "cuts — by listening to the audio itself, and recycle the ones you pick.",
+        "tr": "Aynı şarkıyı kullanan Library setlerini — yeniden kodlamalar, yeniden "
+              "yüklemeler, TV-boyu kesimler — sesin kendisine bakarak bul ve seçtiklerini geri "
+              "dönüşüme gönder."},
+    "ss_title": {"en": "Same song, different sets", "tr": "Aynı şarkı, farklı setler"},
+    "ss_intro": {
+        "en": "Rosu fingerprints each Library set's audio (the first two minutes) and groups "
+              "the sets whose songs match. Different sets of one song are often different "
+              "maps worth keeping: nothing is selected for you, and one set of every song "
+              "always stays.",
+        "tr": "Rosu her Library setinin sesinin parmak izini çıkarır (ilk iki dakika) ve "
+              "şarkısı eşleşen setleri gruplar. Bir şarkının farklı setleri çoğu zaman "
+              "saklamaya değer farklı haritalardır: senin yerine hiçbir şey seçilmez ve her "
+              "şarkıdan bir set daima kalır."},
+    "ss_scan": {"en": "Scan again", "tr": "Yeniden tara"},
+    "ss_scanning": {"en": "Listening to the Library…", "tr": "Library dinleniyor…"},
+    "ss_scanning_n": {"en": "Fingerprinting {done} of {total} new sets…",
+                      "tr": "{total} yeni setin {done} tanesinin parmak izi çıkarılıyor…"},
+    "ss_no_fpcalc": {
+        "en": "This build has no fpcalc (the audio fingerprint tool). Running from source: "
+              "python tools/fetch_fpcalc.py",
+        "tr": "Bu sürümde fpcalc (ses parmak izi aracı) yok. Kaynaktan çalıştırıyorsan: "
+              "python tools/fetch_fpcalc.py"},
+    "ss_summary": {
+        "en": "{groups} songs appear in more than one set ({sets} sets); {checked} sets "
+              "checked.",
+        "tr": "{groups} şarkı birden fazla sette var ({sets} set); {checked} set kontrol "
+              "edildi."},
+    "ss_unreadable": {"en": "{n} sets have audio that could not be read.",
+                      "tr": "{n} setin sesi okunamadı."},
+    "ss_group": {"en": "{name} — {n} sets", "tr": "{name} — {n} set"},
+    "ss_col_diffs": {"en": "Difficulties", "tr": "Zorluklar"},
+    "ss_select_extras": {"en": "Select extras", "tr": "Fazlalıkları seç"},
+    "tip_ss_select_extras": {
+        "en": "In every group, select all sets but the one with the most difficulties.",
+        "tr": "Her grupta, en çok zorluğu olan set dışındaki tüm setleri seç."},
+    "ss_recycle": {"en": "Recycle", "tr": "Geri dönüşüme gönder"},
+    "ss_recycle_n": {"en": "Recycle {n} sets", "tr": "{n} seti geri dönüşüme gönder"},
+    "ss_keep_one": {
+        "en": "Every set of one song is selected — leave at least one per song.",
+        "tr": "Bir şarkının tüm setleri seçili — her şarkıdan en az birini bırak."},
+    "ss_confirm": {
+        "en": "Send {n} Library sets ({size}) to the Recycle Bin?\n\nThey can be restored "
+              "from there. The other sets of each song stay.",
+        "tr": "{n} Library seti ({size}) Geri Dönüşüm Kutusu'na gönderilsin mi?\n\nOradan "
+              "geri yüklenebilirler. Her şarkının diğer setleri kalır."},
+    "job_same_song_recycle": {"en": "Recycle same-song sets", "tr": "Aynı şarkı setlerini geri dönüştür"},
+
     # -- v1.9: watch folder ------------------------------------------------------------
     "set_watch": {"en": "Watch a folder", "tr": "Bir klasörü izle"},
     "set_watch_folder": {"en": "Folder for new .osz downloads (e.g. Downloads)",
                          "tr": "Yeni .osz indirmelerinin klasörü (ör. İndirilenler)"},
     "tip_watch": {
-        "en": "While Rosu is open, new .osz files that appear in this folder are added to "
-              "the Library. Files already there are left alone, and your files are never "
-              "moved or deleted.",
-        "tr": "Rosu açıkken bu klasöre düşen yeni .osz dosyaları Library'e eklenir. Zaten "
-              "orada olan dosyalara dokunulmaz ve dosyaların asla taşınmaz ya da silinmez."},
+        "en": "New .osz files that appear in this folder are added to the Library (ones "
+              "that arrive while Rosu is closed, the next time it starts). Files already "
+              "there when you turn this on are left alone, and your files are never moved "
+              "or deleted.",
+        "tr": "Bu klasöre gelen yeni .osz dosyaları Library'e eklenir (Rosu kapalıyken "
+              "gelenler, bir sonraki açılışta). Bu ayarı açtığınızda klasörde olan "
+              "dosyalara dokunulmaz; dosyalarınız asla taşınmaz ya da silinmez."},
     "job_watch_import": {"en": "Add new downloads", "tr": "Yeni indirmeleri ekle"},
     "job_step_watch_import": {"en": "Import into the Library", "tr": "Library'e aktar"},
     "watch_n_files": {"en": "{n} new files", "tr": "{n} yeni dosya"},
@@ -1946,6 +2000,29 @@ STRINGS: dict[str, dict[str, str]] = {
         "tr": "Yeni klasör Library'nin içinde olamaz ya da onu içeremez."},
     "mv_err_not_writable": {"en": "Rosu cannot write to that folder.",
                             "tr": "Rosu o klasöre yazamıyor."},
+    "mv_err_reserved": {
+        "en": "That folder is (or holds) Rosu's Output, Packs, data or logs folder — Unpack "
+              "empties Output, for one. Pick a folder of its own.",
+        "tr": "O klasör Rosu'nun Output, Packs, data ya da logs klasörü (veya onları "
+              "içeriyor) — örneğin Paketi Aç, Output'u boşaltır. Kendine ait bir klasör seç."},
+    "mv_err_config_save": {
+        "en": "The files were copied, but the new location could not be saved, so the "
+              "Library stays where it was.",
+        "tr": "Dosyalar kopyalandı ama yeni konum kaydedilemedi, bu yüzden Library olduğu "
+              "yerde kalıyor."},
+    "mv_plan_links": {"en": "{n} linked entries in the Library are skipped.",
+                      "tr": "Library'deki {n} bağlantı (link) atlanır."},
+    "mv_done_late": {"en": "{n} files that arrived during the move were copied too.",
+                     "tr": "Taşıma sırasında gelen {n} dosya da kopyalandı."},
+    "mv_done_left_behind": {
+        "en": "{n} files stayed in the old folder (a file with the same name was already "
+              "in the new one): {names}",
+        "tr": "{n} dosya eski klasörde kaldı (yenisinde aynı adlı bir dosya vardı): {names}"},
+    "mv_done_old_failed": {
+        "en": "{n} old copies were left in place: they changed after being copied, or could "
+              "not be recycled.",
+        "tr": "{n} eski kopya yerinde bırakıldı: kopyalandıktan sonra değişmişler ya da geri "
+              "dönüşüme gönderilemediler."},
     "mv_err_no_library": {"en": "The current Library folder does not exist.",
                           "tr": "Şu anki Library klasörü yok."},
     "mv_err_conflicts": {

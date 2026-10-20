@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Move the Library to another folder (v1.9): copy, verify, switch, recycle."""
+import os
+
 import pytest
 
 from rosu import client_remove, config
@@ -112,3 +114,76 @@ def test_move_job_runs_on_the_disk_lane(env, tmp_path):
     job = svc.build_library_move_job(tmp_path / "D", remove_old=False)
     assert [s.lane for s in job.steps] == [jobs.Lane.DISK] and job.kind == "library_move"
     assert jobs.run_job_sync(job)["moved"] == 3
+
+
+def test_reserved_folders_and_no_side_effects_in_the_plan(env, tmp_path):
+    cfg, svc, saved, _ = env
+    assert svc.library_move_plan(cfg.output_path)["error"] == "reserved"   # Unpack clears it
+    assert svc.library_move_plan(cfg.data_path / "lib")["error"] == "reserved"
+    dest = tmp_path / "Not" / "Yet"
+    assert "error" not in svc.library_move_plan(dest)
+    assert not dest.exists()                                  # the preview creates nothing
+
+
+@pytest.mark.skipif(not hasattr(os, "symlink"), reason="no symlinks")
+def test_a_link_to_the_same_file_is_a_conflict_not_a_copy(env, tmp_path):
+    cfg, svc, saved, trash = env
+    dest = tmp_path / "D"
+    dest.mkdir()
+    try:
+        (dest / "0 A - B.osz").symlink_to(cfg.library_path / "0 A - B.osz")
+    except OSError:
+        pytest.skip("symlinks not permitted")
+    plan = svc.library_move_plan(dest)
+    assert plan["conflicts"] == ["0 A - B.osz"] and plan["same"] == 0
+    res = svc.move_library(dest, remove_old=True)
+    assert res["error"] == "conflicts" and trash == []        # the only copy is never recycled
+
+
+def test_changed_originals_stay_and_late_files_follow(env, tmp_path, monkeypatch):
+    cfg, svc, saved, trash = env
+    old = cfg.library_path
+    real_save = move_svc.LibraryMoveMixin._move_files
+
+    def move_then_write(self, files, new, verified, made, res, progress, cancel):
+        real_save(self, files, new, verified, made, res, progress, cancel)
+        if not (old / "9 Late.osz").exists():
+            (old / "9 Late.osz").write_bytes(b"late")             # an import lands mid-move
+            (old / "1 A - B.osz").write_bytes(b"rewritten")       # an original changes
+    monkeypatch.setattr(move_svc.LibraryMoveMixin, "_move_files", move_then_write)
+    res = svc.move_library(tmp_path / "D", remove_old=True)
+    assert res["moved"] == 4 and "error" not in res, res          # the late file came along
+    assert (tmp_path / "D" / "9 Late.osz").read_bytes() == b"late"
+    assert str(old / "1 A - B.osz") not in trash and res["old_failed"] == 1
+
+
+def test_a_failed_config_save_keeps_the_old_library(env, tmp_path, monkeypatch):
+    cfg, svc, saved, trash = env
+    old = cfg.library_dir
+
+    def boom(c):
+        raise OSError("disk full")
+    monkeypatch.setattr(config, "save_config", boom)
+    res = svc.move_library(tmp_path / "D", remove_old=True)
+    assert res["error"] == "config_save" and cfg.library_dir == old and trash == []
+
+
+def test_an_existing_part_file_is_not_clobbered(env, tmp_path):
+    cfg, svc, saved, _ = env
+    dest = tmp_path / "D"
+    dest.mkdir()
+    (dest / "0 A - B.osz.part").write_bytes(b"user's own")
+    assert svc.move_library(dest)["moved"] == 3
+    assert (dest / "0 A - B.osz.part").read_bytes() == b"user's own"
+
+
+def test_a_file_written_at_the_switch_is_copied_after_it(env, tmp_path, monkeypatch):
+    cfg, svc, saved, trash = env
+    old = cfg.library_path
+
+    def save_and_race(c):
+        (old / "8 Race.osz").write_bytes(b"race")                 # written just as we switch
+    monkeypatch.setattr(config, "save_config", save_and_race)
+    res = svc.move_library(tmp_path / "D")
+    assert res["late"] == 1 and res["left_behind"] == []
+    assert (tmp_path / "D" / "8 Race.osz").read_bytes() == b"race"

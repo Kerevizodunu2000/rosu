@@ -12,6 +12,8 @@ import hashlib
 import zipfile
 from pathlib import Path
 
+from .zipread import read_capped
+
 IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".bmp")
 _OSU_CAP = 4 * 1024 * 1024       # the .osu read to find the background
 _IMAGE_CAP = 12 * 1024 * 1024    # a background bigger than this is not decoded
@@ -48,7 +50,7 @@ def cover_bytes(osz_path) -> bytes | None:
             for info in sorted(infos, key=lambda i: i.filename.lower()):
                 if not info.filename.lower().endswith(".osu") or info.file_size > _OSU_CAP:
                     continue
-                bg = background_name(zf.read(info).decode("utf-8", errors="replace"))
+                bg = background_name(read_capped(zf, info, _OSU_CAP).decode("utf-8", errors="replace"))
                 if bg:
                     chosen = by_name.get(bg.lower())
                     if chosen is not None:
@@ -59,7 +61,7 @@ def cover_bytes(osz_path) -> bytes | None:
                 chosen = max(images, key=lambda i: i.file_size, default=None)
             if chosen is None or not 0 < chosen.file_size <= _IMAGE_CAP:
                 return None
-            return zf.read(chosen)
+            return read_capped(zf, chosen, _IMAGE_CAP)
     except Exception:   # unreadable, truncated, encrypted, bad compression…
         return None
 

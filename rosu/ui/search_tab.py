@@ -301,11 +301,14 @@ class SearchTab(QWidget):
         query = self.box.text().strip()
         self._search_seq += 1
         seq = self._search_seq
+        # Back/forward runs a search that must not be pushed onto the history
+        # again; the flag belongs to this one search, whatever happens to it.
+        from_history, self._navigating = self._navigating, False
         self.result.setText(self.ctx.t("working"))
         w = Worker(self.ctx.services.search_page, query,
                    search_tags=self.chk_tags.isChecked())
         self._threads.append(w)
-        w.succeeded.connect(lambda res, s=seq, q=query: self._on_results(res, s, q))
+        w.succeeded.connect(lambda res, s=seq, q=query, h=from_history: self._on_results(res, s, q, h))
         w.failed.connect(self._on_failed)
         w.finished.connect(lambda: self._threads.remove(w) if w in self._threads else None)
         w.start()
@@ -313,15 +316,14 @@ class SearchTab(QWidget):
     def _on_failed(self, msg: str) -> None:
         self.result.setText(msg)
 
-    def _on_results(self, res: dict, seq: int, query: str) -> None:
+    def _on_results(self, res: dict, seq: int, query: str, from_history: bool = False) -> None:
         if seq != self._search_seq:
             return  # a newer search already ran; drop this stale result
         rows = res["rows"]
         total = res["total"]
         self._last_truncated = bool(res["truncated"])
-        if not self._navigating:
+        if not from_history:
             self._history.push((query, self.chk_tags.isChecked()), time.monotonic())
-        self._navigating = False
         self._sync_history_buttons()
         self._populate(rows)
         t = self.ctx.t

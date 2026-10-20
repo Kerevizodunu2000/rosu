@@ -35,7 +35,8 @@ def test_run_lazer_export_reports_done_of_total(tmp_path, monkeypatch):
     svc = Services(cfg, db, DummyLog())
     helper = tmp_path / "helper.sh"
     helper.write_text("#!/bin/sh\necho TOTAL 3\n"
-                      "for i in 1 2 3; do echo \"EXPORT $i\t$i x.osz\"; sleep 0.25; done\n")
+                      "for i in 1 2; do echo \"EXPORT $i\t$i x.osz\"; sleep 0.25; done\n"
+                      "echo \"EXPORT 3\t3 x.osz\"\n")   # the last set right before exit
     helper.chmod(0o755)
     monkeypatch.setattr(type(svc), "_lazer_helper", lambda self: helper)
     seen = []
@@ -44,4 +45,5 @@ def test_run_lazer_export_reports_done_of_total(tmp_path, monkeypatch):
     bars = [(m["done"], m["total"]) for m in seen if m.get("kind") == "export"]
     assert bars and all(t == 3 for _d, t in bars)
     assert [d for d, _t in bars] == sorted(d for d, _t in bars)   # only moves forward
+    assert bars[-1] == (3, 3)                                     # and ends full
     db.close()

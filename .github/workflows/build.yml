@@ -44,6 +44,8 @@ jobs:
           else
             echo "No ROSU_REPORT_TOKEN secret — building without an embedded report token."
           fi
+      - name: Fetch Chromaprint fpcalc (pinned SHA-256)
+        run: python tools/fetch_fpcalc.py windows
       - name: Build single .exe
         run: pyinstaller rosu.spec
       - name: Smoke-test the frozen build
