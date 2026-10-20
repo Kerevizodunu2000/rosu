@@ -2053,7 +2053,7 @@ STRINGS: dict[str, dict[str, str]] = {
     "job_remove": {"en": "Remove from osu!", "tr": "osu!'dan Kaldır"},
     "job_step_remove_save": {"en": "Save to Library, then remove",
                              "tr": "Library'e kaydet, sonra kaldır"},
-    "job_step_remove": {"en": "Remove", "tr": "Kaldır"},
+    "job_step_remove_only": {"en": "Remove", "tr": "Kaldır"},
 
     # -- v1.8: Drive backup browser (HANDOFF 4.2) -------------------------------
     "btn_drive_browse": {"en": "Browse Drive backup…", "tr": "Drive Yedeğine Göz At…"},

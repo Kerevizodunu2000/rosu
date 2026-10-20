@@ -7,7 +7,7 @@ using Realms;
 //   RosuLazerExport --capabilities                   -> "CAPS export list delete"
 //   RosuLazerExport list   <data-dir>                -> "SET\t<id>\t<bytes>\t<name>" per set
 //   RosuLazerExport export <data-dir> <out-dir> [--ids <file>] [--limit N]
-//                                                    -> "EXPORT <id>\t<file>" per set
+//                                                    -> "TOTAL <n>", then "EXPORT <id>\t<file>" per set
 //   RosuLazerExport delete <data-dir> <ids-file>     -> "DELETED <id>" per set
 //   RosuLazerExport <data-dir> <out-dir> [limit]     (legacy form = export)
 //
@@ -43,7 +43,7 @@ if (args.Length >= 1 && args[0] == "export")
     for (int i = 3; i < args.Length - 1; i++)
     {
         if (args[i] == "--ids") ids = ReadIds(args[i + 1]);
-        else if (args[i] == "--limit" && int.TryParse(args[i + 1], out var n)) lim = n;
+        else if (args[i] == "--limit" && int.TryParse(args[i + 1], out var n) && n > 0) lim = n;
     }
     if (ids != null && ids.Count == 0) { Console.Error.WriteLine("no ids to export"); return 5; }
     return Export(args[1], args[2], ids, lim);
@@ -170,6 +170,15 @@ static int Export(string dataDir, string outDir, HashSet<int> onlyIds, int limit
     Directory.CreateDirectory(outDir);
 
     int exported = 0, skipped = 0, missingFiles = 0;
+    // How many sets this run will look at, first — Rosu turns the EXPORT lines
+    // into a real progress bar against it.
+    int planned = 0;
+    foreach (var setObj in LiveSets(realm))
+    {
+        int id = OnlineId(setObj);
+        if (id > 0 && (onlyIds == null || onlyIds.Contains(id))) planned++;
+    }
+    Console.WriteLine($"TOTAL {Math.Min(planned, limit)}");
     // Two live sets can share an OnlineID (an edited copy, a re-import): each
     // gets its own file instead of the second overwriting the first.
     var writtenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

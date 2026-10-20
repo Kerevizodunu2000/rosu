@@ -437,6 +437,6 @@ class RemovalMixin:
                     source, keys, save_first=save_first, progress=progress, cancel=cancel)
 
             job.steps = [jobs.Step("job_step_remove_save" if save_first
-                                   else "job_step_remove", jobs.Lane.DISK, s_remove)]
+                                   else "job_step_remove_only", jobs.Lane.DISK, s_remove)]
             job.finalize = lambda ctx: ctx.get("result", {"removed": 0})
             return job

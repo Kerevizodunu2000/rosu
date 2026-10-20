@@ -1,15 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 from __future__ import annotations
 import datetime as _dt
-import threading
-import time
 from pathlib import Path
 
-from .. import (
-    archives, config, excel_report, extractor, gaps, jobs, library, osu_api,
-    osu_import, parsing, search, db, msd, ratings
-)
-from ..models import ExtractPlan, ParsedPack
+from .. import config, jobs, osu_import, parsing
 
 _CLIENT_LABEL = {"lazer": "osu!lazer", "stable": "osu!(stable)"}
 

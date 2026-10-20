@@ -9,7 +9,7 @@ Standalone .NET 8 helper for **Rosu**: Rosu's only bridge to osu!lazer's
 RosuLazerExport --capabilities                    # "CAPS export list delete"
 RosuLazerExport list   <lazer-data-dir>           # one "SET\t<id>\t<bytes>\t<name>" line per set
 RosuLazerExport export <lazer-data-dir> <out-dir> [--ids <file>] [--limit N]
-                                                   # "EXPORT <id>\t<file name>" per set
+                                                   # "TOTAL <n>", then "EXPORT <id>\t<file name>" per set
 RosuLazerExport delete <lazer-data-dir> <ids-file> # "BACKUP <path>" then "DELETED <id>" per set
 RosuLazerExport <lazer-data-dir> <out-dir> [maxSets]   # legacy form = export
 ```
