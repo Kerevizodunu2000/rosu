@@ -63,6 +63,9 @@ class MainWindow(QMainWindow):
 
         # live-log mirror into the Logs tab
         self.ctx.log.ui_sink = self.logs.append_line
+        from .folder_watch import FolderWatcher
+        self.folder_watch = FolderWatcher(self)   # v1.9, opt-in (Settings)
+        self.folder_watch.reconfigure()
 
         self._prev_index = self.tabs.currentIndex()
         self.tabs.currentChanged.connect(self._on_tab_changed)

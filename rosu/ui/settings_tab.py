@@ -84,6 +84,11 @@ class SettingsTab(QWidget):
         self.cb_stable_enabled = QCheckBox(); self.cb_stable_enabled.setChecked(cfg.stable_enabled)
         self.osu_stable = self._path_row(form, cfg.osu_stable_exe, is_dir=False,
                                          label_widget=self.cb_stable_enabled)
+        # v1.9 watch folder: the "Watch …" checkbox is the row's label, like the
+        # client rows above; new .osz files there are added to the Library.
+        self.cb_watch = QCheckBox(); self.cb_watch.setChecked(cfg.watch_enabled)
+        self.watch = self._path_row(form, cfg.watch_folder, is_dir=True,
+                                    label_widget=self.cb_watch)
         self._sync_client_rows()
 
         self.cb_physical = QCheckBox(); self.cb_physical.setChecked(cfg.library_physical_copy)
@@ -125,7 +130,7 @@ class SettingsTab(QWidget):
         # effect you need to SEE to choose. Physical-copy keeps its own guarded
         # confirm flow because turning it off deletes files.)
         for cb in (self.cb_auto_backup, self.cb_clear_before, self.cb_check_updates,
-                   self.cb_crash_reports,
+                   self.cb_crash_reports, self.cb_watch,
                    self.cb_auto_refresh, self.cb_auto_prune, self.cb_export_prune):
             cb.toggled.connect(self._on_setting_changed)
         self.cb_physical.toggled.connect(self._on_physical_toggled)
@@ -362,6 +367,8 @@ class SettingsTab(QWidget):
                 "clear_before": self.cb_clear_before.isChecked(),
                 "check_updates": self.cb_check_updates.isChecked(),
                 "crash_reports": self.cb_crash_reports.isChecked(),
+                "watch_enabled": self.cb_watch.isChecked(),
+                "watch_folder": self.watch.text(),
                 "auto_refresh": self.cb_auto_refresh.isChecked(),
                 "enrich": self.cb_enrich.isChecked(),
                 "lazer_enabled": self.cb_lazer_enabled.isChecked(),
@@ -377,12 +384,14 @@ class SettingsTab(QWidget):
         self.osu_stable.setText(snap["osu_stable"])
         self.client_id.setText(snap["client_id"])
         self.client_secret.setText(snap["client_secret"])
+        self.watch.setText(snap["watch_folder"])
         # Restore the deferred toggles WITHOUT re-triggering their handlers
         # (they'd re-mark the tab dirty, or re-commit in auto mode).
         boxes = ((self.cb_auto_backup, "auto_backup"),
                  (self.cb_clear_before, "clear_before"),
                  (self.cb_check_updates, "check_updates"),
                  (self.cb_crash_reports, "crash_reports"),
+                 (self.cb_watch, "watch_enabled"),
                  (self.cb_auto_refresh, "auto_refresh"),
                  (self.cb_enrich, "enrich"),
                  (self.cb_lazer_enabled, "lazer_enabled"),
@@ -448,7 +457,11 @@ class SettingsTab(QWidget):
         # (translated below); the fields explain themselves via placeholder.
         self.osu.setPlaceholderText(t("set_osu_lazer_exe"))
         self.osu_stable.setPlaceholderText(t("set_osu_stable_exe"))
-        for f in (self.packs, self.output, self.library, self.osu, self.osu_stable):
+        self.cb_watch.setText(t("set_watch"))
+        self.cb_watch.setToolTip(t("tip_watch"))
+        self.watch.setPlaceholderText(t("set_watch_folder"))
+        self.watch.setToolTip(t("tip_watch"))
+        for f in (self.packs, self.output, self.library, self.osu, self.osu_stable, self.watch):
             f._browse.setText(t("btn_browse"))
         # Match the combo spacers to the (localized) Browse button width (item 22).
         bw = self.packs._browse.sizeHint().width()
@@ -1009,6 +1022,7 @@ class SettingsTab(QWidget):
 
     # -- toggle commit model (v1.4.1) ----------------------------------------
     _TOGGLE_KEYS = ("auto_backup", "clear_before", "check_updates", "crash_reports",
+                    "watch_enabled",
                     "auto_refresh", "enrich", "lazer_enabled", "stable_enabled",
                     "zip")
 
@@ -1056,6 +1070,7 @@ class SettingsTab(QWidget):
         cfg.export_prune = self.cb_export_prune.isChecked()
         cfg.check_updates = self.cb_check_updates.isChecked()
         cfg.crash_reports = self.cb_crash_reports.isChecked()
+        cfg.watch_enabled = self.cb_watch.isChecked()
         cfg.auto_refresh_on_tab = self.cb_auto_refresh.isChecked()
         cfg.enrich_from_api_enabled = self.cb_enrich.isChecked()
         cfg.lazer_enabled = self.cb_lazer_enabled.isChecked()
@@ -1065,6 +1080,7 @@ class SettingsTab(QWidget):
         cfg.prune_mode = self.cbo_prune_mode.currentData() or "video_only"
         self.ctx.save_config()
         self.saved_label.setText(self.ctx.t("saved"))
+        self._rewatch()
         # auto-copy toggle changes whether the Dashboard shows its Copy button.
         self.mw.dashboard._sync_auto_copy()
 
@@ -1118,7 +1134,7 @@ class SettingsTab(QWidget):
         auto = bool(self.ctx.cfg.settings_autosave)
         self.btn_save.setVisible(not auto)
         fields = (self.packs, self.output, self.library, self.osu,
-                  self.osu_stable, self.client_id, self.client_secret)
+                  self.osu_stable, self.watch, self.client_id, self.client_secret)
         if self._live_connected:                    # only disconnect what we connected
             for f in fields:
                 f.editingFinished.disconnect(self._commit_live)
@@ -1164,6 +1180,13 @@ class SettingsTab(QWidget):
         QMessageBox.critical(self, self.ctx.t("app_title"), msg)
 
     # -- save (paths + API) --------------------------------------------------
+    def _rewatch(self) -> None:
+        """Re-point the watch folder at the saved settings (the watcher is
+        created after this tab, so it may not exist yet)."""
+        fw = getattr(self.mw, "folder_watch", None)
+        if fw is not None:
+            fw.reconfigure()
+
     def library_moved(self, path: str) -> None:
         """A Library move switched ``cfg.library_dir``: show it, and count it as
         saved — a later Save must not write the old folder back."""
@@ -1205,10 +1228,12 @@ class SettingsTab(QWidget):
         cfg.osu_exe = cfg.osu_lazer_exe   # keep the legacy field mirrored
         cfg.osu_client_id = self.client_id.text().strip()
         cfg.osu_client_secret = self.client_secret.text().strip()
+        cfg.watch_folder = self.watch.text().strip()
         cfg.ensure_dirs()   # create the derived data/logs dirs (user dirs already made)
         self.ctx.save_config()   # persist the path/API unit (toggles saved above)
         self.ctx.log.info("SETTINGS_SAVE", changed="paths,toggles,api")
         self.saved_label.setText(self.ctx.t("saved"))
         self._baseline = self._snapshot()   # edits are now saved — clear dirty (item 11)
+        self._rewatch()
         self.mw.dashboard.refresh_scan()
         return True

@@ -109,6 +109,9 @@ class Config:
     search_hidden_columns: list = field(default_factory=list)
     saved_searches: list = field(default_factory=list)
     search_view: str = "table"           # "table" or "gallery" (cover art)
+    # v1.9 watch folder (opt-in): new .osz files appearing there go to the Library.
+    watch_enabled: bool = False
+    watch_folder: str = ""
     schema_note: str = "paths are absolute; edit from Settings tab"
     _extra: dict = field(default_factory=dict)
 

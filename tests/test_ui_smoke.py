@@ -895,3 +895,32 @@ def test_autosaved_crash_report_toggle_leaves_settings_clean(qapp, tmp_path, mon
     assert not win.settings._is_dirty()      # v1.8: the toggle was missing from the baseline
     win.close()
     ctx.db.close()
+
+
+def test_folder_watcher_queues_new_downloads_only(qapp, tmp_path, monkeypatch):
+    import zipfile
+    from rosu.ui.main_window import MainWindow
+    ctx = _ctx(tmp_path, monkeypatch)
+    downloads = tmp_path / "Downloads"
+    downloads.mkdir()
+    with zipfile.ZipFile(downloads / "1 old.osz", "w") as zf:
+        zf.writestr("a.osu", "x")
+    win = MainWindow(ctx, qapp)
+    queued = []
+    monkeypatch.setattr(win.shortcuts, "queue_watch_import", lambda paths: queued.append(paths))
+    ctx.cfg.watch_enabled = True
+    ctx.cfg.watch_folder = str(downloads)
+    win.folder_watch.reconfigure()
+    assert win.folder_watch.folder == downloads
+    with zipfile.ZipFile(downloads / "2 new.osz", "w") as zf:
+        zf.writestr("b.osu", "y")
+    win.folder_watch.scan()          # first look: new file seen, not settled
+    win.folder_watch.scan()          # unchanged since: taken
+    assert [[p.name for p in batch] for batch in queued] == [["2 new.osz"]]
+    win.folder_watch.scan()
+    assert len(queued) == 1          # handled once
+    ctx.cfg.watch_enabled = False
+    win.folder_watch.reconfigure()
+    assert win.folder_watch.folder is None
+    win.close()
+    ctx.db.close()

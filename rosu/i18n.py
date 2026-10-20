@@ -1867,6 +1867,22 @@ STRINGS: dict[str, dict[str, str]] = {
               "Library first if you want. Shows exactly what goes before anything is touched.",
         "tr": "osu!(stable) veya osu!lazer'dan beatmap setlerini kaldırır — istersen önce "
               "Library'e kaydeder. Hiçbir şeye dokunmadan önce tam olarak neyin gideceğini gösterir."},
+    # -- v1.9: watch folder ------------------------------------------------------------
+    "set_watch": {"en": "Watch a folder", "tr": "Bir klasörü izle"},
+    "set_watch_folder": {"en": "Folder for new .osz downloads (e.g. Downloads)",
+                         "tr": "Yeni .osz indirmelerinin klasörü (ör. İndirilenler)"},
+    "tip_watch": {
+        "en": "While Rosu is open, new .osz files that appear in this folder are added to "
+              "the Library. Files already there are left alone, and your files are never "
+              "moved or deleted.",
+        "tr": "Rosu açıkken bu klasöre düşen yeni .osz dosyaları Library'e eklenir. Zaten "
+              "orada olan dosyalara dokunulmaz ve dosyaların asla taşınmaz ya da silinmez."},
+    "job_watch_import": {"en": "Add new downloads", "tr": "Yeni indirmeleri ekle"},
+    "job_step_watch_import": {"en": "Import into the Library", "tr": "Library'e aktar"},
+    "watch_n_files": {"en": "{n} new files", "tr": "{n} yeni dosya"},
+    "watch_done": {"en": "Watched folder: {new} new sets added ({files} files).",
+                   "tr": "İzlenen klasör: {new} yeni set eklendi ({files} dosya)."},
+
     # -- v1.9: move the Library -----------------------------------------------------
     "btn_move_library": {"en": "Move Library…", "tr": "Library'yi Taşı…"},
     "tip_move_library": {

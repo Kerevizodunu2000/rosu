@@ -127,6 +127,8 @@ def _describe_job(job, t) -> str:
             bits.append(t("prune_frees", size=_fmt_size(opts["freed_estimate"])))
     elif job.kind in ("restore", "drive_restore") and opts.get("restore_sets"):
         bits.append(t("prune_n_sets", n=opts["restore_sets"]))
+    elif job.kind == "watch_import" and opts.get("files"):
+        bits.append(t("watch_n_files", n=opts["files"]))
     elif job.kind == "library_move":
         bits.append(t("job_library_move_desc", dest=opts.get("dest", "")))
         if opts.get("remove_old"):
@@ -806,6 +808,10 @@ class ShortcutsTab(QWidget):
         self._enqueue(self.services.build_library_move_job(plan["dest"], plan["remove_old"]),
                       ("library_move", plan["dest"]))
 
+    def queue_watch_import(self, paths) -> None:
+        """New files in the watched folder (v1.9) → a quiet disk-lane import."""
+        self._enqueue(self.services.build_watch_import_job(paths))
+
     def on_lazer_slim(self) -> None:
         """The guided osu!lazer round-trip (see :mod:`rosu.ui.lazer_slim_dialog`)."""
         from .lazer_slim_dialog import LazerSlimDialog
@@ -974,6 +980,7 @@ class ShortcutsTab(QWidget):
             "remove": self._present_remove,
             "drive_restore": self._present_drive_restore,
             "library_move": self._present_library_move,
+            "watch_import": self._present_watch_import,
         }.get(job.kind)
         if presenter is not None:
             presenter(res)
@@ -1164,6 +1171,11 @@ class ShortcutsTab(QWidget):
             lines.append(t("drv_done_failed", n=len(failed), names=shown))
         _plain_message(self, t("app_title"), "\n".join(lines))
         self._set_status("drv_done", n=res.get("restored", 0), already=res.get("already", 0))
+        self.mw.search.reload()
+
+    def _present_watch_import(self, res) -> None:
+        # Auto-import is background work: a status line, never a popup.
+        self._set_status("watch_done", new=res.get("new", 0), files=res.get("files", 0))
         self.mw.search.reload()
 
     def _present_library_move(self, res) -> None:

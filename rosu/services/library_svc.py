@@ -3,7 +3,7 @@ from __future__ import annotations
 import datetime as _dt
 from pathlib import Path
 
-from .. import library
+from .. import jobs, library
 
 _CLIENT_LABEL = {"lazer": "osu!lazer", "stable": "osu!(stable)"}
 
@@ -95,6 +95,50 @@ class LibraryMixin:
             self.log.info("LIBRARY_COPY", new=res["new"], duplicates=res["duplicates"],
                           dup_ids=res["dup_ids"][:50])
             return res
+
+        def import_osz_files(self, paths, progress=None, cancel=None) -> dict:
+            """Add these ``.osz`` files to the Library (the watch folder, v1.9).
+            They are copied to a temp stage first, so the import never reads a
+            file that is still changing — and never moves or deletes the user's
+            own copies."""
+            import shutil
+            import tempfile
+            _eff = cancel if cancel is not None else (lambda: False)
+            stage = Path(tempfile.mkdtemp(prefix="rosu_watch_"))
+            try:
+                staged = 0
+                for p in paths or []:
+                    if _eff():
+                        break
+                    src = Path(p)
+                    if src.suffix.lower() != ".osz" or not src.is_file():
+                        continue
+                    try:
+                        shutil.copy2(src, stage / src.name)
+                        staged += 1
+                    except OSError as exc:
+                        self.log.error("watch:copy", f"{src.name}: {str(exc)[:150]}")
+                if not staged or _eff():
+                    return {"new": 0, "duplicates": 0, "files": staged, "cancelled": _eff()}
+                res = self.import_osz_folder(stage, progress, source_label="watch_folder")
+                self.log.info("WATCH_IMPORT", files=staged, new=res.get("new", 0))
+                return {"new": int(res.get("new", 0)), "duplicates": int(res.get("duplicates", 0)),
+                        "files": staged, "cancelled": False}
+            finally:
+                shutil.rmtree(stage, ignore_errors=True)
+
+        def build_watch_import_job(self, paths) -> jobs.Job:
+            """Queue new watch-folder files for import (disk lane)."""
+            paths = [str(p) for p in (paths or [])]
+            job = jobs.Job(jobs.new_id(), "job_watch_import", kind="watch_import")
+            job.ctx["options"] = {"files": len(paths)}
+
+            def s_import(ctx, progress, cancel):
+                ctx["result"] = self.import_osz_files(paths, progress, cancel)
+
+            job.steps = [jobs.Step("job_step_watch_import", jobs.Lane.DISK, s_import)]
+            job.finalize = lambda ctx: ctx.get("result", {"new": 0})
+            return job
 
         def _dedup_scan(self) -> tuple[list, dict, int]:
             """Scan the Library and plan dedup without deleting: returns
