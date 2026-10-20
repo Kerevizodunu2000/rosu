@@ -93,10 +93,19 @@ class MainWindow(QMainWindow):
         if not info:
             self.update_banner.setVisible(False)
             return
-        link = self.ctx.t("update_open")
+        from html import escape
+        t = self.ctx.t
+        # The direct .exe when the site supplied one, else the release page. Both
+        # were validated as links into this project's GitHub releases.
+        dl = info.get("download_url") or info["url"]
+        links = f"  <a href='{escape(dl, quote=True)}'>{escape(t('update_open'))}</a>"
+        if info.get("download_url"):
+            links += (f"  ·  <a href='{escape(info['url'], quote=True)}'>"
+                      f"{escape(t('update_whats_new'))}</a>")
         self.update_banner.setText(
-            self.ctx.t("update_available", tag=info["tag"])
-            + f"  <a href='{info['url']}'>{link}</a>")
+            escape(t("update_available", tag=info["tag"])) + links)
+        if info.get("notes"):
+            self.update_banner.setToolTip(info["notes"])
         self.update_banner.setVisible(True)
 
     # -- shared operations ---------------------------------------------------

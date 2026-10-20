@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Tests for the GitHub update check (item E, v1.0). No real network — urlopen
-is mocked, so responses/errors are simulated."""
+"""Tests for the update check (item E, v1.0; rosu-web first since v1.8). No real
+network — urlopen / the fetchers are mocked, so responses/errors are simulated."""
 import json
 import urllib.error
 
@@ -30,7 +30,7 @@ class _FakeResp:
     def __exit__(self, *a):
         return False
 
-    def read(self):
+    def read(self, *_):
         return self._payload
 
 
@@ -56,12 +56,50 @@ def test_latest_release_missing_tag_returns_none(monkeypatch):
 
 
 def test_check_reports_newer(monkeypatch):
+    monkeypatch.setattr(update_check, "latest_from_site", lambda **_: None)
     monkeypatch.setattr(update_check, "latest_release",
                         lambda owner=None, repo=None: {"tag": "v9.9.9", "url": "u"})
-    assert update_check.check("1.0.0") == {"newer": True, "tag": "v9.9.9", "url": "u"}
+    assert update_check.check("1.0.0") == {"newer": True, "tag": "v9.9.9", "url": "u",
+                                           "download_url": None, "notes": ""}
 
 
 def test_check_none_when_unreachable(monkeypatch):
+    monkeypatch.setattr(update_check, "latest_from_site", lambda **_: None)
     monkeypatch.setattr(update_check, "latest_release",
                         lambda owner=None, repo=None: None)
     assert update_check.check("1.0.0") is None
+
+
+_REL = "https://github.com/Kerevizodunu2000/rosu/releases/"
+
+
+def test_site_reply_is_preferred_and_carries_the_download(monkeypatch):
+    site = {"ok": True, "tag": "v1.8.0", "url": _REL + "tag/v1.8.0",
+            "download_url": _REL + "download/v1.8.0/rosu-v1.8.0-win64.exe", "notes": "- x"}
+    monkeypatch.setattr(update_check.urllib.request, "urlopen",
+                        lambda req, timeout=10: _FakeResp(json.dumps(site).encode()))
+    monkeypatch.setattr(update_check, "latest_release",
+                        lambda owner=None, repo=None: (_ for _ in ()).throw(AssertionError))
+    res = update_check.check("1.7.1")
+    assert res == {"newer": True, "tag": "v1.8.0", "url": site["url"],
+                   "download_url": site["download_url"], "notes": "- x"}
+
+
+def test_site_reply_validation_rejects_foreign_links():
+    ok = {"ok": True, "tag": "v1.8.0", "url": _REL + "tag/v1.8.0"}
+    assert update_check.parse_site_reply(ok)["download_url"] is None
+    assert update_check.parse_site_reply({**ok, "url": "https://evil.example/x"}) is None
+    assert update_check.parse_site_reply({**ok, "tag": "latest"}) is None
+    assert update_check.parse_site_reply({**ok, "ok": False}) is None
+    assert update_check.parse_site_reply("nope") is None
+    bad_dl = update_check.parse_site_reply({**ok, "download_url": "https://evil.example/x.exe"})
+    assert bad_dl["download_url"] is None
+
+
+def test_site_failure_falls_back_to_github(monkeypatch):
+    def boom(req, timeout=10):
+        raise urllib.error.URLError("offline")
+    monkeypatch.setattr(update_check.urllib.request, "urlopen", boom)
+    monkeypatch.setattr(update_check, "latest_release",
+                        lambda owner=None, repo=None: {"tag": "v1.0.0", "url": "u"})
+    assert update_check.check("1.0.0")["newer"] is False

@@ -116,8 +116,14 @@ def _describe_job(job, t) -> str:
             bits.append(t("prune_n_sets", n=opts["sets"]))
         if opts.get("freed_estimate"):
             bits.append(t("prune_frees", size=_fmt_size(opts["freed_estimate"])))
-    elif job.kind == "restore" and opts.get("restore_sets"):
+    elif job.kind in ("restore", "drive_restore") and opts.get("restore_sets"):
         bits.append(t("prune_n_sets", n=opts["restore_sets"]))
+    elif job.kind == "remove":
+        if opts.get("remove_source"):
+            bits.append(t(f"prune_source_{opts['remove_source']}"))
+        bits.append(t("rm_mode_save" if opts.get("save_first") else "rm_mode_only"))
+        if opts.get("sets"):
+            bits.append(t("prune_n_sets", n=opts["sets"]))
     if not bits:
         return ""
     line = "   ·   ".join(bits)
@@ -376,6 +382,18 @@ class ShortcutsTab(QWidget):
         drow.addStretch(1)
         root.addLayout(drow)
 
+        # v1.8: take sets out of a client (HANDOFF 4.1) and get sets back from
+        # the Drive backup (4.2).
+        crow = QHBoxLayout()
+        self.btn_remove = QPushButton(objectName="secondary")
+        self.btn_remove.clicked.connect(self.on_remove)
+        crow.addWidget(self.btn_remove)
+        self.btn_drive_browse = QPushButton(objectName="secondary")
+        self.btn_drive_browse.clicked.connect(self.on_drive_browse)
+        crow.addWidget(self.btn_drive_browse)
+        crow.addStretch(1)
+        root.addLayout(crow)
+
         # -- İş Kuyruğu / job queue --------------------------------------------
         self.jobqueue_box = QGroupBox()
         qlay = QVBoxLayout(self.jobqueue_box)
@@ -445,6 +463,10 @@ class ShortcutsTab(QWidget):
         self.btn_restore.setToolTip(t("tip_restore_pruned"))
         self.btn_lazer_flow.setText(t("btn_lazer_slim"))
         self.btn_lazer_flow.setToolTip(t("tip_lazer_slim"))
+        self.btn_remove.setText(t("btn_remove_from_client"))
+        self.btn_remove.setToolTip(t("tip_remove_from_client"))
+        self.btn_drive_browse.setText(t("btn_drive_browse"))
+        self.btn_drive_browse.setToolTip(t("tip_drive_browse"))
         self.jobqueue_box.setTitle(t("sc_jobqueue_title"))
         self.btn_clear_finished.setText(t("job_clear_finished"))
         self.queue_empty.setText(t("queue_empty"))
@@ -526,6 +548,7 @@ class ShortcutsTab(QWidget):
             b.setVisible(bool(on))
         self.transfer_box.setVisible(both)     # transfer needs BOTH clients
         self.save_box.setVisible(lz or st)
+        self.btn_remove.setVisible(bool(lz or st))
         self.unpack_box.setVisible(lz or st)
         disabled = [n for n, on in (("osu!lazer", lz), ("osu!(stable)", st)) if not on]
         self.disabled_hint.setVisible(bool(disabled))
@@ -728,6 +751,31 @@ class ShortcutsTab(QWidget):
             return
         self._enqueue(self.services.build_restore_pruned_job(), ("restore", n))
 
+    def on_remove(self) -> None:
+        """Remove sets from osu!(stable) / osu!lazer — preview + countdown in the
+        dialog, then a queued job (HANDOFF 4.1)."""
+        from .remove_dialog import RemoveDialog
+        dlg = RemoveDialog(self.ctx, self)
+        if dlg.exec() != QDialog.Accepted or not dlg.plan:
+            return
+        plan = dlg.plan
+        job = self.services.build_remove_job(plan["source"], plan["keys"], plan["save_first"])
+        self._enqueue(job, ("remove", plan["source"], plan["save_first"], tuple(plan["keys"])))
+
+    def on_drive_browse(self) -> None:
+        """List what the Drive backup holds and restore chosen sets (HANDOFF 4.2)."""
+        t = self.ctx.t
+        if not self.ctx.cfg.drive_connected:
+            QMessageBox.information(self, t("app_title"), t("drive_connect_first"))
+            return
+        from .drive_browser_dialog import DriveBrowserDialog
+        dlg = DriveBrowserDialog(self.ctx, self)
+        if dlg.exec() != QDialog.Accepted or not dlg.plan:
+            return
+        entries = dlg.plan
+        self._enqueue(self.services.build_drive_restore_job(entries),
+                      ("drive_restore", tuple(sorted(str(e.get("key")) for e in entries))))
+
     def on_lazer_slim(self) -> None:
         """The guided osu!lazer round-trip (see :mod:`rosu.ui.lazer_slim_dialog`)."""
         from .lazer_slim_dialog import LazerSlimDialog
@@ -893,6 +941,8 @@ class ShortcutsTab(QWidget):
             "dedup": self._present_dedup,
             "prune": self._present_prune,
             "restore": self._present_restore,
+            "remove": self._present_remove,
+            "drive_restore": self._present_drive_restore,
         }.get(job.kind)
         if presenter is not None:
             presenter(res)
@@ -1040,6 +1090,49 @@ class ShortcutsTab(QWidget):
             self._set_status("sc_restore_partial", n=repaired, failed=failed)
         else:
             self._set_status("sc_restore_failed", failed=failed)
+        self.mw.search.reload()
+
+    def _present_remove(self, res) -> None:
+        t = self.ctx.t
+        err = res.get("error")
+        if err:
+            QMessageBox.warning(self, t("app_title"), t(f"rm_err_{err}"))
+            self._set_status(f"rm_err_{err}")
+            return
+        removed, kept, failed = res.get("removed", 0), len(res.get("kept", [])), len(res.get("failed", []))
+        lines = [t("rm_done", n=removed, source=t(f"prune_source_{res.get('source', 'stable')}"))]
+        if res.get("saved"):
+            lines.append(t("rm_done_saved", n=res["saved"]))
+        if kept:
+            lines.append(t("rm_done_kept", n=kept))
+        if failed:
+            lines.append(t("rm_done_failed", n=failed))
+        if res.get("source") == "lazer" and removed:
+            lines.append(t("rm_done_lazer_restart"))
+            if res.get("backup"):
+                lines.append(t("rm_done_backup", path=res["backup"]))
+        if res.get("source") == "stable" and removed:
+            lines.append(t("rm_done_stable_refresh"))
+        QMessageBox.information(self, t("app_title"), "\n".join(lines))
+        self._set_status("rm_done", n=removed, source=t(f"prune_source_{res.get('source', 'stable')}"))
+        self.mw.search.reload()
+
+    def _present_drive_restore(self, res) -> None:
+        t = self.ctx.t
+        if res.get("error"):
+            QMessageBox.warning(self, t("app_title"),
+                                t("drv_err_not_connected") if res["error"] == "not_connected"
+                                else t("drv_err", detail=res.get("detail", "")))
+            return
+        failed = res.get("failed") or []
+        lines = [t("drv_done", n=res.get("restored", 0), already=res.get("already", 0))]
+        if failed:
+            reasons = [str(f.get("reason")) for f in failed[:5]]
+            shown = ", ".join(f"{f.get('name')} ({t(f'drv_fail_{r}')})"
+                              for f, r in zip(failed[:5], reasons))
+            lines.append(t("drv_done_failed", n=len(failed), names=shown))
+        QMessageBox.information(self, t("app_title"), "\n".join(lines))
+        self._set_status("drv_done", n=res.get("restored", 0), already=res.get("already", 0))
         self.mw.search.reload()
 
     def _present_prune(self, res) -> None:

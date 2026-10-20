@@ -217,7 +217,23 @@ class ReportDialog(QDialog):
     def _done(self, res) -> None:
         t = self.ctx.t
         if res.get("ok"):
-            QMessageBox.information(self, t("app_title"), t("report_sent"))
+            link = res.get("status_url")
+            if link:
+                # The private tracking link is shown once: put it on the
+                # clipboard and make it clickable, so it is not lost.
+                from html import escape
+                from PySide6.QtWidgets import QApplication
+                QApplication.clipboard().setText(link)
+                box = QMessageBox(QMessageBox.Information, t("app_title"),
+                                  t("report_sent") + "<br><br>"
+                                  + t("report_sent_track",
+                                      link=f"<a href='{escape(link, quote=True)}'>"
+                                           f"{escape(link)}</a>"), parent=self)
+                box.setTextFormat(Qt.RichText)
+                box.setTextInteractionFlags(Qt.TextBrowserInteraction)
+                box.exec()
+            else:
+                QMessageBox.information(self, t("app_title"), t("report_sent"))
             self.accept()
             return
         self.buttons.setEnabled(True)

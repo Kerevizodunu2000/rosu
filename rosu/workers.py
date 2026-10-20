@@ -29,4 +29,6 @@ class Worker(QThread):
                              **self._kwargs)
             self.succeeded.emit(result)
         except Exception as exc:  # surface to the UI rather than crashing
+            from . import crash_report
+            crash_report.capture(exc)   # no-op unless the user opted in
             self.failed.emit(f"{type(exc).__name__}: {exc}")

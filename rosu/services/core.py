@@ -37,6 +37,8 @@ class BaseServices:
             self._msd_cancel = threading.Event()  # separate cancel for skillset (MSD) scan
             self._prune_cancel = threading.Event()  # separate cancel for the prune scan
             self._reference_cancel = threading.Event()  # separate cancel for the pack-reference sync
+            self._removal_cancel = threading.Event()  # separate cancel for the remove-from-client scan
+            self._collections_cancel = threading.Event()  # separate cancel for collection sync
             self._rebuild_lock = threading.Lock()  # serialize tracking.xlsx writes
             self._reference_cache = None           # lazy osu! reference (invalidated on sync)
 
@@ -54,6 +56,8 @@ class BaseServices:
             self._msd_cancel.set()
             self._prune_cancel.set()
             self._reference_cancel.set()
+            self._removal_cancel.set()
+            self._collections_cancel.set()
 
         def rebuild(self) -> dict:
             # Serialize report writes so two workers (e.g. a Dashboard extract and a

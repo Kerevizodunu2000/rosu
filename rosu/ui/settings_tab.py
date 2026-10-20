@@ -91,6 +91,7 @@ class SettingsTab(QWidget):
         self.cb_clear_before = QCheckBox(); self.cb_clear_before.setChecked(cfg.clear_output_before_extract)
         self.cb_auto_backup = QCheckBox(); self.cb_auto_backup.setChecked(cfg.auto_backup_after_extract)
         self.cb_check_updates = QCheckBox(); self.cb_check_updates.setChecked(cfg.check_updates)
+        self.cb_crash_reports = QCheckBox(); self.cb_crash_reports.setChecked(getattr(cfg, "crash_reports", False))
         self.cb_auto_refresh = QCheckBox(); self.cb_auto_refresh.setChecked(cfg.auto_refresh_on_tab)
         self.cb_auto_prune = QCheckBox(); self.cb_auto_prune.setChecked(getattr(cfg, "auto_prune", False))
         self.cb_export_prune = QCheckBox(); self.cb_export_prune.setChecked(getattr(cfg, "export_prune", False))
@@ -100,7 +101,8 @@ class SettingsTab(QWidget):
         self.cb_autosave = QCheckBox(); self.cb_autosave.setChecked(cfg.settings_autosave)
         for cb in (self.cb_physical,
                    self.cb_auto_backup, self.cb_clear_before, self.cb_auto_prune,
-                   self.cb_export_prune, self.cb_check_updates, self.cb_auto_refresh, self.cb_autosave):
+                   self.cb_export_prune, self.cb_check_updates, self.cb_crash_reports,
+                   self.cb_auto_refresh, self.cb_autosave):
             root.addWidget(cb)
             
         prune_row = QHBoxLayout()
@@ -124,6 +126,7 @@ class SettingsTab(QWidget):
         # effect you need to SEE to choose. Physical-copy keeps its own guarded
         # confirm flow because turning it off deletes files.)
         for cb in (self.cb_auto_backup, self.cb_clear_before, self.cb_check_updates,
+                   self.cb_crash_reports,
                    self.cb_auto_refresh, self.cb_auto_prune, self.cb_export_prune):
             cb.toggled.connect(self._on_setting_changed)
         self.cb_physical.toggled.connect(self._on_physical_toggled)
@@ -359,6 +362,7 @@ class SettingsTab(QWidget):
                 "auto_backup": self.cb_auto_backup.isChecked(),
                 "clear_before": self.cb_clear_before.isChecked(),
                 "check_updates": self.cb_check_updates.isChecked(),
+                "crash_reports": self.cb_crash_reports.isChecked(),
                 "auto_refresh": self.cb_auto_refresh.isChecked(),
                 "enrich": self.cb_enrich.isChecked(),
                 "lazer_enabled": self.cb_lazer_enabled.isChecked(),
@@ -379,6 +383,7 @@ class SettingsTab(QWidget):
         boxes = ((self.cb_auto_backup, "auto_backup"),
                  (self.cb_clear_before, "clear_before"),
                  (self.cb_check_updates, "check_updates"),
+                 (self.cb_crash_reports, "crash_reports"),
                  (self.cb_auto_refresh, "auto_refresh"),
                  (self.cb_enrich, "enrich"),
                  (self.cb_lazer_enabled, "lazer_enabled"),
@@ -455,6 +460,8 @@ class SettingsTab(QWidget):
         self.cb_clear_before.setText(t("set_clear_output_before"))
         self.cb_check_updates.setText(t("set_check_updates"))
         self.cb_check_updates.setToolTip(t("tip_check_updates"))
+        self.cb_crash_reports.setText(t("set_crash_reports"))
+        self.cb_crash_reports.setToolTip(t("tip_crash_reports"))
         self.cb_auto_refresh.setText(t("set_auto_refresh"))
         self.cb_auto_refresh.setToolTip(t("tip_auto_refresh"))
         self.cb_auto_prune.setText(t("set_auto_prune"))
@@ -1049,6 +1056,7 @@ class SettingsTab(QWidget):
         cfg.auto_prune = self.cb_auto_prune.isChecked()
         cfg.export_prune = self.cb_export_prune.isChecked()
         cfg.check_updates = self.cb_check_updates.isChecked()
+        cfg.crash_reports = self.cb_crash_reports.isChecked()
         cfg.auto_refresh_on_tab = self.cb_auto_refresh.isChecked()
         cfg.enrich_from_api_enabled = self.cb_enrich.isChecked()
         cfg.lazer_enabled = self.cb_lazer_enabled.isChecked()

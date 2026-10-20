@@ -77,6 +77,9 @@ class Config:
     auto_backup_after_extract: bool = False   # auto-run Copy to Library after extract
     zip_disposal: str = "recycle"
     check_updates: bool = True   # check GitHub for a newer release on startup
+    # v1.8: opt-in crash reports (exception type + scrubbed message + module:function
+    # stack, see rosu/crash_report.py). OFF unless the user turns it on.
+    crash_reports: bool = False
     auto_refresh_on_tab: bool = True   # re-run a tab's on_shown() when switched to
     
     auto_prune: bool = False     # automatically prune new maps added to library

@@ -173,5 +173,28 @@ def submit_report(title, description, *, image_bytes=None, image_name=None,
     except ValueError:
         return {"ok": False, "error": "bad_reply"}
     if data.get("ok"):
-        return {"ok": True, "id": data.get("id")}
+        out = {"ok": True, "id": data.get("id")}
+        link = _status_link(data.get("status_url"), url)
+        if link:
+            out["status_url"] = link
+        return out
     return {"ok": False, "error": data.get("error", "server")}
+
+
+def _status_link(value, endpoint: str) -> str | None:
+    """The report's private tracking page (rosu-web v1.3+), accepted only as an
+    https link on the endpoint's own host under ``/report/status/`` — the reply
+    is shown as a clickable link, so nothing else may get through."""
+    import re
+    from urllib.parse import urlsplit
+    if not isinstance(value, str) or len(value) > 300:
+        return None
+    try:
+        got, ep = urlsplit(value), urlsplit(endpoint)
+    except ValueError:
+        return None
+    if got.scheme != "https" or not got.hostname or got.hostname != ep.hostname:
+        return None
+    if got.query or got.fragment or not re.fullmatch(r"/report/status/[A-Za-z0-9_-]{20,100}", got.path):
+        return None
+    return value
