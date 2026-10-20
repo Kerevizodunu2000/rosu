@@ -905,12 +905,34 @@ class Database:
             parts.append(f"({filter_where})")
         if not parts:
             return []       # nothing searchable (no tokens, no id, no filters)
-        params = params + filter_params + [limit]
         final_where = " AND ".join(parts)
+
+        # The recall is capped, and SQLite returns capped rows in table order, so
+        # a common word could cut the best hit before ranking ever saw it. Rows
+        # where every word starts a word of a strong field (the ranker's top
+        # tiers) are therefore recalled first, under the same cap.
+        pre_clauses: list[str] = []
+        pre_params: list = []
+        for tok in tokens:
+            pre_clauses.append("(" + " OR ".join(
+                f"({f} LIKE ? COLLATE NOCASE OR {f} LIKE ? COLLATE NOCASE)"
+                for f in ("display_name", "artist", "title")) + ")")
+            pre_params.extend([f"{tok}%", f"% {tok}%"] * 3)
         with self._lock:
-            cur = self._conn.execute(
-                f"SELECT * FROM tracks WHERE {final_where} LIMIT ?", params)
-            return [dict(r) for r in cur.fetchall()]
+            rows: list[dict] = []
+            if pre_clauses:
+                pre_where = " AND ".join(pre_clauses + parts[1:])
+                cur = self._conn.execute(
+                    f"SELECT * FROM tracks WHERE {pre_where} LIMIT ?",
+                    pre_params + filter_params + [limit])
+                rows = [dict(r) for r in cur.fetchall()]
+            if len(rows) < limit:
+                seen = {r["id"] for r in rows}
+                cur = self._conn.execute(
+                    f"SELECT * FROM tracks WHERE {final_where} LIMIT ?",
+                    params + filter_params + [limit])
+                rows += [dict(r) for r in cur.fetchall() if r["id"] not in seen]
+            return rows[:limit]
 
     def _build_filter_sql(self, filters: list) -> tuple[str, list]:
         """Turn structured query filters into (where_fragment, params).

@@ -104,6 +104,20 @@ def test_verify_library_respects_max_files(tmp_path):
     db.close()
 
 
+def test_verify_progress_reaches_its_total_when_rows_are_skipped(tmp_path):
+    cfg, db, svc = _svc(tmp_path)
+    f = cfg.library_path / "here.osz"
+    f.write_bytes(b"x")
+    _add(db, 1, "here.osz", drive_hash=sha256_file(f))
+    _add(db, 2, "gone.osz", drive_hash="abc")                  # missing: skipped, not hashed
+    _add(db, 3, "gone2.osz", drive_hash="abc")
+    seen = []
+    res = svc.verify_library(progress=seen.append)
+    assert res["checked"] == 1 and res["missing"] == 2
+    assert [(m["done"], m["total"]) for m in seen] == [(1, 3), (2, 3), (3, 3)]
+    db.close()
+
+
 def test_library_health_reports_usage_scrub_and_biggest(tmp_path):
     cfg, db, svc = _svc(tmp_path)
     (cfg.library_path / "small.osz").write_bytes(b"x" * 100)
