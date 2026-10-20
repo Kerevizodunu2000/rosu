@@ -52,7 +52,19 @@ def test_place_new_never_replaces_a_file(tmp_path):
     assert dest.read_bytes() == b"new"
 
 
-@pytest.mark.skipif(hasattr(os, "geteuid") and os.geteuid() == 0, reason="root can write anywhere")
+def test_dir_writable_is_false_when_a_file_cannot_be_created(tmp_path, monkeypatch):
+    import tempfile
+
+    def refuse(**_k):
+        raise PermissionError("access denied")
+    monkeypatch.setattr(tempfile, "TemporaryFile", refuse)
+    assert not dir_writable(tmp_path)
+
+
+# chmod cannot take write access away from a folder on Windows (it only sets the
+# read-only attribute, which folders ignore), and root ignores it on POSIX.
+@pytest.mark.skipif(os.name == "nt" or (hasattr(os, "geteuid") and os.geteuid() == 0),
+                    reason="needs POSIX permissions enforced for this user")
 def test_dir_writable_answers_for_read_only_folders(tmp_path):
     ro = tmp_path / "ro"
     ro.mkdir()
