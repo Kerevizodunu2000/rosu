@@ -9,6 +9,7 @@ from .export_svc import ExportMixin
 from .collection_svc import CollectionMixin
 from .removal_svc import RemovalMixin
 from .drive_restore_svc import DriveRestoreMixin
+from .move_svc import LibraryMoveMixin
 
 class Services(
     BaseServices,
@@ -21,5 +22,6 @@ class Services(
     CollectionMixin,
     RemovalMixin,
     DriveRestoreMixin,
+    LibraryMoveMixin,
 ):
     pass

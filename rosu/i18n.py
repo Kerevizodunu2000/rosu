@@ -1867,6 +1867,83 @@ STRINGS: dict[str, dict[str, str]] = {
               "Library first if you want. Shows exactly what goes before anything is touched.",
         "tr": "osu!(stable) veya osu!lazer'dan beatmap setlerini kaldırır — istersen önce "
               "Library'e kaydeder. Hiçbir şeye dokunmadan önce tam olarak neyin gideceğini gösterir."},
+    # -- v1.9: move the Library -----------------------------------------------------
+    "btn_move_library": {"en": "Move Library…", "tr": "Library'yi Taşı…"},
+    "tip_move_library": {
+        "en": "Move the Library to another folder or drive. Every file is copied and "
+              "checked before Rosu switches to the new folder.",
+        "tr": "Library'yi başka bir klasöre ya da sürücüye taşı. Rosu yeni klasöre "
+              "geçmeden önce her dosya kopyalanır ve kontrol edilir."},
+    "mv_title": {"en": "Move the Library", "tr": "Library'yi Taşı"},
+    "mv_intro": {
+        "en": "Every file is copied to the new folder and checked byte for byte; only "
+              "then does Rosu switch to it. If anything goes wrong, nothing changes.",
+        "tr": "Her dosya yeni klasöre kopyalanır ve bayt bayt kontrol edilir; Rosu ancak "
+              "ondan sonra oraya geçer. Bir şey ters giderse hiçbir şey değişmez."},
+    "mv_current": {"en": "Current Library: {path}", "tr": "Şu anki Library: {path}"},
+    "mv_dest_placeholder": {"en": "New Library folder…", "tr": "Yeni Library klasörü…"},
+    "mv_checking": {"en": "Checking the destination…", "tr": "Hedef kontrol ediliyor…"},
+    "mv_plan": {"en": "{n} files ({size}) will be copied. Free space there: {free}.",
+                "tr": "{n} dosya ({size}) kopyalanacak. Oradaki boş alan: {free}."},
+    "mv_plan_same": {"en": "{n} of them are already there (identical) and are kept.",
+                     "tr": "Bunların {n} tanesi zaten orada (birebir aynı) ve korunur."},
+    "mv_plan_subfolders": {
+        "en": "Folders inside the Library stay where they are: {names}",
+        "tr": "Library içindeki klasörler olduğu yerde kalır: {names}"},
+    "mv_remove_old": {"en": "Afterwards, send the old copies to the Recycle Bin",
+                      "tr": "Sonra eski kopyaları Geri Dönüşüm Kutusu'na gönder"},
+    "mv_remove_old_short": {"en": "old copies → Recycle Bin",
+                            "tr": "eski kopyalar → Geri Dönüşüm Kutusu"},
+    "tip_mv_remove_old": {
+        "en": "Only after every file is verified in the new folder. On a drive without a "
+              "Recycle Bin the old copies are left alone.",
+        "tr": "Yalnızca her dosya yeni klasörde doğrulandıktan sonra. Geri Dönüşüm Kutusu "
+              "olmayan bir sürücüde eski kopyalara dokunulmaz."},
+    "mv_run": {"en": "Move", "tr": "Taşı"},
+    "mv_confirm": {
+        "en": "Move {n} files ({size}) to:\n{dest}\n\nRosu copies and checks every file, "
+              "then switches to the new folder.",
+        "tr": "{n} dosya ({size}) şuraya taşınsın mı:\n{dest}\n\nRosu her dosyayı "
+              "kopyalayıp kontrol eder, sonra yeni klasöre geçer."},
+    "mv_confirm_old_recycle": {
+        "en": "Then the old copies go to the Recycle Bin.",
+        "tr": "Sonra eski kopyalar Geri Dönüşüm Kutusu'na gider."},
+    "mv_confirm_old_kept": {
+        "en": "The old copies stay where they are (delete them yourself when you are sure).",
+        "tr": "Eski kopyalar olduğu yerde kalır (emin olunca kendin silebilirsin)."},
+    "mv_err_same": {"en": "That is the current Library folder.",
+                    "tr": "Bu zaten şu anki Library klasörü."},
+    "mv_err_inside": {
+        "en": "The new folder cannot be inside the Library, or contain it.",
+        "tr": "Yeni klasör Library'nin içinde olamaz ya da onu içeremez."},
+    "mv_err_not_writable": {"en": "Rosu cannot write to that folder.",
+                            "tr": "Rosu o klasöre yazamıyor."},
+    "mv_err_no_library": {"en": "The current Library folder does not exist.",
+                          "tr": "Şu anki Library klasörü yok."},
+    "mv_err_conflicts": {
+        "en": "{n} files with the same name but different contents are already there "
+              "(e.g. {names}). Move or rename them first.",
+        "tr": "Orada aynı adlı ama içeriği farklı {n} dosya zaten var (ör. {names}). Önce "
+              "onları taşı ya da yeniden adlandır."},
+    "mv_err_no_space": {"en": "There is not enough free space there.",
+                        "tr": "Orada yeterli boş alan yok."},
+    "mv_err_copy_failed": {"en": "A file could not be copied or did not match its original.",
+                           "tr": "Bir dosya kopyalanamadı ya da aslıyla eşleşmedi."},
+    "mv_cancelled": {"en": "The move was cancelled.", "tr": "Taşıma iptal edildi."},
+    "mv_nothing_changed": {
+        "en": "Nothing changed: the Library is still where it was.",
+        "tr": "Hiçbir şey değişmedi: Library hâlâ olduğu yerde."},
+    "mv_done": {"en": "The Library ({n} files) is now in {dest}.",
+                "tr": "Library ({n} dosya) artık şurada: {dest}."},
+    "mv_done_recycled": {"en": "{n} old copies went to the Recycle Bin.",
+                         "tr": "{n} eski kopya Geri Dönüşüm Kutusu'na gitti."},
+    "mv_done_old_kept_no_bin": {
+        "en": "The old copies were left in place: that drive has no Recycle Bin.",
+        "tr": "Eski kopyalar yerinde bırakıldı: o sürücüde Geri Dönüşüm Kutusu yok."},
+    "job_library_move": {"en": "Move the Library", "tr": "Library'yi taşı"},
+    "job_step_library_move": {"en": "Copy, verify, switch", "tr": "Kopyala, doğrula, geç"},
+    "job_library_move_desc": {"en": "to {dest}", "tr": "hedef: {dest}"},
+
     # -- v1.9: Logs table ----------------------------------------------------------
     "log_col_time": {"en": "Time", "tr": "Zaman"},
     "log_col_level": {"en": "Level", "tr": "Seviye"},

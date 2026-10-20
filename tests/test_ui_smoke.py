@@ -855,3 +855,43 @@ def test_cover_gallery_makes_and_caches_thumbnails(qapp, tmp_path, monkeypatch):
     tall = cover_crop(QImage(100, 1000, QImage.Format_RGB32))
     assert (tall.width(), tall.height()) == (THUMB_W, THUMB_H)
     ctx.db.close()
+
+
+def test_move_library_dialog_previews_and_the_result_updates_settings(qapp, tmp_path, monkeypatch):
+    from rosu.ui.main_window import MainWindow
+    from rosu.ui.move_library_dialog import MoveLibraryDialog
+    ctx = _ctx(tmp_path, monkeypatch)
+    (ctx.cfg.library_path / "1 A - B.osz").write_bytes(b"x" * 10)
+    dlg = MoveLibraryDialog(ctx)
+    dlg.dest.setText(str(ctx.cfg.library_path))
+    dlg.check()
+    dlg._worker.wait(5000)
+    qapp.processEvents()
+    assert not dlg.btn_move.isEnabled() and dlg.lbl_plan.text() == ctx.t("mv_err_same")
+    dlg.dest.setText(str(tmp_path / "NewLib"))
+    dlg.check()
+    dlg._worker.wait(5000)
+    qapp.processEvents()
+    assert dlg.btn_move.isEnabled() and "1" in dlg.lbl_plan.text()
+    win = MainWindow(ctx, qapp)
+    shown = []
+    monkeypatch.setattr("rosu.ui.shortcuts_tab._plain_message", lambda *a: shown.append(a[2]))
+    win.shortcuts._present_library_move({"moved": 1, "same": 0, "dest": str(tmp_path / "NewLib")})
+    assert win.settings.library.text() == str(tmp_path / "NewLib")
+    assert not win.settings._is_dirty() or win.settings._baseline["library"] == str(tmp_path / "NewLib")
+    win.shortcuts._present_library_move({"error": "conflicts", "conflicts": ["a.osz"]})
+    assert ctx.t("mv_nothing_changed") in shown[-1]
+    win.close()
+    ctx.db.close()
+
+
+def test_autosaved_crash_report_toggle_leaves_settings_clean(qapp, tmp_path, monkeypatch):
+    from rosu.ui.main_window import MainWindow
+    ctx = _ctx(tmp_path, monkeypatch)
+    ctx.cfg.settings_autosave = True
+    win = MainWindow(ctx, qapp)
+    win.settings.cb_crash_reports.setChecked(not win.settings.cb_crash_reports.isChecked())
+    assert ctx.cfg.crash_reports == win.settings.cb_crash_reports.isChecked()
+    assert not win.settings._is_dirty()      # v1.8: the toggle was missing from the baseline
+    win.close()
+    ctx.db.close()

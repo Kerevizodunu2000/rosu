@@ -48,6 +48,7 @@ ACTIONS: dict[str, tuple[tuple[str, ...], str]] = {
     "EXCEL_WRITE":   (("path", "sheets"), "Regenerated the Excel tracking report"),
     "SEARCH":        (("query", "results"), "User searched the music memory"),
     "SETTINGS_SAVE": (("changed",), "User saved settings"),
+    "LIBRARY_MOVE":  (("old", "new", "files", "bytes"), "Moved the Library to another folder (copied, verified, switched)"),
     "ERROR":         (("where", "detail"), "An error occurred"),
 }
 

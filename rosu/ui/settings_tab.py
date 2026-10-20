@@ -17,7 +17,6 @@ from .. import config
 from ..workers import Worker
 from . import wheel_guard
 from .countdown_dialog import CountdownConfirmDialog
-from .links import wire_link_hover
 
 _ZIP_ORDER = ["recycle", "move", "delete"]
 
@@ -1009,7 +1008,7 @@ class SettingsTab(QWidget):
         w.start()
 
     # -- toggle commit model (v1.4.1) ----------------------------------------
-    _TOGGLE_KEYS = ("auto_backup", "clear_before", "check_updates",
+    _TOGGLE_KEYS = ("auto_backup", "clear_before", "check_updates", "crash_reports",
                     "auto_refresh", "enrich", "lazer_enabled", "stable_enabled",
                     "zip")
 
@@ -1165,6 +1164,16 @@ class SettingsTab(QWidget):
         QMessageBox.critical(self, self.ctx.t("app_title"), msg)
 
     # -- save (paths + API) --------------------------------------------------
+    def library_moved(self, path: str) -> None:
+        """A Library move switched ``cfg.library_dir``: show it, and count it as
+        saved — a later Save must not write the old folder back."""
+        if not path:
+            return
+        self.library.blockSignals(True)
+        self.library.setText(path)
+        self.library.blockSignals(False)
+        self._baseline["library"] = path
+
     def _save(self, silent: bool = False) -> bool:
         cfg = self.ctx.cfg
         packs = self.packs.text().strip()
