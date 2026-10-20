@@ -10,6 +10,52 @@ the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-10-20
+
+**Browse the Library your way, move it anywhere, and let new downloads come in by themselves.**
+
+### Added
+- **Search, your way.**
+  - Right-click a column header to hide or show columns; the choice is remembered (the
+    name column always stays).
+  - **★ Saved** keeps the current search (text, filters and the tags toggle) under a
+    name; one click runs it again (up to 50).
+  - **◀ ▶** (Alt+←/→) step back and forward through the last 16 searches; a burst of
+    live-search typing counts as one step.
+  - **▦ Gallery** shows the results as cover art (each set's background, the first 500);
+    double-click a cover for its details. Thumbnails are made in the background and
+    cached under `data/covers`.
+  - **Export…** writes the listed sets to CSV (opens in Excel; spreadsheet formulas in
+    titles are neutralised) or JSON.
+  - Right-click sets → **Copy to Output (for Import to osu!)** stages exactly those Library
+    sets for the Dashboard's Import to osu!.
+- **Move Library…** (Shortcuts): move the Library to another folder or drive. The preview
+  shows the files, their size, the free space there and anything in the way (a different
+  file with the same name blocks the move; it is never overwritten). Every file is
+  copied and checked against its SHA-256 before Rosu switches to the new folder;
+  afterwards the old copies can go to the Recycle Bin (left alone on a drive without
+  one). A cancel or a failed copy changes nothing.
+- **Watch a folder** (Settings, opt-in): while Rosu runs, new `.osz` files that land in the
+  chosen folder (say, Downloads) are added to the Library by a quiet background job. Files
+  already there when watching starts are left alone, a file is taken only once it has
+  stopped changing, and your files are never moved or deleted.
+- **Logs tab as a table**: any day's log in columns (time, level, action, details,
+  message), with "Errors only" and a word filter; today's grows live.
+
+### Changed
+- The osu!lazer export shows real progress (sets done / total) with the updated helper
+  (it now prints the total first); an older helper keeps the moving bar.
+
+### Fixed
+- **Searching a common word could miss the best match.** The candidate list was capped
+  in table order before ranking; matches where every word starts a word of the name,
+  artist or title are now collected first.
+- **Library verify's progress bar never filled** when some files were missing or pruned
+  (only hashed files counted).
+- The v1.8 "Remove" job step label replaced the dedup job's "Recycle duplicates" text
+  (both used one translation key); a test now fails on any repeated key.
+- Turning crash reports on in Auto-Save mode left Settings looking unsaved.
+
 ## [1.8.0] - 2026-10-20
 
 **Take sets out of osu!, and get sets back from your Drive backup.**
