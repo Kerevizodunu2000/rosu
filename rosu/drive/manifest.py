@@ -66,7 +66,7 @@ def load_shard(path: Path) -> dict:
         return {}
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError, ValueError):
+    except (json.JSONDecodeError, OSError, ValueError, RecursionError):
         return {}
     entries = data.get("entries") if isinstance(data, dict) else None
     return entries if isinstance(entries, dict) else {}

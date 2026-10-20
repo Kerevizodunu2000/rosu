@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """RemovalMixin: remove sets from osu!(stable) / osu!lazer (v1.8, HANDOFF 4.1)."""
 import zipfile
+from pathlib import Path
 
 import pytest
 
@@ -108,13 +109,59 @@ def test_save_first_copies_into_the_library_then_removes(env):
     assert (trash / "303 A - B").exists()
 
 
-def test_save_first_keeps_sets_it_cannot_prove_are_in_the_library(env):
+def test_save_first_keeps_a_real_file_even_with_memory_only_imports(env):
     cfg, db, svc, songs, trash = env
-    cfg.library_physical_copy = False                     # memory-only: no .osz kept
+    cfg.library_physical_copy = False                     # the setting covers normal imports
     _stable_set(songs, 404)
     res = svc.remove_from_client("stable", ["404 A - B"], save_first=True)
-    assert res["removed"] == 0 and res["kept"] == ["404 A - B"]
-    assert (songs / "404 A - B").exists()
+    assert res["saved"] == 1 and res["removed"] == 1, res
+    assert (cfg.library_path / "404 A - B.osz").is_file()
+
+
+def test_save_first_never_trusts_a_matching_id_alone(env):
+    cfg, db, svc, songs, trash = env
+    # The Library's set 101 is something else entirely (another map that happens
+    # to share the id prefix): the folder's own difficulties are not in it.
+    _library_set(cfg, db, 101)
+    lib_file = cfg.library_path / "101 A - B.osz"
+    before = lib_file.read_bytes()
+    _stable_set(songs, 101)
+    res = svc.remove_from_client("stable", ["101 A - B"], save_first=True)
+    assert res["removed"] == 0 and res["kept"] == ["101 A - B"], res
+    assert (songs / "101 A - B").exists()
+    assert lib_file.read_bytes() == before                # never overwritten
+
+
+def test_save_first_keeps_a_set_whose_library_copy_is_empty_or_edited(env):
+    cfg, db, svc, songs, trash = env
+    d = _stable_set(songs, 606)
+    (cfg.library_path / "606 A - B.osz").write_bytes(b"")  # 0-byte "copy"
+    res = svc.remove_from_client("stable", ["606 A - B"], save_first=True)
+    assert res["removed"] == 0 and res["kept"] == ["606 A - B"]
+    # A Library copy with every difficulty byte for byte does prove it.
+    (cfg.library_path / "606 A - B.osz").unlink()
+    client_import.zip_folder_to_osz(d, cfg.library_path / "606 A - B.osz")
+    (d / "A - B [x].osu").write_text("osu file format v14\nedited locally\n")
+    res = svc.remove_from_client("stable", ["606 A - B"], save_first=True)
+    assert res["removed"] == 0 and res["kept"] == ["606 A - B"]     # edited since: kept
+    client_import.zip_folder_to_osz(d, cfg.library_path / "606 A - B.osz")
+    res = svc.remove_from_client("stable", ["606 A - B"], save_first=True)
+    assert res["removed"] == 1 and (trash / "606 A - B").exists()
+
+
+def test_remove_only_needs_a_recycle_bin_and_a_known_client_state(env, monkeypatch):
+    cfg, db, svc, songs, trash = env
+    _stable_set(songs, 707)
+    monkeypatch.setattr(client_remove, "osu_process_paths", lambda: None)
+    assert svc.remove_from_client("stable", ["707 A - B"], save_first=False)["error"] \
+        == "client_check_failed"
+    monkeypatch.setattr(client_remove, "osu_process_paths", lambda: [])
+    monkeypatch.setattr(client_remove, "recycle_bin_available", lambda path: False)
+    assert svc.remove_from_client("stable", ["707 A - B"], save_first=False)["error"] \
+        == "no_recycle_bin"
+    assert (songs / "707 A - B").exists()
+    res = svc.remove_from_client("stable", ["707 A - B"], save_first=True)   # Library copy instead
+    assert res["removed"] == 1
 
 
 def test_refuses_names_outside_songs_and_a_running_client(env, monkeypatch):
@@ -130,31 +177,66 @@ def test_refuses_names_outside_songs_and_a_running_client(env, monkeypatch):
     assert res["error"] == "client_running" and (songs / "505 A - B").exists()
 
 
-def test_lazer_removal_goes_through_the_helper_only(env, monkeypatch, tmp_path):
-    cfg, db, svc, songs, _ = env
+def _fake_lazer(svc, monkeypatch, tmp_path, exports):
+    """A stand-in helper: ``export`` writes ``exports`` ({file name: .osu text},
+    all for set 7), ``delete`` soft-deletes whatever ids it is given."""
     data = tmp_path / "lazer"
     data.mkdir()
     monkeypatch.setattr(client_import, "lazer_data_dir", lambda: data)
     calls = []
 
     def fake_run(self, args, cancel=None, timeout=0):
-        calls.append([str(a) for a in args])
-        if args[0] == "--capabilities":
+        a = [str(x) for x in args]
+        calls.append(a)
+        if a[0] == "--capabilities":
             return 0, "CAPS export list delete\n", ""
-        if args[0] == "delete":
-            return 0, "BACKUP C:\\osu\\client.realm.rosu-1.bak\nDELETED 7\n", "done deleted=1"
+        if a[0] == "export":
+            out = Path(a[2])
+            out.mkdir(parents=True, exist_ok=True)
+            lines = []
+            for name, osu in exports.items():
+                with zipfile.ZipFile(out / name, "w") as z:
+                    z.writestr("A - B [x].osu", osu)
+                    z.writestr("audio.mp3", b"a" * 10)
+                lines.append(f"EXPORT 7\t{name}")
+            return 0, "\n".join(lines) + "\n", ""
+        if a[0] == "delete":
+            ids = Path(a[2]).read_text().split()
+            return 0, "BACKUP C:\\osu\\client.realm.rosu-1.bak\n" + \
+                "".join(f"DELETED {i}\n" for i in ids), "done"
         return 1, "", "unexpected"
     monkeypatch.setattr(type(svc), "_lazer_helper", lambda self: tmp_path / "helper.exe")
     (tmp_path / "helper.exe").write_bytes(b"")
     monkeypatch.setattr(type(svc), "_lazer_helper_run", fake_run)
-    _library_set(cfg, db, 7)
+    return data, calls
+
+
+def test_lazer_removal_saves_first_and_goes_through_the_helper_only(env, monkeypatch, tmp_path):
+    cfg, db, svc, songs, _ = env
+    # Two lazer sets share id 7 (an edited copy): both must reach the Library.
+    data, calls = _fake_lazer(svc, monkeypatch, tmp_path, {
+        "7 A - B.osz": "osu file format v14\nBeatmapSetID:7\n",
+        "7 A - B (2).osz": "osu file format v14\nBeatmapSetID:7\nedited\n"})
     db.set_in_osu(7, True, client="lazer")
-    res = svc.remove_from_client("lazer", ["7", "not-an-id"], save_first=False)
-    assert res["removed"] == 1 and res["failed"] == ["not-an-id"]
+    res = svc.remove_from_client("lazer", ["7", "not-an-id"], save_first=False)  # forced to save
+    assert res["removed"] == 1 and res["failed"] == ["not-an-id"] and res["kept"] == [], res
+    assert {p.name for p in cfg.library_path.glob("7 *.osz")} == {"7 A - B.osz", "7 A - B (2).osz"}
     assert res["backup"].endswith(".bak")
     assert db.find_track_row(7, None)["in_osu_lazer"] == 0
-    assert [c[0] for c in calls] == ["--capabilities", "delete"]
+    assert [c[0] for c in calls] == ["--capabilities", "export", "delete"]
     assert not any(p.name != "lazer" for p in data.iterdir())   # never touched lazer's files
+
+
+def test_lazer_keeps_a_set_when_the_library_holds_another_version(env, monkeypatch, tmp_path):
+    cfg, db, svc, songs, _ = env
+    data, calls = _fake_lazer(svc, monkeypatch, tmp_path, {
+        "7 A - B.osz": "osu file format v14\nBeatmapSetID:7\nlazer's version\n"})
+    _library_set(cfg, db, 7)                       # same name, different difficulty bytes
+    before = (cfg.library_path / "7 A - B.osz").read_bytes()
+    res = svc.remove_from_client("lazer", ["7"], save_first=True)
+    assert res["removed"] == 0 and res["kept"] == ["7"], res
+    assert (cfg.library_path / "7 A - B.osz").read_bytes() == before   # not overwritten
+    assert "delete" not in [c[0] for c in calls]
 
 
 def test_lazer_without_the_new_helper_is_refused(env, monkeypatch, tmp_path):
@@ -169,3 +251,4 @@ def test_remove_job_reports_its_options(env):
     job = svc.build_remove_job("stable", ["a", "b"], save_first=False)
     assert job.kind == "remove"
     assert job.ctx["options"] == {"remove_source": "stable", "sets": 2, "save_first": False}
+    assert svc.build_remove_job("lazer", ["7"], save_first=False).ctx["options"]["save_first"]

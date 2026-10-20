@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using System.Text;
 using Realms;
 
 // RosuLazerExport — Rosu's bridge to osu!lazer's client.realm + files/ store.
@@ -6,6 +7,7 @@ using Realms;
 //   RosuLazerExport --capabilities                   -> "CAPS export list delete"
 //   RosuLazerExport list   <data-dir>                -> "SET\t<id>\t<bytes>\t<name>" per set
 //   RosuLazerExport export <data-dir> <out-dir> [--ids <file>] [--limit N]
+//                                                    -> "EXPORT <id>\t<file>" per set
 //   RosuLazerExport delete <data-dir> <ids-file>     -> "DELETED <id>" per set
 //   RosuLazerExport <data-dir> <out-dir> [limit]     (legacy form = export)
 //
@@ -16,7 +18,12 @@ using Realms;
 // lazer shares one stored copy between every set with a byte-identical file.
 // Before writing, `delete` (1) proves the file opens read-only — i.e. this
 // helper's Realm needs no file-format upgrade, so the write cannot leave a file
-// lazer is unable to open — and (2) copies client.realm aside as an undo path.
+// lazer is unable to open — and (2) copies client.realm aside as an undo path
+// (the newest few are kept; lazer purges the sets on its next start anyway).
+
+// Rosu reads stdout/stderr as UTF-8; the console default on Windows is the OEM
+// code page, which would garble (or fail to decode) non-ASCII artist names.
+Console.OutputEncoding = new UTF8Encoding(false);
 
 string[] caps = { "export", "list", "delete" };
 if (args.Length == 1 && args[0] == "--capabilities")
@@ -163,6 +170,9 @@ static int Export(string dataDir, string outDir, HashSet<int> onlyIds, int limit
     Directory.CreateDirectory(outDir);
 
     int exported = 0, skipped = 0, missingFiles = 0;
+    // Two live sets can share an OnlineID (an edited copy, a re-import): each
+    // gets its own file instead of the second overwriting the first.
+    var writtenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     using (realm)
     {
         foreach (var setObj in LiveSets(realm))
@@ -175,7 +185,10 @@ static int Export(string dataDir, string outDir, HashSet<int> onlyIds, int limit
             string dn = DisplayName(set, onlineId);
             string baseName = Sanitize(dn == onlineId.ToString() ? dn : $"{onlineId} {dn}");
             if (string.IsNullOrWhiteSpace(baseName)) baseName = onlineId.ToString();
-            string oszPath = Path.Combine(outDir, baseName + ".osz");
+            string fileName = baseName + ".osz";
+            for (int n = 2; writtenNames.Contains(fileName); n++)
+                fileName = $"{baseName} ({n}).osz";
+            string oszPath = Path.Combine(outDir, fileName);
             string tmp = oszPath + ".part";
 
             try
@@ -203,8 +216,9 @@ static int Export(string dataDir, string outDir, HashSet<int> onlyIds, int limit
                 if (written == 0) { File.Delete(tmp); skipped++; continue; }
                 if (File.Exists(oszPath)) File.Delete(oszPath);
                 File.Move(tmp, oszPath);
+                writtenNames.Add(fileName);
                 exported++;
-                Console.WriteLine($"EXPORT {onlineId}");   // one line per set -> progress
+                Console.WriteLine($"EXPORT {onlineId}\t{fileName}");   // one line per set
                 if (exported >= limit) break;
             }
             catch (Exception ex)
@@ -244,6 +258,7 @@ static int Delete(string dataDir, string idsFile)
         return 6;
     }
     Console.WriteLine("BACKUP " + backup);
+    PruneBackups(realmPath, keep: 3);
 
     // 3. The write: flag the chosen sets exactly as lazer's own delete does.
     Realm realm;
@@ -278,6 +293,21 @@ static int Delete(string dataDir, string idsFile)
     foreach (var id in deleted) Console.WriteLine($"DELETED {id}");
     Console.Error.WriteLine($"done deleted={deleted.Count}");
     return 0;
+}
+
+// Each backup is a full copy of client.realm; keep only the newest few.
+static void PruneBackups(string realmPath, int keep)
+{
+    try
+    {
+        string dir = Path.GetDirectoryName(realmPath) ?? ".";
+        var old = Directory.GetFiles(dir, Path.GetFileName(realmPath) + ".rosu-*.bak")
+            .OrderByDescending(f => Path.GetFileName(f), StringComparer.Ordinal)
+            .Skip(keep);
+        foreach (var f in old)
+            try { File.Delete(f); } catch { /* best effort */ }
+    }
+    catch { /* best effort: a failed cleanup never fails the delete */ }
 }
 
 static string Sanitize(string s)

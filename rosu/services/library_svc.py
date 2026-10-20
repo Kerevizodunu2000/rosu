@@ -75,10 +75,13 @@ class LibraryMixin:
                           disappeared=res["disappeared"], present=res["present"])
             return res
 
-        def import_osz_folder(self, folder, progress=None, source_label=None) -> dict:
+        def import_osz_folder(self, folder, progress=None, source_label=None,
+                              physical_copy: bool | None = None) -> dict:
             """Dedup every .osz in ``folder`` into the Library (shared by the stable,
             lazer and manual import paths). Emits k/n import progress (item 3) and, when
-            ``source_label`` is set, tags each set with its origin (item 9)."""
+            ``source_label`` is set, tags each set with its origin (item 9).
+            ``physical_copy`` overrides the setting: saving a set before it leaves
+            osu!, or restoring one from Drive, must leave a real file."""
             folder = Path(folder)
             total = sum(1 for _ in folder.glob("*.osz")) if folder.exists() else 0
             done = [0]
@@ -90,7 +93,8 @@ class LibraryMixin:
     
             res = library.copy_to_library(
                 folder, self.cfg.library_path, self.db, now_iso(),
-                self.cfg.library_physical_copy, cb if progress else None,
+                self.cfg.library_physical_copy if physical_copy is None else physical_copy,
+                cb if progress else None,
                 source_label=source_label, auto_prune=self.cfg.auto_prune,
                 prune_mode=self.cfg.prune_mode)
             self.rebuild()

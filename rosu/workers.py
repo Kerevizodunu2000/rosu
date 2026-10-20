@@ -11,6 +11,11 @@ from typing import Callable
 
 from PySide6.QtCore import QThread, Signal
 
+# Every started Worker stays referenced here until its thread has ended. A
+# dialog closed mid-scan drops its own reference; without this the QThread
+# could be garbage-collected while still running, which aborts the process.
+_live: set = set()
+
 
 class Worker(QThread):
     progressed = Signal(object)   # str status or a structured dict
@@ -22,6 +27,15 @@ class Worker(QThread):
         self._fn = fn
         self._args = args
         self._kwargs = kwargs
+        self.finished.connect(self._release)   # queued to the owning (UI) thread
+
+    def start(self, *args) -> None:
+        _live.add(self)
+        super().start(*args)
+
+    def _release(self) -> None:
+        self.wait()   # finished is emitted just before the thread exits
+        _live.discard(self)
 
     def run(self) -> None:
         try:

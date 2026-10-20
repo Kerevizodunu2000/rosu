@@ -70,7 +70,8 @@ class RemovalMixin:
                 return cache[1]
             rc, out, _err = self._lazer_helper_run(["--capabilities"], timeout=30)
             caps = client_remove.parse_helper_capabilities(out) if rc == 0 else set()
-            self._lazer_caps_cache = (stamp, caps)
+            if rc is not None:   # a timeout is not an answer: ask again next time
+                self._lazer_caps_cache = (stamp, caps)
             return caps
 
         def _lazer_helper_run(self, args, cancel=None, timeout: float = 3600):
@@ -81,13 +82,15 @@ class RemovalMixin:
             helper = self._lazer_helper()
             if helper is None:
                 return None, "", "helper_missing"
-            out_f = tempfile.TemporaryFile(mode="w+", encoding="utf-8")
-            err_f = tempfile.TemporaryFile(mode="w+", encoding="utf-8")
+            # The helper writes UTF-8 (Console.OutputEncoding); "replace" keeps an
+            # older helper's code-page output from failing the whole read.
+            out_f = tempfile.TemporaryFile(mode="w+", encoding="utf-8", errors="replace")
+            err_f = tempfile.TemporaryFile(mode="w+", encoding="utf-8", errors="replace")
             try:
                 try:
                     proc = subprocess.Popen(
                         [str(helper), *[str(a) for a in args]],
-                        stdout=out_f, stderr=err_f, text=True,
+                        stdout=out_f, stderr=err_f,
                         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
                 except OSError as exc:
                     return None, "", str(exc)[:300]
@@ -109,19 +112,57 @@ class RemovalMixin:
                 out_f.close()
                 err_f.close()
 
-        # -- preview -------------------------------------------------------
-        def _library_backed_ids(self) -> set[int]:
-            """Set ids with a real ``.osz`` in the Library right now — the only
-            thing that counts as "backed up" before a set leaves a client."""
+        # -- preview / proof -----------------------------------------------
+        def _library_files_by_id(self) -> dict[int, list[Path]]:
+            """Set id → the Library ``.osz`` files on disk recorded for it."""
             lib = self.cfg.library_path
-            ids: set[int] = set()
+            out: dict[int, list[Path]] = {}
             for r in self.db.library_tracks():
                 bid, fn = r.get("beatmapset_id"), r.get("filename")
                 if bid is None or not fn or not has_library_copy(r):
                     continue
                 if (lib / fn).is_file():
-                    ids.add(int(bid))
-            return ids
+                    out.setdefault(int(bid), []).append(lib / fn)
+            return out
+
+        def _library_backed_ids(self) -> set[int]:
+            """Set ids with a real ``.osz`` in the Library — the preview's "In
+            Library" hint. The removal itself proves each set file by file
+            (:meth:`_proven`), so a matching id alone never removes anything."""
+            return set(self._library_files_by_id())
+
+        @staticmethod
+        def _proven(want, candidates) -> bool:
+            """Does one of the ``candidates`` Library files hold every ``.osu`` of
+            ``want`` (a :func:`client_remove.folder_fingerprint`) byte for byte?"""
+            if not want:
+                return False
+            seen: set = set()
+            for p in candidates:
+                if p in seen or not p.is_file():
+                    continue
+                seen.add(p)
+                if client_remove.covers(client_remove.osz_fingerprint(p), want):
+                    return True
+            return False
+
+        def _stable_save_name(self, folder: Path, bid) -> str:
+            from .. import client_import
+            return (client_import._osz_name_for(folder, bid) if bid is not None
+                    else f"{folder.name}.osz")
+
+        def _drop_existing(self, stage: Path) -> list[str]:
+            """Remove from ``stage`` every ``.osz`` whose name the Library already
+            uses: the import would replace that Library file when the sizes
+            differ, and a save before removal must never overwrite anything.
+            Returns the names dropped."""
+            lib = self.cfg.library_path
+            dropped = []
+            for f in sorted(Path(stage).glob("*.osz")):
+                if (lib / f.name).exists():
+                    f.unlink(missing_ok=True)
+                    dropped.append(f.name)
+            return dropped
 
         def removal_scan(self, source: str, progress=None, cancel=None) -> dict:
             """Read-only: every set in ``source`` with its size and whether the
@@ -163,26 +204,34 @@ class RemovalMixin:
             """Remove the chosen sets (scan ``key`` values) from ``source``.
 
             With ``save_first`` each set is copied into the Library first and only
-            the sets that are then PROVABLY in the Library (a real ``.osz`` on
-            disk) are removed; the rest are reported as ``kept``. Without it,
-            every chosen set is removed. Refuses while the client is running.
+            the sets that are then PROVABLY in the Library (a Library ``.osz``
+            holding every one of its difficulties byte for byte) are removed;
+            the rest are reported as ``kept``. Without it (stable only, and only
+            where the Recycle Bin works) every chosen set is removed. osu!lazer
+            is always saved first. Refuses while the client is running — or
+            when that cannot be checked.
             Returns ``{"source","removed","kept","failed","saved","backup"?,
             "cancelled","error"?}``.
             """
             from .. import client_import
             _eff = cancel if cancel is not None else (lambda: False)
-            keys = [str(k) for k in (keys or [])]
+            keys = list(dict.fromkeys(str(k) for k in (keys or [])))   # lazer lists an id per copy
             res = {"source": source, "removed": 0, "kept": [], "failed": [],
                    "saved": 0, "cancelled": False}
             if source not in _SOURCES or not self.client_enabled(source):
                 return {**res, "error": "unavailable"}
-            if client_remove.client_running(source, client_remove.osu_process_paths()):
+            paths = client_remove.osu_process_paths()
+            if paths is None:
+                return {**res, "error": "client_check_failed"}
+            if client_remove.client_running(source, paths):
                 return {**res, "error": "client_running"}
 
             if source == "stable":
                 songs = client_import.stable_songs_dir()
                 if songs is None:
                     return {**res, "error": "no_stable"}
+                if not save_first and not client_remove.recycle_bin_available(songs):
+                    return {**res, "error": "no_recycle_bin"}
                 targets = {}
                 for k in keys:
                     folder = client_remove.resolve_stable_folder(songs, k)
@@ -190,13 +239,14 @@ class RemovalMixin:
                         res["failed"].append(k)
                         self.log.error("remove:refused", f"not a Songs set folder: {k[:120]}")
                     else:
-                        targets[k] = (folder, client_import.beatmapset_id_for_folder(folder))
+                        targets[k] = client_import.beatmapset_id_for_folder(folder)
                 if save_first:
                     res["saved"] = self._save_stable_folders(
-                        [f for f, _ in targets.values()], progress, _eff)
-                return self._remove_stable(targets, save_first, res, progress, _eff)
+                        songs, list(targets), progress, _eff)
+                return self._remove_stable(songs, targets, save_first, res, progress, _eff)
 
-            # lazer
+            # lazer: always saved first — once lazer restarts it purges what was
+            # removed, so the Library copy is the only lasting way back.
             data = client_import.lazer_data_dir()
             if data is None:
                 return {**res, "error": "no_lazer"}
@@ -208,77 +258,118 @@ class RemovalMixin:
                     ids.append(int(k))
                 else:
                     res["failed"].append(k)
-            if save_first and ids:
-                res["saved"] = self._save_lazer_ids(data, ids, progress, _eff)
-                backed = self._library_backed_ids()
-                res["kept"] = [str(i) for i in ids if i not in backed]
-                ids = [i for i in ids if i in backed]
+            if ids:
+                saved, wants = self._save_lazer_ids(data, ids, progress, _eff)
+                res["saved"] = saved
+                files = self._library_files_by_id()
+                lib = self.cfg.library_path
+                proven = []
+                for i in ids:
+                    exported = wants.get(i) or []
+                    ok = bool(exported) and all(
+                        self._proven(fp, files.get(i, []) + [lib / name])
+                        for name, fp in exported)
+                    if ok:
+                        proven.append(i)
+                    else:
+                        res["kept"].append(str(i))
+                ids = proven
             if _eff():
                 return {**res, "cancelled": True}
             if not ids:
                 return res
             return self._remove_lazer(data, ids, res, progress, _eff)
 
-        def _save_stable_folders(self, folders, progress, cancel) -> int:
-            """Zip the folders whose set is not in the Library yet into a temp
-            stage and import that into the Library. Returns how many were added."""
+        def _save_stable_folders(self, songs: Path, keys, progress, cancel) -> int:
+            """Zip each folder the Library cannot prove yet into a temp stage and
+            import that (always as a real file). A name the Library already uses
+            is left alone — that set is then kept, never overwritten. Returns how
+            many were added."""
             from .. import client_import
-            backed = self._library_backed_ids()
+            files = self._library_files_by_id()
+            lib = self.cfg.library_path
             stage = Path(tempfile.mkdtemp(prefix="rosu_rm_save_"))
             try:
                 made = 0
-                for i, folder in enumerate(folders, 1):
+                for i, key in enumerate(keys, 1):
                     if cancel():
                         break
-                    bid = client_import.beatmapset_id_for_folder(folder)
-                    if bid is not None and bid in backed:
+                    folder = client_remove.resolve_stable_folder(songs, key)
+                    if folder is None:
                         continue
-                    name = (client_import._osz_name_for(folder, bid) if bid is not None
-                            else f"{folder.name}.osz")
+                    bid = client_import.beatmapset_id_for_folder(folder)
+                    name = self._stable_save_name(folder, bid)
+                    want = client_remove.folder_fingerprint(folder)
+                    if self._proven(want, files.get(bid, []) + [lib / name]):
+                        continue
+                    if (lib / name).exists():
+                        self.log.error("remove:save", f"{name}: a different file with "
+                                       "this name is already in the Library; kept")
+                        continue
                     try:
                         client_import.zip_folder_to_osz(folder, stage / name)
                         made += 1
-                    except OSError as exc:
+                    except (OSError, ValueError) as exc:
                         self.log.error("remove:save", f"{folder.name}: {str(exc)[:150]}")
                     if progress:
-                        progress({"kind": "export", "done": i, "total": len(folders)})
+                        progress({"kind": "export", "done": i, "total": len(keys)})
                 if not made or cancel():
                     return 0
-                res = self.import_osz_folder(stage, progress, source_label="local_osu_stable")
+                res = self.import_osz_folder(stage, progress, source_label="local_osu_stable",
+                                             physical_copy=True)
                 return int(res.get("new", 0))
             finally:
                 shutil.rmtree(stage, ignore_errors=True)
 
-        def _save_lazer_ids(self, data, ids, progress, cancel) -> int:
-            """Export just these lazer sets through the helper, then import them."""
+        def _save_lazer_ids(self, data, ids, progress, cancel) -> tuple[int, dict]:
+            """Export just these lazer sets through the helper, then import them
+            (always as real files, never over an existing Library file). Returns
+            ``(added, {id: [(file name, fingerprint), …]})`` — what lazer holds
+            for each id, which the removal then proves against the Library."""
             stage = Path(tempfile.mkdtemp(prefix="rosu_rm_save_"))
             ids_file = stage / "ids.txt"
             out = stage / "osz"
+            wants: dict[int, list] = {}
             try:
                 ids_file.write_text("\n".join(str(i) for i in ids), encoding="utf-8")
                 if progress:
                     progress({"kind": "phase", "key": "sc_exporting_lazer"})
-                rc, _o, err = self._lazer_helper_run(
+                rc, stdout, err = self._lazer_helper_run(
                     ["export", data, out, "--ids", ids_file], cancel=cancel)
                 if rc != 0:
                     if err != "cancelled":
                         self.log.error("remove:lazer_export", err[:300])
-                    return 0
-                res = self.import_osz_folder(out, progress, source_label="local_osu_lazer")
-                return int(res.get("new", 0))
+                    return 0, {}
+                for name, bid in client_remove.parse_helper_exported(stdout).items():
+                    fp = client_remove.osz_fingerprint(out / name)
+                    wants.setdefault(bid, []).append((name, fp))
+                for name in self._drop_existing(out):
+                    self.log.error("remove:save", f"{name}: a file with this name is "
+                                   "already in the Library; not overwritten")
+                res = self.import_osz_folder(out, progress, source_label="local_osu_lazer",
+                                             physical_copy=True)
+                return int(res.get("new", 0)), wants
             finally:
                 shutil.rmtree(stage, ignore_errors=True)
 
-        def _remove_stable(self, targets: dict, save_first: bool, res: dict,
+        def _remove_stable(self, songs: Path, targets: dict, save_first: bool, res: dict,
                            progress, cancel) -> dict:
             from send2trash import send2trash
-            backed = self._library_backed_ids() if save_first else set()
+            files = self._library_files_by_id() if save_first else {}
+            lib = self.cfg.library_path
             total = len(targets)
-            for i, (key, (folder, bid)) in enumerate(targets.items(), 1):
+            for i, (key, bid) in enumerate(targets.items(), 1):
                 if cancel():
                     res["cancelled"] = True
                     break
-                if save_first and (bid is None or bid not in backed):
+                # Resolved again right before the delete: saving can take minutes.
+                folder = client_remove.resolve_stable_folder(songs, key)
+                if folder is None:
+                    res["failed"].append(key)
+                    self.log.error("remove:refused", f"not a Songs set folder: {key[:120]}")
+                elif save_first and not self._proven(
+                        client_remove.folder_fingerprint(folder),
+                        files.get(bid, []) + [lib / self._stable_save_name(folder, bid)]):
                     res["kept"].append(key)   # not provably in the Library: leave it
                 else:
                     try:
@@ -335,6 +426,7 @@ class RemovalMixin:
             """Queue an ALREADY-PREVIEWED removal (the Remove dialog showed the
             sets and took a countdown confirmation, so there is no second gate)."""
             keys = [str(k) for k in (keys or [])]
+            save_first = bool(save_first) or source == "lazer"   # lazer always saves first
             job = jobs.Job(jobs.new_id(), "job_remove", kind="remove",
                            title_kwargs={})
             job.ctx["options"] = {"remove_source": source, "sets": len(keys),

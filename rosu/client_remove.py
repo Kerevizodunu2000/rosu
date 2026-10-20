@@ -22,6 +22,8 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import zipfile
+import zlib
 from pathlib import Path
 
 from . import client_import
@@ -47,7 +49,7 @@ def stable_candidates(songs_dir: Path, backed_up_ids: set[int],
     """Every set folder in ``songs_dir`` → ``{"key","name","beatmapset_id",
     "size","backed_up"}``. ``backed_up`` = the set has a real ``.osz`` in the
     Library (the caller decides what counts, see ``RemovalMixin``)."""
-    folders = list(client_import.iter_stable_folders(songs_dir))
+    folders = [f for f in client_import.iter_stable_folders(songs_dir) if is_set_folder(f)]
     out: list[dict] = []
     for i, folder in enumerate(folders, 1):
         if cancel is not None and cancel():
@@ -82,10 +84,21 @@ def select(sets: list[dict], which: str = "all", sort: str = "largest",
     return rows
 
 
+def is_set_folder(folder: Path) -> bool:
+    """A beatmap set folder holds at least one ``.osu`` directly inside it. Only
+    those are ever listed or removed, so a misdetected Songs folder (one that is
+    really Documents, say) offers nothing to remove."""
+    try:
+        return any(p.is_file() for p in Path(folder).glob("*.osu"))
+    except OSError:
+        return False
+
+
 def resolve_stable_folder(songs_dir: Path, name: str) -> Path | None:
     """The set folder ``name`` inside ``songs_dir`` — or None when ``name`` is not
-    exactly one plain path component naming an existing, non-symlink directory
-    directly under it. This is the only way a removal target is ever built."""
+    exactly one plain path component naming an existing, non-symlink set folder
+    (see :func:`is_set_folder`) directly under it. This is the only way a removal
+    target is ever built."""
     if not name or name in (".", "..") or "/" in name or "\\" in name \
             or os.sep in name or (os.altsep and os.altsep in name) or ":" in name:
         return None
@@ -98,14 +111,90 @@ def resolve_stable_folder(songs_dir: Path, name: str) -> Path | None:
             return None
     except OSError:
         return None
-    return target
+    return target if is_set_folder(target) else None
+
+
+def recycle_bin_available(path: Path) -> bool:
+    """Will the Recycle Bin take files deleted under ``path``? Only fixed local
+    drives have one; on a removable or network drive Windows deletes for good
+    without asking (send2trash suppresses the prompt). Non-Windows: True."""
+    if sys.platform != "win32":
+        return True
+    import ctypes
+    try:
+        drive = os.path.splitdrive(str(Path(path).resolve()))[0]
+        if not drive or drive.startswith("\\\\"):
+            return False   # UNC share: never a Recycle Bin
+        return ctypes.windll.kernel32.GetDriveTypeW(drive + "\\") == 3   # DRIVE_FIXED
+    except (OSError, AttributeError):
+        return False
+
+
+# --- is it really in the Library? ---------------------------------------------
+# A set counts as saved only when a Library .osz holds every one of its
+# difficulties byte for byte. Matching the set id alone is not enough: a local
+# edit, an extra difficulty or an unrelated unsubmitted map that happens to
+# carry the same id prefix would otherwise be removed with no copy anywhere.
+_OSU_CAP = 32 * 1024 * 1024   # a .osu is text; anything bigger is not a beatmap
+
+
+def _osu_key(rel: str) -> str:
+    return rel.replace("\\", "/").lower()   # Windows names are case-insensitive
+
+
+def folder_fingerprint(folder: Path) -> dict[str, tuple[int, int]] | None:
+    """``{relative .osu name: (size, crc32)}`` for a stable set folder; None when
+    it cannot be read (or holds an oversized ``.osu``)."""
+    folder = Path(folder)
+    out: dict[str, tuple[int, int]] = {}
+    try:
+        for root, _dirs, files in os.walk(folder, followlinks=False):
+            for f in files:
+                if not f.lower().endswith(".osu"):
+                    continue
+                p = Path(root) / f
+                if p.is_symlink() or p.stat().st_size > _OSU_CAP:
+                    return None
+                data = p.read_bytes()
+                out[_osu_key(p.relative_to(folder).as_posix())] = (len(data), zlib.crc32(data))
+    except OSError:
+        return None
+    return out
+
+
+def osz_fingerprint(path: Path) -> dict[str, tuple[int, int]] | None:
+    """The same map for a ``.osz``, computed from the members' actual bytes
+    (reading verifies each stored CRC too). None for a missing, truncated or
+    otherwise unreadable archive — it proves nothing."""
+    out: dict[str, tuple[int, int]] = {}
+    try:
+        with zipfile.ZipFile(path) as zf:
+            for info in zf.infolist():
+                if info.is_dir() or not info.filename.lower().endswith(".osu"):
+                    continue
+                if info.file_size > _OSU_CAP:
+                    return None
+                data = zf.read(info)
+                out[_osu_key(info.filename)] = (len(data), zlib.crc32(data))
+    except Exception:   # BadZipFile, zlib.error, encrypted, EOF, unsupported method…
+        return None
+    return out
+
+
+def covers(have: dict | None, want: dict | None) -> bool:
+    """Does archive fingerprint ``have`` contain every ``.osu`` of ``want``?
+    A set with no ``.osu`` at all is never "covered"."""
+    if not have or not want:
+        return False
+    return all(have.get(k) == v for k, v in want.items())
 
 
 # --- is the client running? ---------------------------------------------------
 def osu_process_paths(runner=None) -> list[str] | None:
     """Executable paths of every running ``osu!.exe`` (stable and lazer share that
-    image name). ``[]`` when none run, None when it cannot be determined (not
-    Windows, or PowerShell unavailable) — callers treat None as "unknown"."""
+    image name). ``[]`` when none run (or not on Windows), None when it could not
+    be determined — PowerShell missing, timed out or failing. ``runner(cmd)``
+    returns ``(returncode, stdout)`` (tests)."""
     if sys.platform != "win32" and runner is None:
         return []
     cmd = ["powershell", "-NoProfile", "-NonInteractive", "-Command",
@@ -113,12 +202,16 @@ def osu_process_paths(runner=None) -> list[str] | None:
            "ForEach-Object { if ($_.Path) { $_.Path } else { '?' } }"]
     try:
         if runner is not None:
-            out = runner(cmd)
+            rc, out = runner(cmd)
         else:
-            out = subprocess.run(
-                cmd, capture_output=True, text=True, timeout=15,
-                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)).stdout
-    except (OSError, subprocess.SubprocessError):
+            proc = subprocess.run(
+                cmd, capture_output=True, text=True, timeout=30,
+                encoding="utf-8", errors="replace",
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            rc, out = proc.returncode, proc.stdout
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return None
+    if rc != 0:
         return None
     return [ln.strip() for ln in (out or "").splitlines() if ln.strip()]
 
@@ -127,9 +220,12 @@ def client_running(client: str, paths: list[str] | None) -> bool:
     """Is ``client`` ("stable"/"lazer") among the running ``osu!.exe`` paths?
 
     lazer installs under ``…\\osulazer\\``; anything else named ``osu!.exe`` is
-    taken to be stable. A process whose path could not be read (``"?"``) counts
+    taken to be stable. Callers check ``paths is None`` (could not tell) first
+    and refuse; here a process whose path could not be read (``"?"``) counts
     as BOTH — when in doubt, the destructive action waits.
     """
+    if paths is None:
+        return True
     if not paths:
         return False
     for p in paths:
@@ -169,6 +265,21 @@ def parse_helper_list(stdout: str) -> list[dict]:
             continue
         name = parts[3].strip() or str(bid)
         out.append({"key": str(bid), "name": name, "beatmapset_id": bid, "size": size})
+    return out
+
+
+def parse_helper_exported(stdout: str) -> dict[str, int]:
+    """``EXPORT <id>\\t<file name>`` lines → ``{file name: id}`` (what the helper
+    wrote for which set; an older helper prints bare ``EXPORT <id>`` lines,
+    which carry no file name and are skipped)."""
+    out: dict[str, int] = {}
+    for line in (stdout or "").splitlines():
+        parts = line.rstrip("\r\n").split("\t", 1)
+        head = parts[0].split()
+        if len(parts) == 2 and len(head) == 2 and head[0] == "EXPORT" and head[1].isdigit():
+            name = parts[1].strip()
+            if name and "/" not in name and "\\" not in name:
+                out[name] = int(head[1])
     return out
 
 

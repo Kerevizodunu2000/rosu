@@ -182,3 +182,78 @@ def test_not_connected(env):
     svc._drive_auth = lambda: Off()
     assert svc.drive_catalog() == {"error": "not_connected"}
     assert svc.drive_restore([])["error"] == "not_connected"
+
+
+def test_restore_never_overwrites_a_library_file(env):
+    cfg, db, svc = env
+    a = _osz()
+    mine = _osz("osu file format v14\n[Metadata]\nTitle:my edit\n")
+    chunk = "chunk-devX-0000.zip"
+    drive = FakeDrive({chunk: _chunk({"50 A.osz": a, "51 B.osz": a})})
+    svc._make_drive_client = lambda: drive
+    (cfg.library_path / "50 A.osz").write_bytes(mine)        # a different version
+    (cfg.library_path / "51 B.osz").write_bytes(a)           # the same bytes
+    res = svc.drive_restore([_entry(chunk, "50 A.osz", a, 50), _entry(chunk, "51 B.osz", a, 51)])
+    assert res["failed"] == [{"name": "50 A.osz", "reason": "library_conflict"}]
+    assert res["restored"] == 0 and res["already"] == 1
+    assert (cfg.library_path / "50 A.osz").read_bytes() == mine
+
+
+def test_restore_keeps_a_real_file_with_memory_only_imports(env):
+    cfg, db, svc = env
+    cfg.library_physical_copy = False
+    a = _osz()
+    chunk = "chunk-devX-0000.zip"
+    svc._make_drive_client = lambda: FakeDrive({chunk: _chunk({"55 A.osz": a})})
+    assert svc.drive_restore([_entry(chunk, "55 A.osz", a, 55)])["restored"] == 1
+    assert (cfg.library_path / "55 A.osz").read_bytes() == a
+
+
+def test_one_bad_member_or_entry_never_sinks_the_rest(env, monkeypatch):
+    cfg, db, svc = env
+    a = _osz()
+    chunk = "chunk-devX-0000.zip"
+    drive = FakeDrive({chunk: _chunk({"60 A.osz": a, "61 B.osz": a}),
+                       manifest.shard_name("devX"): _shard("devX", {
+                           "id:60": _entry(chunk, "60 A.osz", a, 60),
+                           "bad1": {**_entry(chunk, "61 B.osz", a, 61), "size": "abc",
+                                    "beatmapset_id": "61"},
+                           "bad2": {"chunk": 5, "name": None},
+                           "bad3": "not an entry"})})
+    svc._make_drive_client = lambda: drive
+    res = svc.drive_catalog()
+    assert {e["name"] for e in res["entries"]} == {"60 A.osz", "61 B.osz"}
+    monkeypatch.setattr(zipfile.ZipFile, "open", _raise_for("60 A.osz", zipfile.ZipFile.open))
+    res = svc.drive_restore([_entry(chunk, "60 A.osz", a, 60), _entry(chunk, "61 B.osz", a, 61)])
+    assert res["failed"] == [{"name": "60 A.osz", "reason": "corrupt"}]
+    assert res["restored"] == 1
+
+
+def _raise_for(name, original):
+    import zlib
+
+    def opener(self, member, *a, **k):
+        if getattr(member, "filename", member) == name:
+            raise zlib.error("Error -3 while decompressing data")
+        return original(self, member, *a, **k)
+    return opener
+
+
+def test_restore_refuses_when_the_disk_is_too_full(env, monkeypatch):
+    from rosu.services import drive_restore_svc
+    cfg, db, svc = env
+    a = _osz()
+    chunk = "chunk-devX-0000.zip"
+    svc._make_drive_client = lambda: FakeDrive({chunk: _chunk({"70 A.osz": a})})
+    monkeypatch.setattr(drive_restore_svc, "_free_bytes", lambda path: 1024)
+    res = svc.drive_restore([_entry(chunk, "70 A.osz", a, 70)])
+    assert res["failed"] == [{"name": "70 A.osz", "reason": "disk_full"}]
+    assert not list(cfg.library_path.glob("*.osz"))
+
+
+def test_member_names_reject_windows_devices_and_paths():
+    from rosu.services.drive_restore_svc import _safe_member_name
+    assert _safe_member_name("12 A - B.osz") == "12 A - B.osz"
+    for bad in ("NUL.osz", "con.osz", "COM1.osz", "a/b.osz", "a\\b.osz", "c:x.osz",
+                "x?.osz", "x.txt", "", None, "a\x01.osz"):
+        assert _safe_member_name(bad) is None, bad

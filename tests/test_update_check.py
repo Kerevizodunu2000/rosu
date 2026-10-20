@@ -35,10 +35,13 @@ class _FakeResp:
 
 
 def test_latest_release_parses(monkeypatch):
-    payload = json.dumps({"tag_name": "v1.2.0", "html_url": "https://x/rel"}).encode()
+    page = "https://github.com/Kerevizodunu2000/rosu/releases/tag/v1.2.0"
+    payload = json.dumps({"tag_name": "v1.2.0", "html_url": page}).encode()
     monkeypatch.setattr(update_check.urllib.request, "urlopen",
                         lambda req, timeout=10: _FakeResp(payload))
-    assert update_check.latest_release() == {"tag": "v1.2.0", "url": "https://x/rel"}
+    assert update_check.latest_release() == {"tag": "v1.2.0", "url": page}
+    payload = json.dumps({"tag_name": "v1.2.0", "html_url": "https://x/rel"}).encode()
+    assert update_check.latest_release()["url"].endswith("/rosu/releases/latest")   # foreign link
 
 
 def test_latest_release_network_error_returns_none(monkeypatch):
@@ -94,6 +97,11 @@ def test_site_reply_validation_rejects_foreign_links():
     assert update_check.parse_site_reply("nope") is None
     bad_dl = update_check.parse_site_reply({**ok, "download_url": "https://evil.example/x.exe"})
     assert bad_dl["download_url"] is None
+    for sneaky in (_REL + "../../../evil/x.exe", _REL + "%2e%2e/%2e%2e/evil/x.exe",
+                   _REL + "download/v1.8.0/..", _REL + "tag/v1.8.0/../../x",
+                   _REL + "download/v1.8.0/x.exe?y=1", _REL[:-1] + "s/x"):
+        assert update_check.parse_site_reply({**ok, "download_url": sneaky})["download_url"] is None
+        assert update_check.parse_site_reply({**ok, "url": sneaky}) is None
 
 
 def test_site_failure_falls_back_to_github(monkeypatch):

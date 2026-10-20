@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 
 from ..workers import Worker
 from .copy_table import SortItem
+from .links import plain_tip
 
 _MIB = 1024 ** 2
 _GIB = 1024 ** 3
@@ -32,7 +33,7 @@ def _fmt_size(n: int) -> str:
 def filter_entries(entries: list[dict], text: str = "", hide_in_library: bool = True) -> list[dict]:
     """What the table shows. Pure (tested): every word of ``text`` must appear in
     the artist, title or file name; ``hide_in_library`` drops sets the Library
-    already has (restoring those would be a no-op)."""
+    already has (restoring one adds nothing: a Library file is never replaced)."""
     words = [w for w in (text or "").lower().split() if w]
     out = []
     for e in entries:
@@ -52,6 +53,7 @@ class DriveBrowserDialog(QDialog):
         self._entries: list[dict] = []
         self._shown: list[dict] = []
         self._worker: Worker | None = None
+        self._closing = False
         t = ctx.t
         self.setWindowTitle(t("drv_title"))
         self.setMinimumSize(820, 520)
@@ -83,6 +85,7 @@ class DriveBrowserDialog(QDialog):
         root.addWidget(self.bar)
         self.lbl_status = QLabel(objectName="status")
         self.lbl_status.setWordWrap(True)
+        self.lbl_status.setTextFormat(Qt.PlainText)   # may show text from Drive
         root.addWidget(self.lbl_status)
 
         self.table = QTableWidget(0, 5)
@@ -121,7 +124,7 @@ class DriveBrowserDialog(QDialog):
         self.bar.setRange(0, 0)
         self.bar.setVisible(True)
         self.lbl_status.setText(self.ctx.t("drv_loading"))
-        w = Worker(self.ctx.services.drive_catalog)
+        w = Worker(self.ctx.services.drive_catalog, cancel=lambda: self._closing)
         self._worker = w
         w.progressed.connect(self._on_progress)
         w.succeeded.connect(self._on_loaded)
@@ -137,6 +140,8 @@ class DriveBrowserDialog(QDialog):
     def _on_loaded(self, res: dict) -> None:
         self.bar.setVisible(False)
         t = self.ctx.t
+        if res.get("error") == "cancelled":
+            return
         if res.get("error"):
             self._entries = []
             self.lbl_status.setText(t("drv_err_not_connected") if res["error"] == "not_connected"
@@ -171,7 +176,7 @@ class DriveBrowserDialog(QDialog):
         for r, e in enumerate(self._shown):
             artist = QTableWidgetItem(str(e.get("artist") or "—"))
             title = QTableWidgetItem(str(e.get("title") or e.get("name") or ""))
-            title.setToolTip(str(e.get("name") or ""))
+            title.setToolTip(plain_tip(e.get("name") or ""))
             title.setData(Qt.UserRole, r)          # survives sorting: index into _shown
             size = SortItem(_fmt_size(e.get("size") or 0), e.get("size") or 0)
             size.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -222,6 +227,7 @@ class DriveBrowserDialog(QDialog):
         self.accept()
 
     def reject(self) -> None:
-        if self._worker is not None and self._worker.isRunning():
-            self._worker.wait(5000)
+        # The catalog stops at its next shard; the Worker keeps itself alive
+        # until then, so closing never waits on the network.
+        self._closing = True
         super().reject()

@@ -193,8 +193,11 @@ def _status_link(value, endpoint: str) -> str | None:
         got, ep = urlsplit(value), urlsplit(endpoint)
     except ValueError:
         return None
-    if got.scheme != "https" or not got.hostname or got.hostname != ep.hostname:
+    # Exact netloc (no userinfo, no port games) and no backslash: browsers and
+    # urlsplit disagree on "https://evil\\@host/…". The link handed on is
+    # rebuilt from the endpoint, never echoed.
+    if "\\" in value or got.scheme != "https" or not ep.netloc or got.netloc != ep.netloc:
         return None
     if got.query or got.fragment or not re.fullmatch(r"/report/status/[A-Za-z0-9_-]{20,100}", got.path):
         return None
-    return value
+    return f"https://{ep.netloc}{got.path}"

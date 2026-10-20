@@ -1870,9 +1870,13 @@ STRINGS: dict[str, dict[str, str]] = {
     "rm_title": {"en": "Remove from osu!", "tr": "osu!'dan Kaldır"},
     "rm_intro": {
         "en": "Pick a client and which sets to take out of it. Nothing changes until you "
-              "confirm — and every removal can be undone.",
+              "confirm, and nothing is removed without a way back: the Recycle Bin or an "
+              "identical copy in the Library.",
         "tr": "Bir client seç ve içinden hangi setlerin çıkacağını belirle. Sen onaylayana "
-              "kadar hiçbir şey değişmez — ve her kaldırma geri alınabilir."},
+              "kadar hiçbir şey değişmez ve hiçbir şey geri dönüş yolu olmadan kaldırılmaz: "
+              "Geri Dönüşüm Kutusu ya da Library'deki birebir aynı kopya."},
+    "rm_checking": {"en": "Checking which osu! clients are available…",
+                    "tr": "Hangi osu! client'larının kullanılabildiği kontrol ediliyor…"},
     "rm_source": {"en": "Remove from:", "tr": "Şuradan kaldır:"},
     "rm_why_disabled": {"en": "This client is turned off in Settings.",
                         "tr": "Bu client Ayarlar'da kapalı."},
@@ -1893,22 +1897,32 @@ STRINGS: dict[str, dict[str, str]] = {
         "tr": "Her setin Songs/ içindeki klasörü Geri Dönüşüm Kutusu'na gider. Sonrasında "
               "osu!'da şarkı seçiminde F5'e bas ki fark etsin."},
     "rm_how_lazer": {
-        "en": "Experimental. The sets are marked deleted in lazer's database, exactly like "
-              "lazer's own delete; lazer frees the space on its next start. A copy of "
-              "client.realm is kept first so it can be undone.",
-        "tr": "Deneysel. Setler lazer'ın veritabanında, lazer'ın kendi silme işlemiyle aynı "
-              "şekilde silinmiş olarak işaretlenir; lazer alanı bir sonraki açılışında "
-              "boşaltır. Geri alınabilsin diye önce client.realm'in bir kopyası alınır."},
+        "en": "Experimental. The sets are saved to the Library first, then marked deleted "
+              "in lazer's database exactly like lazer's own delete; lazer removes them for "
+              "good on its next start. To get one back later, import it from the Library.",
+        "tr": "Deneysel. Setler önce Library'e kaydedilir, sonra lazer'ın veritabanında "
+              "lazer'ın kendi silme işlemiyle aynı şekilde silinmiş olarak işaretlenir; "
+              "lazer onları bir sonraki açılışında kalıcı olarak kaldırır. Birini sonradan "
+              "geri istersen Library'den içe aktar."},
     "rm_mode_save": {"en": "Save to Library, then remove", "tr": "Library'e kaydet, sonra kaldır"},
     "rm_mode_save_tip": {
-        "en": "Copies each set into the Library first and removes only the sets that are "
-              "then really in the Library.",
-        "tr": "Her seti önce Library'e kopyalar ve yalnızca sonrasında gerçekten "
-              "Library'de olan setleri kaldırır."},
+        "en": "Copies each set into the Library first and removes only the sets whose "
+              "Library copy holds every difficulty byte for byte. A Library file is never "
+              "overwritten; a set that differs from it stays in osu!.",
+        "tr": "Her seti önce Library'e kopyalar ve yalnızca Library kopyası her zorluğu "
+              "bayt bayt içeren setleri kaldırır. Library'deki bir dosyanın üzerine asla "
+              "yazılmaz; ondan farklı olan set osu!'da kalır."},
     "rm_mode_only": {"en": "Remove only", "tr": "Sadece kaldır"},
     "rm_mode_only_tip": {
-        "en": "Removes the sets without saving them anywhere first.",
-        "tr": "Setleri önce bir yere kaydetmeden kaldırır."},
+        "en": "Removes the sets without saving them anywhere first (they go to the "
+              "Recycle Bin).",
+        "tr": "Setleri önce bir yere kaydetmeden kaldırır (Geri Dönüşüm Kutusu'na "
+              "giderler)."},
+    "rm_mode_only_lazer": {
+        "en": "Not for osu!lazer: lazer deletes removed sets for good on its next start, "
+              "so they are always saved to the Library first.",
+        "tr": "osu!lazer için yok: lazer kaldırılan setleri bir sonraki açılışında kalıcı "
+              "olarak siler, bu yüzden her zaman önce Library'e kaydedilirler."},
     "rm_which": {"en": "Which:", "tr": "Hangileri:"},
     "rm_which_all": {"en": "All sets", "tr": "Tüm setler"},
     "rm_which_backed_up": {"en": "Only sets already in the Library",
@@ -1929,17 +1943,11 @@ STRINGS: dict[str, dict[str, str]] = {
     "rm_warn_save": {
         "en": "{n} of these are not in the Library yet — they will be copied there first.",
         "tr": "Bunların {n} tanesi henüz Library'de değil — önce oraya kopyalanacaklar."},
-    "rm_warn_no_physical": {
-        "en": "Physical Library copies are turned off in Settings, so nothing can be saved "
-              "first — with this option no set would be removed.",
-        "tr": "Ayarlar'da fiziksel Library kopyaları kapalı, bu yüzden önce hiçbir şey "
-              "kaydedilemez — bu seçenekle hiçbir set kaldırılmaz."},
     "rm_warn_only": {
         "en": "Careful: {n} of these have no copy in the Library. After removing them Rosu "
-              "has no copy of its own (the Recycle Bin / lazer backup is the only way back).",
+              "has no copy of its own; the Recycle Bin is the only way back.",
         "tr": "Dikkat: bunların {n} tanesinin Library'de kopyası yok. Kaldırdıktan sonra "
-              "Rosu'nun kendi kopyası olmaz (tek geri dönüş yolu Geri Dönüşüm Kutusu / lazer "
-              "yedeği)."},
+              "Rosu'nun kendi kopyası olmaz; tek geri dönüş yolu Geri Dönüşüm Kutusu."},
     "rm_confirm_body": {
         "en": "Remove {n} sets from {source}?\nMode: {mode}.\n\n{recovery}\n\nClose {source} "
               "first.",
@@ -1949,10 +1957,12 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "Undo: the folders are in the Recycle Bin — restore them from there.",
         "tr": "Geri alma: klasörler Geri Dönüşüm Kutusu'nda — oradan geri yükle."},
     "rm_recovery_lazer": {
-        "en": "Undo: a copy of client.realm is saved next to it before anything changes; "
-              "putting it back (with lazer closed) restores the sets.",
-        "tr": "Geri alma: hiçbir şey değişmeden önce client.realm'in bir kopyası yanına "
-              "kaydedilir; (lazer kapalıyken) onu geri koymak setleri geri getirir."},
+        "en": "Undo: until osu!lazer is started again, putting back the copy of "
+              "client.realm saved next to it (with lazer closed) restores the sets. After "
+              "that, the Library copy is the way back.",
+        "tr": "Geri alma: osu!lazer yeniden açılana kadar, yanına kaydedilen client.realm "
+              "kopyasını (lazer kapalıyken) geri koymak setleri geri getirir. Ondan sonra "
+              "geri dönüş yolu Library'deki kopyadır."},
     "rm_listing_lazer": {"en": "Reading osu!lazer's set list…",
                          "tr": "osu!lazer'ın set listesi okunuyor…"},
     "rm_deleting_lazer": {"en": "Marking the sets deleted in osu!lazer…",
@@ -1966,6 +1976,18 @@ STRINGS: dict[str, dict[str, str]] = {
     "rm_err_bad_source": {"en": "Unknown source.", "tr": "Bilinmeyen kaynak."},
     "rm_err_unavailable": {"en": "That client is not available (turned off in Settings?).",
                            "tr": "Bu client kullanılamıyor (Ayarlar'da kapalı mı?)."},
+    "rm_err_client_check_failed": {
+        "en": "Could not check whether osu! is running. Close osu! and try again — nothing "
+              "was removed.",
+        "tr": "osu!'nun açık olup olmadığı kontrol edilemedi. osu!'yu kapatıp tekrar dene — "
+              "hiçbir şey kaldırılmadı."},
+    "rm_err_no_recycle_bin": {
+        "en": "The Songs folder is on a drive without a Recycle Bin (removable or network), "
+              "so removed folders could not be brought back. Use \"Save to Library, then "
+              "remove\" instead — nothing was removed.",
+        "tr": "Songs klasörü Geri Dönüşüm Kutusu olmayan bir sürücüde (çıkarılabilir ya da "
+              "ağ), bu yüzden kaldırılan klasörler geri getirilemez. Bunun yerine \"Library'e "
+              "kaydet, sonra kaldır\"ı kullan — hiçbir şey kaldırılmadı."},
     "rm_err_client_running": {
         "en": "osu! is running. Close it and try again — nothing was removed.",
         "tr": "osu! açık. Kapatıp tekrar dene — hiçbir şey kaldırılmadı."},
@@ -1977,8 +1999,10 @@ STRINGS: dict[str, dict[str, str]] = {
     "rm_done_saved": {"en": "{n} sets were copied into the Library first.",
                       "tr": "{n} set önce Library'e kopyalandı."},
     "rm_done_kept": {
-        "en": "{n} sets were kept because they could not be confirmed in the Library.",
-        "tr": "{n} set Library'de olduğu doğrulanamadığı için bırakıldı."},
+        "en": "{n} sets were kept because the Library does not hold an identical copy "
+              "(see the Logs tab).",
+        "tr": "{n} set, Library'de birebir aynı kopyası olmadığı için bırakıldı (Loglar "
+              "sekmesine bak)."},
     "rm_done_failed": {"en": "{n} sets could not be removed — see the Logs tab.",
                        "tr": "{n} set kaldırılamadı — Loglar sekmesine bak."},
     "rm_done_lazer_restart": {
@@ -2055,6 +2079,10 @@ STRINGS: dict[str, dict[str, str]] = {
     "drv_fail_size_mismatch": {"en": "size mismatch", "tr": "boyut uyuşmuyor"},
     "drv_fail_corrupt": {"en": "unreadable", "tr": "okunamıyor"},
     "drv_fail_hash_mismatch": {"en": "fingerprint mismatch", "tr": "parmak izi uyuşmuyor"},
+    "drv_fail_disk_full": {"en": "not enough disk space", "tr": "yeterli disk alanı yok"},
+    "drv_fail_library_conflict": {
+        "en": "a different file with this name is in the Library (left as it is)",
+        "tr": "Library'de bu adla farklı bir dosya var (olduğu gibi bırakıldı)"},
     "job_drive_restore": {"en": "Restore from Drive", "tr": "Drive'dan Geri Al"},
     "job_step_drive_fetch": {"en": "Download + verify", "tr": "İndir + doğrula"},
     "job_step_drive_import": {"en": "Import into the Library", "tr": "Library'e aktar"},

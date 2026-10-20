@@ -70,6 +70,15 @@ def _copy_to_clipboard(text: str) -> bool:
     return True
 
 
+def _plain_message(parent, title: str, text: str) -> None:
+    """An information box that shows ``text`` literally — it can carry file names
+    from Drive or a client folder, and QMessageBox renders anything that looks
+    like HTML as HTML."""
+    box = QMessageBox(QMessageBox.Information, title, text, QMessageBox.Ok, parent)
+    box.setTextFormat(Qt.PlainText)
+    box.exec()
+
+
 def _describe_job(job, t) -> str:
     """One line spelling out every choice behind a queued job.
 
@@ -1113,7 +1122,7 @@ class ShortcutsTab(QWidget):
                 lines.append(t("rm_done_backup", path=res["backup"]))
         if res.get("source") == "stable" and removed:
             lines.append(t("rm_done_stable_refresh"))
-        QMessageBox.information(self, t("app_title"), "\n".join(lines))
+        _plain_message(self, t("app_title"), "\n".join(lines))
         self._set_status("rm_done", n=removed, source=t(f"prune_source_{res.get('source', 'stable')}"))
         self.mw.search.reload()
 
@@ -1131,7 +1140,7 @@ class ShortcutsTab(QWidget):
             shown = ", ".join(f"{f.get('name')} ({t(f'drv_fail_{r}')})"
                               for f, r in zip(failed[:5], reasons))
             lines.append(t("drv_done_failed", n=len(failed), names=shown))
-        QMessageBox.information(self, t("app_title"), "\n".join(lines))
+        _plain_message(self, t("app_title"), "\n".join(lines))
         self._set_status("drv_done", n=res.get("restored", 0), already=res.get("already", 0))
         self.mw.search.reload()
 

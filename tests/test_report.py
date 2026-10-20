@@ -168,4 +168,9 @@ def test_status_link_is_accepted_only_from_the_endpoints_own_host():
     assert _status_link("http://rosu-web.vercel.app/report/status/" + "A" * 43, ep) is None
     assert _status_link(good + "?x=1", ep) is None
     assert _status_link("https://rosu-web.vercel.app/admin", ep) is None
+    # urlsplit and browsers disagree on these hosts: refused outright.
+    tail = "/report/status/" + "A" * 43
+    assert _status_link("https://evil.example\\@rosu-web.vercel.app" + tail, ep) is None
+    assert _status_link("https://x@rosu-web.vercel.app" + tail, ep) is None
+    assert _status_link("https://rosu-web.vercel.app:8443" + tail, ep) is None
     assert _status_link(None, ep) is None

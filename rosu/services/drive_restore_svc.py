@@ -17,6 +17,7 @@ listed, let alone retrieved. Here:
 from __future__ import annotations
 
 import hashlib
+import re
 import shutil
 import zipfile
 from pathlib import Path
@@ -25,17 +26,36 @@ from .. import jobs
 from ..columns import has_library_copy
 
 _SHARD_CAP = 64 * 1024 * 1024          # a manifest shard is JSON text — never this big
-_MEMBER_CAP = 4 * 1024 * 1024 * 1024   # no beatmap set is 4 GB; refuse anything claiming to be
+_MEMBER_CAP = 1024 * 1024 * 1024       # no beatmap set is 1 GB; refuse anything claiming to be
 _COPY_BUF = 1024 * 1024
+_FREE_MARGIN = 256 * 1024 * 1024       # never fill a disk to the last byte
+_RESERVED = re.compile(r"(?i)^(con|prn|aux|nul|com[0-9]|lpt[0-9])(\.|$)")
 
 
 def _safe_member_name(name) -> str | None:
-    """A restorable member is one plain ``*.osz`` filename — nothing with a path."""
-    if not isinstance(name, str) or not name or name in (".", ".."):
+    """A restorable member is one plain ``*.osz`` filename — nothing with a path,
+    no Windows device name (``NUL.osz``) and no trailing dot or space."""
+    if not isinstance(name, str) or not name or name in (".", "..") or len(name) > 200:
         return None
-    if "/" in name or "\\" in name or ":" in name or "\x00" in name:
+    if any(c in name for c in '/\\:*?"<>|') or any(ord(c) < 32 for c in name):
+        return None
+    if _RESERVED.match(name) or name != name.rstrip(" ."):
         return None
     return name if name.lower().endswith((".osz", ".olz")) else None
+
+
+def _int(v, default: int = 0) -> int:
+    try:
+        return int(v)
+    except (TypeError, ValueError, OverflowError):
+        return default
+
+
+def _free_bytes(path: Path) -> int | None:
+    try:
+        return shutil.disk_usage(path).free
+    except OSError:
+        return None
 
 
 def _device_of(chunk: str) -> str:
@@ -54,9 +74,11 @@ class DriveRestoreMixin:
                 config.save_config(self.cfg)
             return folder
 
-        def _effective_manifest(self, client, listing, progress=None) -> tuple[dict, int]:
+        def _effective_manifest(self, client, listing, progress=None,
+                                cancel=None) -> tuple[dict, int] | None:
             """Every device's shard merged (remote copies first, this device's
-            local shard last so it wins). Returns ``(entries, shard_count)``."""
+            local shard last so it wins). Returns ``(entries, shard_count)``, or
+            None when ``cancel`` fired."""
             from ..drive import manifest
             from ..drive.auth import DriveError
             cache = self.cfg.drive_cache_path / "remote"
@@ -67,6 +89,8 @@ class DriveRestoreMixin:
                            and str(f.get("name", "")).endswith(manifest.SHARD_SUFFIX))
             by_name = {f["name"]: f for f in listing}
             for i, name in enumerate(names, 1):
+                if cancel is not None and cancel():
+                    return None
                 if "/" in name or "\\" in name:
                     continue
                 dest = cache / name
@@ -84,9 +108,10 @@ class DriveRestoreMixin:
             devices = len(names) + (1 if local and own not in names else 0)
             return manifest.merge_shards(shards), devices
 
-        def drive_catalog(self, progress=None) -> dict:
+        def drive_catalog(self, progress=None, cancel=None) -> dict:
             """What the Drive backup holds. ``{"entries": [...], "devices",
-            "missing", "orphans"}`` or ``{"error": ...}``. Read-only."""
+            "missing", "orphans"}`` or ``{"error": ...}`` (``"cancelled"`` when
+            ``cancel`` fired). Read-only."""
             from ..drive.auth import DriveError
             if not self._drive_auth().is_connected():
                 return {"error": "not_connected"}
@@ -94,10 +119,13 @@ class DriveRestoreMixin:
                 client = self._make_drive_client()
                 folder = self._drive_root(client)
                 listing = client.list_folder(folder)
-                effective, devices = self._effective_manifest(client, listing, progress)
+                merged = self._effective_manifest(client, listing, progress, cancel)
             except DriveError as exc:
                 self.log.error("drive:catalog", str(exc)[:300])
                 return {"error": "drive", "detail": str(exc)[:300]}
+            if merged is None:
+                return {"error": "cancelled"}
+            effective, devices = merged
 
             on_drive = {f["name"] for f in listing}
             lib = self.cfg.library_path
@@ -112,26 +140,39 @@ class DriveRestoreMixin:
 
             entries: list[dict] = []
             referenced: set[str] = set()
+            skipped = 0
             for key, e in effective.items():
+                # Shards come from Drive: one malformed entry is skipped, it never
+                # takes the whole catalog down.
                 if not isinstance(e, dict):
+                    skipped += 1
                     continue
-                chunk = str(e.get("chunk") or "")
-                name = e.get("name") or ""
+                chunk = e.get("chunk")
+                name = e.get("name")
+                if not isinstance(chunk, str) or not isinstance(name, str):
+                    skipped += 1
+                    continue
                 md = e.get("metadata") if isinstance(e.get("metadata"), dict) else {}
                 bid = e.get("beatmapset_id")
+                bid = bid if isinstance(bid, int) and not isinstance(bid, bool) and bid > 0 \
+                    else None
+                digest = e.get("hash")
                 referenced.add(chunk)
                 entries.append({
-                    "key": key, "name": name, "chunk": chunk,
-                    "size": int(e.get("size") or 0), "hash": e.get("hash") or "",
+                    "key": str(key), "name": name, "chunk": chunk,
+                    "size": max(0, _int(e.get("size"))),
+                    "hash": digest if isinstance(digest, str) else "",
                     "beatmapset_id": bid,
-                    "artist": (md or {}).get("artist") or "",
-                    "title": (md or {}).get("title") or "",
+                    "artist": str(md.get("artist") or ""),
+                    "title": str(md.get("title") or ""),
                     "device": _device_of(chunk),
                     "this_device": _device_of(chunk) == self.cfg.device_id,
                     "on_drive": chunk in on_drive,
-                    "in_library": (bid is not None and int(bid) in in_lib_ids)
+                    "in_library": (bid is not None and bid in in_lib_ids)
                                   or name in in_lib_names,
                 })
+            if skipped:
+                self.log.error("drive:catalog", f"{skipped} malformed manifest entries skipped")
             orphans = sorted(n for n in on_drive
                              if (n.startswith("chunk-") and n.endswith(".zip")
                                  or n.lower().endswith(".osz")) and n not in referenced)
@@ -199,8 +240,22 @@ class DriveRestoreMixin:
                     progress({"kind": "phase", "key": "drv_downloading", "name": chunk})
                 individual = chunk.lower().endswith((".osz", ".olz"))
                 raw = work / ("single.osz" if individual else "chunk.zip")
-                cap = (max(int(it.get("size") or 0) for it in items) + _COPY_BUF if individual
-                       else max(int(self.cfg.drive_chunk_bytes) * 2, _MEMBER_CAP))
+                listed = _int(meta.get("size"), -1)
+                cap = (listed + _COPY_BUF if listed >= 0
+                       else _MEMBER_CAP if individual
+                       else max(_int(self.cfg.drive_chunk_bytes) * 2, _MEMBER_CAP))
+                # Room for the download, the extracted sets and their Library copies.
+                members = sum(min(max(0, _int(it.get("size"))) or _MEMBER_CAP, _MEMBER_CAP)
+                              for it in items)
+                need_work = cap + (0 if individual else members) + _FREE_MARGIN
+                need_lib = members + _FREE_MARGIN
+                free_work = _free_bytes(work)
+                free_lib = _free_bytes(self.cfg.library_path)
+                if (free_work is not None and free_work < need_work) or \
+                        (free_lib is not None and free_lib < need_lib):
+                    self.log.error("drive:restore_space", f"{chunk}: not enough free disk space")
+                    failed += [{"name": it["name"], "reason": "disk_full"} for it in items]
+                    continue
                 try:
                     client.download_file(meta["id"], raw, max_bytes=cap)
                 except (DriveError, OSError) as exc:
@@ -232,21 +287,49 @@ class DriveRestoreMixin:
             if fetched.get("error"):
                 return {"error": fetched["error"], "detail": fetched.get("detail", ""),
                         "restored": 0, "already": 0, "failed": fetched.get("failed", [])}
-            got, failed = fetched.get("got") or [], fetched.get("failed") or []
+            got, failed = fetched.get("got") or [], list(fetched.get("failed") or [])
             if not got:
                 return {"restored": 0, "already": 0, "failed": failed,
                         "cancelled": bool(fetched.get("cancelled"))}
-            res = self.import_osz_folder(Path(fetched["stage"]), progress,
-                                         source_label="drive_backup")
+            # A restore never replaces a Library file: the same name with the same
+            # bytes is already there; the same name with other bytes (an edited or
+            # newer version) is left alone and reported.
+            stage, lib = Path(fetched["stage"]), self.cfg.library_path
+            present = 0
+            restored: list[dict] = []
             for it in got:
+                existing = lib / it["name"]
+                if not existing.exists():
+                    restored.append(it)
+                    continue
+                (stage / it["name"]).unlink(missing_ok=True)
+                if self._same_file(existing, it):
+                    present += 1
+                    restored.append(it)
+                else:
+                    failed.append({"name": it["name"], "reason": "library_conflict"})
+            res = self.import_osz_folder(stage, progress, source_label="drive_backup",
+                                         physical_copy=True)
+            for it in restored:
                 row = self.db.find_track_row(it.get("beatmapset_id"), it["name"])
                 if row:
                     self.db.set_drive_state(row["id"], True, it["chunk"], it.get("hash") or "")
-            self.log.info("DRIVE_RESTORE", restored=res.get("new", 0),
-                          already=res.get("duplicates", 0), failed=len(failed),
-                          cancelled=bool(fetched.get("cancelled")))
-            return {"restored": int(res.get("new", 0)), "already": int(res.get("duplicates", 0)),
+            already = int(res.get("duplicates", 0)) + present
+            self.log.info("DRIVE_RESTORE", restored=res.get("new", 0), already=already,
+                          failed=len(failed), cancelled=bool(fetched.get("cancelled")))
+            return {"restored": int(res.get("new", 0)), "already": already,
                     "failed": failed, "cancelled": bool(fetched.get("cancelled"))}
+
+        def _same_file(self, path: Path, it: dict) -> bool:
+            """Is ``path`` the backed-up file ``it``? By SHA-256 when the manifest
+            recorded one, else by size (an old shard)."""
+            try:
+                if it.get("hash"):
+                    return self._verify(path, it["hash"])
+                size = _int(it.get("size"))
+                return size > 0 and path.stat().st_size == size
+            except OSError:
+                return False
 
         @staticmethod
         def _verify(path: Path, expected: str) -> bool:
@@ -267,8 +350,8 @@ class DriveRestoreMixin:
                         info = zf.getinfo(it["name"])
                     except KeyError:
                         return False, "not_in_archive"
-                    if info.file_size > _MEMBER_CAP or (
-                            it.get("size") and info.file_size != int(it["size"])):
+                    want = _int(it.get("size"))
+                    if info.file_size > _MEMBER_CAP or (want and info.file_size != want):
                         return False, "size_mismatch"
                     written = 0
                     with zf.open(info) as src, open(dest, "wb") as out:
@@ -277,9 +360,10 @@ class DriveRestoreMixin:
                             if written > info.file_size:   # lying header: stop, don't fill the disk
                                 raise ValueError("member larger than declared")
                             out.write(block)
-            except (zipfile.BadZipFile, OSError, ValueError) as exc:
+            except Exception as exc:   # bad zip, zlib error, encrypted, truncated…
                 dest.unlink(missing_ok=True)
-                self.log.error("drive:restore_extract", f"{it['name']}: {str(exc)[:150]}")
+                self.log.error("drive:restore_extract",
+                               f"{it['name']}: {type(exc).__name__}: {str(exc)[:150]}")
                 return False, "corrupt"
             if not self._verify(dest, it.get("hash") or ""):
                 dest.unlink(missing_ok=True)

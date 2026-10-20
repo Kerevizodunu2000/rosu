@@ -4,7 +4,7 @@
 When enabled, an unexpected exception (an uncaught one, or one a background
 worker caught and turned into an error dialog) sends a small fingerprint to
 ``rosu-web`` ``POST /api/crash``: the exception type, a short message with file
-paths and e-mail addresses removed, and the stack as ``module:function`` names
+paths, quoted text and e-mail addresses removed, and the stack as ``module:function`` names
 (``rosu/services/library_svc.py:copy_to_library``) — no line contents, no
 files, no library data, no usernames. The server scrubs again and groups
 identical crashes so the maintainer sees "this crash hit N users".
@@ -38,19 +38,25 @@ _seen: set = set()
 _seen_lock = threading.Lock()
 _installed = False
 
-_PATH_PATTERNS = (
-    re.compile(r"[A-Za-z]:[\\/][^\s'\"<>|]*"),
-    re.compile(r"\\\\[^\s'\"<>|]+"),
-    re.compile(r"(?:~|/(?:home|Users|root|mnt|media|var|tmp|private))[\\/][^\s'\"<>|]*"),
-)
 _EMAIL = re.compile(r"[^\s@<>\"']+@[^\s@<>\"']+\.[A-Za-z]{2,}")
+# Quoted text is usually a name from the user's library or disk ('Artist -
+# Title', a file name), so it goes whole. A Windows path may contain spaces
+# ("C:\\Users\\John Smith\\…"), so from a drive letter or a UNC prefix the
+# rest of the line goes; elsewhere everything from the first slashed token to
+# the last one on a line is a (relative, maybe spaced) path too.
+_QUOTED = re.compile(r"'[^'\n]*'|\"[^\"\n]*\"")
+_LINE_PATHS = (re.compile(r"[A-Za-z]:[\\/].*"), re.compile(r"\\\\.*"))
+_SLASHY = re.compile(r"\S*[\\/](?:.*[\\/])?\S*")
 
 
 def scrub(text: str) -> str:
-    """Remove anything path- or e-mail-like (a message must not carry a username)."""
-    for pat in _PATH_PATTERNS:
-        text = pat.sub("<path>", text)
+    """Remove anything that could carry a name: e-mail addresses, quoted text
+    and paths (a message must not carry a username or a library entry)."""
     text = _EMAIL.sub("<email>", text)
+    text = _QUOTED.sub("'<str>'", text)
+    for pat in _LINE_PATHS:
+        text = pat.sub("<path>", text)
+    text = _SLASHY.sub("<path>", text)
     return re.sub(r"[\x00-\x1f\x7f]", " ", text)
 
 

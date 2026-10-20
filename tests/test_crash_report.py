@@ -26,6 +26,15 @@ def _raise(exc):
 def test_scrub_and_module_paths():
     assert crash_report.scrub(r"cannot open C:\Users\halil\osu!\Songs\x.osz") == "cannot open <path>"
     assert crash_report.scrub("mail me@example.com") == "mail <email>"
+    # Spaces inside a path, quoted library names and relative paths all go.
+    spaced = r"bad C:\Users\John Smith\Documents\osu!\Songs\123 Artist - Title\a.osu"
+    assert crash_report.scrub(spaced) == "bad <path>"
+    assert crash_report.scrub("x /home/jane doe/x") == "x <path>"
+    assert crash_report.scrub("Songs/123 A - B/x.osu missing") == "<path> missing"
+    assert crash_report.scrub("'Artist - Title'") == "'<str>'"
+    assert crash_report.scrub(r"\\server\share\John Doe\f") == "<path>"
+    assert crash_report.scrub("invalid literal for int() with base 10: 12") == \
+        "invalid literal for int() with base 10: 12"
     assert crash_report.module_path(r"C:\x\_MEI1\rosu\services\library_svc.py") == "rosu/services/library_svc.py"
     assert crash_report.module_path("/usr/lib/python3.13/zipfile.py") == "zipfile.py"
 
@@ -48,7 +57,7 @@ def test_payload_is_frames_and_scrubbed_message_only():
     exc = _raise(KeyError(r"C:\Users\me\secret.osz"))
     p = crash_report.build_payload(exc)
     assert p["exc_type"] == "KeyError"
-    assert "Users" not in p["message"] and "<path>" in p["message"]
+    assert "Users" not in p["message"] and p["message"] == "'<str>'"
     assert all(":" in f and "\\" not in f for f in p["frames"])
     assert p["frames"][-1].endswith(":_raise")
     assert set(p) == {"exc_type", "message", "frames", "app_version", "os"}

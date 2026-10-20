@@ -105,7 +105,8 @@ class MainWindow(QMainWindow):
         self.update_banner.setText(
             escape(t("update_available", tag=info["tag"])) + links)
         if info.get("notes"):
-            self.update_banner.setToolTip(info["notes"])
+            from .links import plain_tip
+            self.update_banner.setToolTip(plain_tip(info["notes"]))
         self.update_banner.setVisible(True)
 
     # -- shared operations ---------------------------------------------------

@@ -671,8 +671,30 @@ def test_remove_dialog_builds_with_no_client_available(qapp, tmp_path, monkeypat
         {"key": "stable", "available": False, "reason": "no_stable"},
         {"key": "lazer", "available": False, "reason": "lazer_helper"}])
     dlg = RemoveDialog(ctx)
+    _sources_loaded(dlg, qapp)
     assert not dlg.btn_run.isEnabled()
     assert dlg.lbl_status.text() == ctx.t("rm_no_source")
+    dlg.reject()
+    ctx.db.close()
+
+
+def _sources_loaded(dlg, qapp):
+    """The dialog asks which clients are available off the UI thread."""
+    dlg._src_worker.wait(5000)
+    qapp.processEvents()
+
+
+def test_remove_dialog_offers_only_save_first_for_lazer(qapp, tmp_path, monkeypatch):
+    from rosu.ui.remove_dialog import RemoveDialog
+    ctx = _ctx(tmp_path, monkeypatch)
+    monkeypatch.setattr(type(ctx.services), "removal_sources", lambda self: [
+        {"key": "stable", "available": False, "reason": "no_stable"},
+        {"key": "lazer", "available": True, "reason": ""}])
+    monkeypatch.setattr(RemoveDialog, "scan", lambda self: None)
+    dlg = RemoveDialog(ctx)
+    _sources_loaded(dlg, qapp)
+    assert dlg.cbo_source.currentData() == "lazer"
+    assert dlg.rb_save.isChecked() and not dlg.rb_only.isEnabled()
     dlg.reject()
     ctx.db.close()
 
@@ -684,6 +706,7 @@ def test_remove_dialog_lists_a_scan_and_warns_about_unbacked_sets(qapp, tmp_path
         {"key": "stable", "available": False, "reason": "no_stable"},
         {"key": "lazer", "available": False, "reason": "lazer_helper"}])
     dlg = RemoveDialog(ctx)
+    _sources_loaded(dlg, qapp)
     dlg._on_scanned({"source": "stable", "sets": [
         {"key": "1 A", "name": "1 A", "size": 10, "backed_up": True},
         {"key": "2 B", "name": "2 B", "size": 20, "backed_up": False}]}, dlg._scan_seq)
@@ -747,6 +770,6 @@ def test_update_banner_links_the_exe_and_escapes(qapp, tmp_path, monkeypatch):
     text = win.update_banner.text()
     from html import escape
     assert "rosu-v9.9.9-win64.exe" in text and escape(ctx.t("update_whats_new")) in text
-    assert win.update_banner.toolTip() == "<b>notes</b>"
+    assert win.update_banner.toolTip() == "<qt>&lt;b&gt;notes&lt;/b&gt;</qt>"
     win.close()
     ctx.db.close()

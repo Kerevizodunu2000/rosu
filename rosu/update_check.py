@@ -20,7 +20,12 @@ OWNER = "Kerevizodunu2000"
 REPO = "rosu"
 _API = "https://api.github.com/repos/{owner}/{repo}/releases/latest"
 SITE_LATEST = "https://rosu-web.vercel.app/api/latest-version"
-_RELEASE_PREFIX = f"https://github.com/{OWNER}/{REPO}/releases/"
+# The only links the UI may show: this repo's latest/tag pages and its release
+# assets. Matched whole, from a closed character set — no "..", "%2e" or "\\"
+# can steer a browser to another repository.
+_RELEASE_LINK = re.compile(
+    rf"https://github\.com/{OWNER}/{REPO}/releases/"
+    r"(?:latest|tag/v?\d+\.\d+\.\d+|download/v?\d+\.\d+\.\d+/[A-Za-z0-9][A-Za-z0-9._-]*)")
 _NOTES_MAX = 1500
 
 
@@ -44,7 +49,7 @@ def _get_json(url: str, timeout: int, user_agent: str):
 
 def _release_link(url) -> str | None:
     """Only ever hand the UI a link into this project's own GitHub releases."""
-    return url if isinstance(url, str) and url.startswith(_RELEASE_PREFIX) else None
+    return url if isinstance(url, str) and _RELEASE_LINK.fullmatch(url) else None
 
 
 def parse_site_reply(data) -> dict | None:
@@ -88,7 +93,7 @@ def latest_release(owner: str = OWNER, repo: str = REPO,
     if not tag:
         return None
     return {"tag": tag,
-            "url": data.get("html_url")
+            "url": _release_link(data.get("html_url"))
             or f"https://github.com/{owner}/{repo}/releases/latest"}
 
 

@@ -19,6 +19,7 @@ from .. import client_remove
 from ..workers import Worker
 from .copy_table import SortItem
 from .countdown_dialog import CountdownConfirmDialog
+from .links import plain_tip
 
 _MIB = 1024 ** 2
 _GIB = 1024 ** 3
@@ -39,9 +40,11 @@ class RemoveDialog(QDialog):
         self._all_sets: list[dict] = []
         self._shown: list[dict] = []
         self._worker: Worker | None = None
+        self._src_worker: Worker | None = None
+        self._closed = False
         self._scan_seq = 0
         self._rescan_pending = False
-        self._sources = {s["key"]: s for s in ctx.services.removal_sources()}
+        self._sources: dict = {}
         t = ctx.t
 
         self.setWindowTitle(t("rm_title"))
@@ -57,13 +60,8 @@ class RemoveDialog(QDialog):
         src_row.addWidget(QLabel(t("rm_source")))
         self.cbo_source = QComboBox()
         for key in ("stable", "lazer"):
-            info = self._sources.get(key) or {"available": False, "reason": "disabled"}
             self.cbo_source.addItem(t(f"prune_source_{key}"), key)
-            idx = self.cbo_source.count() - 1
-            if not info.get("available"):
-                self.cbo_source.setItemData(idx, t(f"rm_why_{info.get('reason') or 'disabled'}"),
-                                            Qt.ToolTipRole)
-                self.cbo_source.model().item(idx).setEnabled(False)
+        self.cbo_source.setEnabled(False)   # until the sources are known
         src_row.addWidget(self.cbo_source, 1)
         root.addLayout(src_row)
 
@@ -153,9 +151,40 @@ class RemoveDialog(QDialog):
         self.spin_limit.valueChanged.connect(lambda _=0: self._refill())
         self.rb_save.toggled.connect(lambda _=False: self._refill())
         self.btn_scan.clicked.connect(self.scan)
-        self._select_first_available()
+        self.btn_scan.setEnabled(False)
+        self._load_sources()
 
     # -- source ----------------------------------------------------------------
+    def _load_sources(self) -> None:
+        """Which clients can be removed from — off the UI thread: asking the lazer
+        helper what it supports starts a process."""
+        self.lbl_status.setText(self.ctx.t("rm_checking"))
+        services = self.ctx.services
+        w = Worker(lambda progress=None: services.removal_sources())
+        self._src_worker = w
+        w.succeeded.connect(self._apply_sources)
+        w.failed.connect(self._on_sources_failed)
+        w.start()
+
+    def _on_sources_failed(self, msg: str) -> None:
+        self._apply_sources([])
+        self.lbl_status.setText(msg)
+
+    def _apply_sources(self, sources) -> None:
+        if self._closed:
+            return
+        t = self.ctx.t
+        self._sources = {s["key"]: s for s in (sources or [])}
+        for i in range(self.cbo_source.count()):
+            info = self._sources.get(self.cbo_source.itemData(i)) or {"reason": "disabled"}
+            item = self.cbo_source.model().item(i)
+            item.setEnabled(bool(info.get("available")))
+            self.cbo_source.setItemData(
+                i, None if info.get("available")
+                else t(f"rm_why_{info.get('reason') or 'disabled'}"), Qt.ToolTipRole)
+        self.cbo_source.setEnabled(True)
+        self.lbl_status.setText("")
+        self._select_first_available()
     def _note_for(self, key) -> str:
         info = self._sources.get(key) or {}
         if not info.get("available"):
@@ -165,9 +194,10 @@ class RemoveDialog(QDialog):
     def _select_first_available(self) -> None:
         for i in range(self.cbo_source.count()):
             if (self._sources.get(self.cbo_source.itemData(i)) or {}).get("available"):
+                self.cbo_source.blockSignals(True)
                 self.cbo_source.setCurrentIndex(i)
-                self.lbl_source_note.setText(self._note_for(self.cbo_source.itemData(i)))
-                self.scan()
+                self.cbo_source.blockSignals(False)
+                self._on_source_changed()
                 return
         self.lbl_source_note.setText(self._note_for(self.cbo_source.currentData()))
         self.lbl_status.setText(self.ctx.t("rm_no_source"))
@@ -176,9 +206,16 @@ class RemoveDialog(QDialog):
     def _on_source_changed(self, _i=0) -> None:
         key = self.cbo_source.currentData()
         self.lbl_source_note.setText(self._note_for(key))
+        # osu!lazer purges removed sets on its next start: always save first.
+        lazer = key == "lazer"
+        if lazer:
+            self.rb_save.setChecked(True)
+        self.rb_only.setEnabled(not lazer)
+        self.rb_only.setToolTip(self.ctx.t("rm_mode_only_lazer" if lazer else "rm_mode_only_tip"))
         self._all_sets = []
         self._refill()
         if (self._sources.get(key) or {}).get("available"):
+            self.btn_scan.setEnabled(True)
             self.scan()
 
     # -- scan (off the UI thread) ------------------------------------------------
@@ -258,7 +295,7 @@ class RemoveDialog(QDialog):
         self.table.setRowCount(len(self._shown))
         for r, s in enumerate(self._shown):
             name = QTableWidgetItem(str(s["name"]))
-            name.setToolTip(str(s["name"]))
+            name.setToolTip(plain_tip(s["name"]))
             size = SortItem(_fmt_size(s.get("size") or 0), s.get("size") or 0)
             size.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
             backed = QTableWidgetItem("✓" if s.get("backed_up") else "—")
@@ -273,9 +310,7 @@ class RemoveDialog(QDialog):
         if not self._shown:
             self.lbl_warn.setText("")
         elif self.rb_save.isChecked():
-            self.lbl_warn.setText(
-                t("rm_warn_no_physical") if not self.ctx.cfg.library_physical_copy
-                else t("rm_warn_save", n=unbacked) if unbacked else "")
+            self.lbl_warn.setText(t("rm_warn_save", n=unbacked) if unbacked else "")
         else:
             self.lbl_warn.setText(t("rm_warn_only", n=unbacked) if unbacked else "")
         self.btn_run.setEnabled(bool(self._shown))
@@ -303,9 +338,11 @@ class RemoveDialog(QDialog):
         self.accept()
 
     def _stop_scan(self) -> None:
+        # No waiting: the scan stops at its next item and the Worker keeps itself
+        # alive until then (see workers._live).
+        self._closed = True
         if self._worker is not None and self._worker.isRunning():
             self.ctx.services.cancel_removal_scan()
-            self._worker.wait(5000)
 
     def reject(self) -> None:
         self._stop_scan()
