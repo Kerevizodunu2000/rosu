@@ -688,19 +688,32 @@ class Database:
                    client: str | None = None) -> None:
         """Flag a beatmapset as present in an osu! client (the Search 'Where'
         markers). ``client`` is ``"stable"`` / ``"lazer"`` / ``None`` — the
-        per-client column is set in addition to the legacy ``in_osu`` flag."""
+        per-client column is set in addition to the legacy ``in_osu`` flag.
+
+        Clearing ONE client keeps the legacy ``in_osu`` flag set while the other
+        client still has the set, so the two never contradict each other."""
         if beatmapset_id is None:
             return
-        cols = ["in_osu=?"]
-        vals: list = [1 if in_osu else 0]
+        flag = 1 if in_osu else 0
         if client == "stable":
-            cols.append("in_osu_stable=?"); vals.append(1 if in_osu else 0)
+            sql = ("UPDATE tracks SET in_osu_stable=?, "
+                   "in_osu=MAX(?, COALESCE(in_osu_lazer, 0)) WHERE beatmapset_id=?")
         elif client == "lazer":
-            cols.append("in_osu_lazer=?"); vals.append(1 if in_osu else 0)
-        vals.append(beatmapset_id)
+            sql = ("UPDATE tracks SET in_osu_lazer=?, "
+                   "in_osu=MAX(?, COALESCE(in_osu_stable, 0)) WHERE beatmapset_id=?")
+        else:
+            sql = None
         with self._lock:
-            self._conn.execute(
-                f"UPDATE tracks SET {', '.join(cols)} WHERE beatmapset_id=?", vals)
+            if sql:
+                self._conn.execute(sql, (flag, flag, beatmapset_id))
+            elif flag:
+                self._conn.execute(
+                    "UPDATE tracks SET in_osu=1 WHERE beatmapset_id=?",
+                    (beatmapset_id,))
+            else:   # "in no osu! client at all"
+                self._conn.execute(
+                    "UPDATE tracks SET in_osu=0, in_osu_stable=0, in_osu_lazer=0 "
+                    "WHERE beatmapset_id=?", (beatmapset_id,))
             self._conn.commit()
 
     def set_availability(self, beatmapset_id: int, status: str) -> None:
@@ -1097,6 +1110,7 @@ class Database:
                 "SELECT * FROM tracks WHERE artist=? ORDER BY title", (artist,))
             rows = [dict(r) for r in cur.fetchall()]
             self.attach_sources_bulk(rows)   # RLock re-entrant: keep the read atomic (item 10)
+            self.attach_difficulties_bulk(rows)   # the Mode column lists every diff's mode
         return rows
 
     def counts(self) -> dict:

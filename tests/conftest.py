@@ -25,3 +25,26 @@ from rosu import config
 def _isolate_config_file(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "_config_file",
                         lambda: tmp_path / "config.json")
+
+
+def pytest_sessionfinish(session, exitstatus):
+    """Destroy every leftover top-level widget while Qt is still fully alive.
+
+    Test dialogs built with ``parent=None`` otherwise survive until interpreter
+    shutdown, where PySide6 6.12 tears them down after parts of Qt are already
+    gone and the process dies with a segfault — after every test has passed,
+    which still fails the CI step via the exit code.
+    """
+    import sys
+    if "PySide6.QtWidgets" not in sys.modules:
+        return
+    from PySide6.QtCore import QCoreApplication, QEvent
+    from PySide6.QtWidgets import QApplication
+    app = QApplication.instance()
+    if app is None:
+        return
+    for w in app.topLevelWidgets():
+        w.close()
+        w.deleteLater()
+    QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+    app.processEvents()

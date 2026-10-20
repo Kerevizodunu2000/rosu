@@ -634,3 +634,31 @@ def test_health_dialog_builds_and_renders_report(qapp, tmp_path, monkeypatch):
     ctx.i18n.set_language("en")
     dlg.close()
     ctx.db.close()
+
+
+def test_search_row_columns_match_the_stored_data(qapp, tmp_path, monkeypatch):
+    """HANDOFF 4.3: Mode lists every difficulty's mode (not the first .osu's),
+    a memory-only set shows no 💾 and offers no "Open location", and the
+    Library status is translated rather than a raw DB token."""
+    from rosu.ui.main_window import MainWindow
+    from rosu.ui.search_tab import SearchTab
+    ctx = _ctx(tmp_path, monkeypatch)
+    ctx.i18n.set_language("tr")
+    win = MainWindow(ctx, qapp)
+    tab = win.search
+    diffs = [{"mode": "osu!", "mode_int": 0, "star_rating": 2.0},
+             {"mode": "osu!mania", "mode_int": 3, "keycount": 7, "star_rating": 4.0}]
+    tab._populate([{"id": 1, "beatmapset_id": 1, "filename": "1 A - B.osz",
+                    "title": "B", "artist": "A", "display_name": "A - B",
+                    "mode": "osu!", "difficulties": diffs,
+                    "in_library": 1, "library_status": "memory",
+                    "in_osu": 1, "in_osu_lazer": 1}])
+    col = {k: i for i, k in enumerate(SearchTab._KEYS)}
+    cell = lambda k: tab.table.item(0, col[k]).text()   # noqa: E731
+    assert cell("col_mode") == "osu!, osu!mania"
+    assert cell("col_keys") == "7K"
+    assert "💾" not in cell("col_location")
+    assert cell("col_lib_status") == ctx.t("lib_status_memory") != "memory"
+    assert tab.table._row_path(0) == ""
+    win.close()
+    ctx.db.close()

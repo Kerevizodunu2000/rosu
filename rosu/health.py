@@ -19,6 +19,8 @@ from __future__ import annotations
 
 from typing import Iterable, Mapping
 
+from .columns import has_library_copy
+
 
 def disk_usage(disk_files: Mapping[str, int]) -> dict:
     """Total bytes + file count from an on-disk Library scan.
@@ -48,7 +50,8 @@ def scrub(db_rows: Iterable[dict], disk_files: Mapping[str, int]) -> dict:
 
     * **present**    — DB rows whose file is on disk (healthy).
     * **orphans**    — files on disk that no DB row references (sorted names).
-    * **dead_links** — rows flagged ``in_library`` (physically present) whose
+    * **dead_links** — rows that should have a file on disk (``in_library`` and
+      not memory-only, see :func:`rosu.columns.has_library_copy`) whose
       file is missing. A ``memory``/``disappeared`` row is *not* a dead link —
       the DB already knows it has no physical copy.
     * **memory**     — count of intentionally memory-only rows.
@@ -64,7 +67,7 @@ def scrub(db_rows: Iterable[dict], disk_files: Mapping[str, int]) -> dict:
     present = disk_names & set(by_name)
     orphans = sorted(disk_names - set(by_name))
     dead_links = [r for fn, r in by_name.items()
-                  if fn not in disk_names and r.get("in_library")]
+                  if fn not in disk_names and has_library_copy(r)]
     memory = sum(1 for r in rows if r.get("library_status") == "memory")
     return {"present": len(present), "orphans": orphans,
             "dead_links": dead_links, "memory": memory}

@@ -67,7 +67,7 @@ def copy_to_library(output_dir: Path, library_dir: Path, db, when: str,
 
     for src_path, t in _scan_osz(output_dir):
         # Ensure the track is in memory (adds the name even if physical copy off).
-        track_id, _is_new = db.upsert_track(t, when)
+        track_id = _upsert_with_meta(db, src_path, t, when)
         row = db.find_track_row(t.beatmapset_id, t.filename)
         already = bool(row and row["in_library"] == 1)  # library membership per the DB
 
@@ -131,6 +131,26 @@ def copy_to_library(output_dir: Path, library_dir: Path, db, when: str,
             progress(t.filename)
 
     return {"new": new, "duplicates": duplicates, "dup_ids": dup_ids}
+
+
+def _upsert_with_meta(db, src_path: Path, t, when: str) -> int:
+    """Record ``t`` and, if its difficulties were never parsed, parse them now.
+
+    Sets unpacked from Output were parsed at extraction, but a set imported
+    straight out of osu!(stable)/osu!lazer arrived here as a bare name: its Mode,
+    Keys, Star, BPM and length stayed blank in Search until a "Refresh Library",
+    and forever when physical copies are off (Refresh only reads the Library
+    folder). The source ``.osz`` is still in hand, so read it once.
+    """
+    row = db.find_track_row(t.beatmapset_id, t.filename)
+    if row is not None and row["diffs_scanned_at"]:
+        return db.upsert_track(t, when)[0]
+    meta, diffs, raw = read_osz_full(src_path)
+    track_id, _ = db.upsert_track(t, when, meta)
+    if diffs:   # an unreadable archive stays unscanned so Refresh can retry it
+        db.upsert_difficulties(track_id, diffs, ratings.stars_for_diffs(diffs, raw), when)
+        db.apply_msd(track_id, msd.msd_for_diffs(diffs, raw), when)
+    return track_id
 
 
 def refresh_library(library_dir: Path, db, when: str,
