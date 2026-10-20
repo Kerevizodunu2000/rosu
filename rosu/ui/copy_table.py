@@ -59,6 +59,7 @@ class SortItem(QTableWidgetItem):
 class CopyTable(QTableWidget):
     openLocationRequested = Signal(str)   # emitted with a file path (v1.3)
     repairRequested = Signal(str)
+    stageRequested = Signal(list)         # the selected rows' file paths (v1.9)
     rowActivated = Signal(int)            # double-click a row (v1.5, opt-in)
 
     def __init__(self, name_column: int = 0, parent=None,
@@ -73,6 +74,7 @@ class CopyTable(QTableWidget):
         self._menu_open_location = ""            # set via retranslate; empty = hidden
         self._menu_open_url = ""                 # set via retranslate; empty = hidden
         self._menu_repair = ""                   # set via retranslate; empty = hidden
+        self._menu_stage = ""                    # set via retranslate; empty = hidden
         self._widths_seeded = False
         self.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.setSelectionBehavior(QAbstractItemView.SelectRows)
@@ -248,6 +250,14 @@ class CopyTable(QTableWidget):
                 act_url.triggered.connect(lambda: self._open_url(url))
                 menu.addAction(act_url)
                 
+        if self._menu_stage:
+            paths = [p for p in (self._row_path(r) for r in rows) if p]
+            if paths:
+                menu.addSeparator()
+                act_stage = QAction(self._menu_stage, self)
+                act_stage.triggered.connect(lambda: self.stageRequested.emit(paths))
+                menu.addAction(act_stage)
+
         if len(rows) == 1 and self._menu_repair:
             item = self.item(rows[0], self._name_column)
             if item is not None:

@@ -924,3 +924,43 @@ def test_folder_watcher_queues_new_downloads_only(qapp, tmp_path, monkeypatch):
     assert win.folder_watch.folder is None
     win.close()
     ctx.db.close()
+
+
+def test_search_history_goes_back_and_forward(qapp, tmp_path, monkeypatch):
+    from rosu.ui.main_window import MainWindow
+    ctx = _ctx(tmp_path, monkeypatch)
+    win = MainWindow(ctx, qapp)
+    tab = win.search
+    clock = iter(range(0, 1000, 10))
+    monkeypatch.setattr("rosu.ui.search_tab.time.monotonic", lambda: next(clock))
+
+    def run(q):
+        tab._search_seq += 1
+        tab._on_results({"rows": [], "total": 0, "truncated": False}, tab._search_seq, q)
+    run("alpha")
+    run("beta")
+    assert tab.btn_back.isEnabled() and not tab.btn_fwd.isEnabled()
+    searched = []
+    monkeypatch.setattr(tab, "do_search", lambda: (searched.append(tab.box.text()),
+                                                   run(tab.box.text())))
+    tab._go_history(-1)
+    assert searched == ["alpha"] and tab.btn_fwd.isEnabled() and not tab.btn_back.isEnabled()
+    tab._go_history(1)
+    assert searched == ["alpha", "beta"]
+    win.close()
+    ctx.db.close()
+
+
+def test_stage_to_output_copies_library_files_only(tmp_path, monkeypatch):
+    ctx = _ctx(tmp_path, monkeypatch)
+    lib = ctx.cfg.library_path
+    (lib / "1 A.osz").write_bytes(b"a")
+    outside = tmp_path / "elsewhere.osz"
+    outside.write_bytes(b"x")
+    (ctx.cfg.output_path / "2 B.osz").write_bytes(b"different")
+    (lib / "2 B.osz").write_bytes(b"b")
+    res = ctx.services.stage_to_output([lib / "1 A.osz", lib / "2 B.osz", outside])
+    assert res == {"copied": 1, "already": 0, "skipped": 2}
+    assert (ctx.cfg.output_path / "1 A.osz").read_bytes() == b"a"
+    assert (ctx.cfg.output_path / "2 B.osz").read_bytes() == b"different"   # not replaced
+    ctx.db.close()

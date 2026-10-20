@@ -127,6 +127,42 @@ class LibraryMixin:
             finally:
                 shutil.rmtree(stage, ignore_errors=True)
 
+        def stage_to_output(self, paths, progress=None) -> dict:
+            """Copy chosen Library sets into Output (v1.9), so "Import to osu!"
+            sends exactly those. Only files directly in the Library are taken;
+            an Output file with the same name is never replaced. ``{"copied",
+            "already", "skipped"}``."""
+            import shutil
+            lib = self.cfg.library_path.resolve()
+            out = self.cfg.output_path
+            out.mkdir(parents=True, exist_ok=True)
+            res = {"copied": 0, "already": 0, "skipped": 0}
+            paths = list(paths or [])
+            for i, p in enumerate(paths, 1):
+                src = Path(p)
+                try:
+                    inside = src.resolve().parent == lib
+                except OSError:
+                    inside = False
+                if not inside or src.suffix.lower() != ".osz" or not src.is_file():
+                    res["skipped"] += 1
+                    continue
+                dest = out / src.name
+                if dest.exists():
+                    same = dest.is_file() and dest.stat().st_size == src.stat().st_size
+                    res["already" if same else "skipped"] += 1
+                    continue
+                try:
+                    shutil.copy2(src, dest)
+                    res["copied"] += 1
+                except OSError as exc:
+                    res["skipped"] += 1
+                    self.log.error("stage:output", f"{src.name}: {str(exc)[:150]}")
+                if progress:
+                    progress({"kind": "stage", "done": i, "total": len(paths)})
+            self.log.info("STAGE_OUTPUT", **res)
+            return res
+
         def build_watch_import_job(self, paths) -> jobs.Job:
             """Queue new watch-folder files for import (disk lane)."""
             paths = [str(p) for p in (paths or [])]

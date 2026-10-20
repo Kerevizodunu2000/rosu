@@ -7,7 +7,10 @@ is browsable (item 11).
 """
 from __future__ import annotations
 
+import time
+
 from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QHBoxLayout,
     QInputDialog, QLabel, QLineEdit, QMenu, QMessageBox, QPushButton,
@@ -134,6 +137,17 @@ class SearchTab(QWidget):
         root.setSpacing(10)
 
         row = QHBoxLayout()
+        # v1.9: back/forward through the last 16 searches (Alt+←/→).
+        self._history = presets.History()
+        self._navigating = False
+        self.btn_back = QToolButton(objectName="secondary", text="◀")
+        self.btn_back.clicked.connect(lambda: self._go_history(-1))
+        self.btn_fwd = QToolButton(objectName="secondary", text="▶")
+        self.btn_fwd.clicked.connect(lambda: self._go_history(1))
+        QShortcut(QKeySequence("Alt+Left"), self, activated=lambda: self._go_history(-1))
+        QShortcut(QKeySequence("Alt+Right"), self, activated=lambda: self._go_history(1))
+        row.addWidget(self.btn_back)
+        row.addWidget(self.btn_fwd)
         self.box = QLineEdit()
         self.box.returnPressed.connect(self.do_search)          # Enter = search now
         self.btn = QPushButton()
@@ -184,6 +198,7 @@ class SearchTab(QWidget):
         self.table.setColumnCount(len(self._KEYS))
         self.table.openLocationRequested.connect(self._open_location)
         self.table.repairRequested.connect(self._repair_map)
+        self.table.stageRequested.connect(self._stage_to_output)
         self.table.rowActivated.connect(self._show_map_details)   # dbl-click → details
         # v1.9: right-click a column header to hide/show columns (remembered).
         header = self.table.horizontalHeader()
@@ -225,6 +240,8 @@ class SearchTab(QWidget):
         self.btn_saved.setToolTip(t("tip_saved_searches"))
         self.btn_export.setText(t("btn_export_results"))
         self.btn_export.setToolTip(t("tip_export_results"))
+        self.btn_back.setToolTip(t("tip_history_back"))
+        self.btn_fwd.setToolTip(t("tip_history_forward"))
         self.btn_gallery.setText(t("btn_gallery"))
         self.btn_gallery.setToolTip(t("tip_gallery", n=GALLERY_CAP))
         self.table.setHorizontalHeaderLabels([t(k) for k in self._KEYS])
@@ -232,6 +249,7 @@ class SearchTab(QWidget):
         self.table.set_menu_labels(t("copy_names_action"), t("copy_table_action"))
         self.table._menu_open_location = t("menu_open_location")
         self.table._menu_repair = t("menu_repair")
+        self.table._menu_stage = t("menu_stage_output")
 
     def on_shown(self) -> None:
         # First time the tab is opened, show the full library so it's browsable.
@@ -301,6 +319,10 @@ class SearchTab(QWidget):
         rows = res["rows"]
         total = res["total"]
         self._last_truncated = bool(res["truncated"])
+        if not self._navigating:
+            self._history.push((query, self.chk_tags.isChecked()), time.monotonic())
+        self._navigating = False
+        self._sync_history_buttons()
         self._populate(rows)
         t = self.ctx.t
         if res["truncated"]:
@@ -403,6 +425,22 @@ class SearchTab(QWidget):
     def _open_location(self, path: str) -> None:
         reveal_in_explorer(self, self.ctx, path)
 
+    def _stage_to_output(self, paths: list) -> None:
+        """Library → Output staging (v1.9): pick sets here, then "Import to
+        osu!" on the Dashboard sends exactly those."""
+        w = Worker(self.ctx.services.stage_to_output, paths)
+        self._threads.append(w)
+        w.succeeded.connect(self._staged)
+        w.failed.connect(self._on_failed)
+        w.finished.connect(lambda: self._threads.remove(w) if w in self._threads else None)
+        w.start()
+
+    def _staged(self, res: dict) -> None:
+        self.result.setText(self.ctx.t("stage_output_done", n=res.get("copied", 0),
+                                       already=res.get("already", 0),
+                                       skipped=res.get("skipped", 0)))
+        self.mw.dashboard.refresh_scan()
+
     # -- columns (v1.9) ----------------------------------------------------------
     def _apply_hidden_columns(self) -> None:
         hidden = set(self.ctx.cfg.search_hidden_columns)
@@ -469,6 +507,17 @@ class SearchTab(QWidget):
             self.ctx.cfg.saved_searches, name, text, self.chk_tags.isChecked())
         self.ctx.save_config()
         self.result.setText(t("saved_search_saved", name=" ".join(name.split())))
+
+    def _sync_history_buttons(self) -> None:
+        self.btn_back.setEnabled(self._history.can_back())
+        self.btn_fwd.setEnabled(self._history.can_forward())
+
+    def _go_history(self, step: int) -> None:
+        entry = self._history.back() if step < 0 else self._history.forward()
+        if entry is None:
+            return
+        self._navigating = True
+        self.apply_saved_search({"query": entry[0], "tags": entry[1]})
 
     def apply_saved_search(self, entry: dict) -> None:
         """Put a saved search back in the box (and the tags toggle) and run it."""

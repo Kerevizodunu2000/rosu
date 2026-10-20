@@ -1867,6 +1867,18 @@ STRINGS: dict[str, dict[str, str]] = {
               "Library first if you want. Shows exactly what goes before anything is touched.",
         "tr": "osu!(stable) veya osu!lazer'dan beatmap setlerini kaldırır — istersen önce "
               "Library'e kaydeder. Hiçbir şeye dokunmadan önce tam olarak neyin gideceğini gösterir."},
+    "tip_history_back": {"en": "Previous search (Alt+←)", "tr": "Önceki arama (Alt+←)"},
+    "tip_history_forward": {"en": "Next search (Alt+→)", "tr": "Sonraki arama (Alt+→)"},
+
+    # -- v1.9: Library → Output staging --------------------------------------------
+    "menu_stage_output": {"en": "Copy to Output (for Import to osu!)",
+                          "tr": "Output'a kopyala (osu!'ya aktarmak için)"},
+    "stage_output_done": {
+        "en": "Copied {n} sets to Output ({already} already there, {skipped} skipped). Use "
+              "Import to osu! on the Dashboard to send them.",
+        "tr": "{n} set Output'a kopyalandı ({already} tanesi zaten oradaydı, {skipped} "
+              "atlandı). Göndermek için Gösterge Paneli'nde osu!'ya Aktar'ı kullan."},
+
     # -- v1.9: watch folder ------------------------------------------------------------
     "set_watch": {"en": "Watch a folder", "tr": "Bir klasörü izle"},
     "set_watch_folder": {"en": "Folder for new .osz downloads (e.g. Downloads)",

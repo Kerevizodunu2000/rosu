@@ -35,3 +35,21 @@ def test_config_coerces_hand_edited_ui_state(tmp_path):
     cfg = config._fill_defaults(cfg)
     assert cfg.search_hidden_columns == []
     assert cfg.saved_searches == [{"name": "ok", "query": "x", "tags": False}]
+
+
+def test_history_steps_back_and_forward_and_coalesces_typing():
+    h = presets.History(size=3)
+    h.push(("ca", False), now=0.0)
+    h.push(("cam", False), now=0.5)            # same burst of typing: one step
+    h.push(("camellia", False), now=1.0)
+    h.push(("star>5", False), now=10.0)
+    assert h.back() == ("camellia", False) and not h.can_back()
+    assert h.forward() == ("star>5", False) and not h.can_forward()
+    h.back()
+    h.push(("mode=mania", True), now=20.0)     # a new step drops the forward ones
+    assert not h.can_forward() and h.back() == ("camellia", False)
+    for i in range(5):
+        h.push((f"q{i}", False), now=100.0 + 10 * i)
+    assert len(h._items) == 3                  # capped
+    h.push(("q4", False), now=200.0)           # repeating the current entry: no step
+    assert len(h._items) == 3 and h._items[-1] == ("q4", False)
