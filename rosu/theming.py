@@ -88,7 +88,7 @@ PALETTES: dict[str, dict[str, str]] = {
         banner_bg="#45475a", banner_text="#f5c2e7", banner_border="#f38ba8"),
     "catppuccin-latte": dict(
         bg="#eff1f5", surface="#ffffff", table="#ffffff", alt="#e6e9ef",
-        text="#464962", muted="#64677c", border="#ccd0da", bar_border="#878990",
+        text="#4c4f69", muted="#64677c", border="#ccd0da", bar_border="#878990",
         accent="#ce68b3", accent_text="#ffffff", accent_hover="#8839ef",
         secondary="#e6e9ef", secondary_text="#4c4f69",
         header_bg="#e6e9ef", header_text="#5c5f77",

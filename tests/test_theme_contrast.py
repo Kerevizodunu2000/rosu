@@ -62,10 +62,12 @@ def test_light_theme_targets(theme):
 
 @pytest.mark.parametrize("theme", LIGHT)
 def test_light_muted_stays_distinct_from_text(theme):
-    # Disabled and muted text must stay visibly lighter than body text.
+    # Disabled and muted text must stay visibly lighter than body text. The 1.4
+    # floor is the owner's amendment to #50 (catppuccin-latte sits at 1.43).
     pal = theming.PALETTES[theme]
     got = ratio(pal["text"], pal["muted"])
     assert got >= 1.4, f"{theme}: text vs muted is {got:.2f}, need 1.4"
+    assert luminance(pal["muted"]) > luminance(pal["text"]), f"{theme}: muted is not lighter than text"
 
 
 @pytest.mark.parametrize("theme", DARK)

@@ -36,7 +36,7 @@ the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Existing libraries get the speed-up the first time Rosu opens them.
 - Exporting from a large Library is faster.
 - The light themes now meet the WCAG contrast targets for muted text, primary buttons
-  and progress bars.
+  and progress bars. Solarized Light body text is darker so muted text stays distinct.
 
 ### Fixed
 - A refused or disk-full **Unpack** from the Shortcuts tab no longer goes on to send
