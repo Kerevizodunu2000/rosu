@@ -64,6 +64,10 @@ class DriveCancelled(DriveError):
     """The user cancelled an in-progress Drive operation (upload/backup)."""
 
 
+class DriveQuotaExceeded(DriveError):
+    """Drive refused an upload because the account's storage is full."""
+
+
 @dataclass(frozen=True)
 class ClientConfig:
     client_id: str
