@@ -49,6 +49,10 @@ class FakeClient:
         self.deleted.append(file_id)
         self._folder = [n for n in self._folder if ("id-" + n) != file_id]
 
+    def storage_quota(self):
+        return {"limit": None, "usage": 0, "usage_in_drive": 0,
+                "usage_in_drive_trash": 0}
+
 
 def _make_services(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "save_config", lambda cfg: None)  # no repo side effect

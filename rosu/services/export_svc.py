@@ -7,6 +7,8 @@ from pathlib import Path
 from .. import config, jobs, osu_import, parsing
 
 _CLIENT_LABEL = {"lazer": "osu!lazer", "stable": "osu!(stable)"}
+# Headroom a backup must leave on Drive (the shard, Drive's own rounding).
+_QUOTA_MARGIN = 64 * 1024 * 1024
 
 def now_iso() -> str:
     return _dt.datetime.now().replace(microsecond=0).isoformat()
@@ -514,6 +516,29 @@ class ExportMixin:
                     "connected": auth.is_connected(),
                     "can_store": auth.can_store_token()}
 
+        def drive_storage(self, progress=None) -> dict:
+            """The account's Drive quota plus the bytes in Rosu's folder and its
+            Exports/Packs subfolders. ``{"error": "not_connected"|"drive"}`` on
+            failure; never raises."""
+            from ..drive.auth import DriveError
+            if not self._drive_auth().is_connected():
+                return {"error": "not_connected"}
+            try:
+                client = self._make_drive_client()
+                quota = client.storage_quota()
+                rosu = 0
+                if self.cfg.drive_folder_id:
+                    for f in client.list_folder(self.cfg.drive_folder_id):
+                        if "size" in f:
+                            rosu += int(f["size"])
+                        elif f.get("name") in ("Exports", "Packs"):
+                            rosu += sum(int(g.get("size", 0))
+                                        for g in client.list_folder(f["id"]))
+            except (DriveError, ValueError, KeyError) as exc:
+                self.log.error("drive:quota", str(exc)[:200])
+                return {"error": "drive"}
+            return {**quota, "rosu": rosu}
+
         def connect_drive(self, progress=None) -> dict:
             """Run the Google OAuth consent flow (off-thread) and remember it."""
             from ..drive.auth import DriveError, DriveNotConfigured
@@ -574,7 +599,7 @@ class ExportMixin:
             ``{"uploaded", "chunks", "skipped"}`` or ``{"error": ...}``.
             """
             from ..drive import bundle, manifest
-            from ..drive.auth import DriveCancelled, DriveError
+            from ..drive.auth import DriveCancelled, DriveError, DriveQuotaExceeded
             self._drive_cancel.clear()
             auth = self._drive_auth()
             if not auth.is_connected():
@@ -608,6 +633,20 @@ class ExportMixin:
     
             try:
                 client = self._make_drive_client()
+                # Refuse up front when the run can't fit; never delete to make room.
+                try:
+                    quota = client.storage_quota()
+                except DriveError as exc:
+                    self.log.error("drive:quota", str(exc)[:200])
+                    quota = {"limit": None}
+                if quota["limit"] is not None:
+                    needed = sum(int(t["size"]) for t in to_upload) + _QUOTA_MARGIN
+                    free = max(0, quota["limit"] - quota["usage"])
+                    if needed > free:
+                        self.log.info("DRIVE_BACKUP", refused="drive_full",
+                                      needed=needed, free=free)
+                        return {"error": "drive_full", "needed": needed, "free": free,
+                                "trash": quota["usage_in_drive_trash"]}
                 folder = self.cfg.drive_folder_id or client.ensure_folder("Rosu")
                 if folder != self.cfg.drive_folder_id:
                     self.cfg.drive_folder_id = folder
@@ -628,7 +667,7 @@ class ExportMixin:
                 done = 0
                 uploaded = 0
                 uploaded_chunks = 0
-                cancelled = False
+                cancelled = full = False
                 for ch in chunks:
                     if self._drive_cancel.is_set():
                         cancelled = True
@@ -641,13 +680,15 @@ class ExportMixin:
                                            cancel=self._drive_cancel.is_set)
                     except DriveCancelled:
                         cancelled = True
+                    except DriveQuotaExceeded:
+                        full = True
                     finally:
                         # transient staging copy — remove even if the upload failed
                         try:
                             local_chunk.unlink()
                         except OSError:
                             pass
-                    if cancelled:
+                    if cancelled or full:
                         break
                     for it in ch["items"]:
                         t = it["track"]
@@ -670,7 +711,11 @@ class ExportMixin:
                 if uploaded:
                     self._push_shard(client, shard_path, folder)
                 self.log.info("DRIVE_BACKUP", uploaded=uploaded, chunks=uploaded_chunks,
-                              skipped=len(local) - len(to_upload), cancelled=cancelled)
+                              skipped=len(local) - len(to_upload), cancelled=cancelled,
+                              drive_full=full)
+                if full:
+                    return {"error": "drive_full", "uploaded": uploaded,
+                            "chunks": uploaded_chunks}
                 return {"uploaded": uploaded, "chunks": uploaded_chunks,
                         "skipped": len(local) - len(to_upload), "cancelled": cancelled}
             except DriveError as exc:
@@ -684,10 +729,10 @@ class ExportMixin:
             stands alone. Raises DriveError to the caller's handler on transport
             failure; DriveCancelled stops early keeping partial progress."""
             from ..drive import bundle, manifest
-            from ..drive.auth import DriveCancelled
+            from ..drive.auth import DriveCancelled, DriveQuotaExceeded
             total = len(to_upload)
             done = uploaded = 0
-            cancelled = False
+            cancelled = full = False
             for t in to_upload:
                 if self._drive_cancel.is_set():
                     cancelled = True
@@ -699,6 +744,9 @@ class ExportMixin:
                                        cancel=self._drive_cancel.is_set)
                 except DriveCancelled:
                     cancelled = True
+                    break
+                except DriveQuotaExceeded:
+                    full = True
                     break
                 sha = bundle.sha256_file(path)
                 entries[manifest.track_key(t)] = manifest.entry_from_track(
@@ -715,19 +763,24 @@ class ExportMixin:
             if uploaded:
                 self._push_shard(client, shard_path, folder)
             self.log.info("DRIVE_BACKUP", uploaded=uploaded, chunks=0, individual=True,
-                          skipped=local_count - total, cancelled=cancelled)
+                          skipped=local_count - total, cancelled=cancelled,
+                          drive_full=full)
+            if full:
+                return {"error": "drive_full", "uploaded": uploaded, "chunks": 0}
             return {"uploaded": uploaded, "chunks": 0,
                     "skipped": local_count - total, "cancelled": cancelled}
 
         def _push_shard(self, client, shard_path, folder) -> None:
             """Publish this device's manifest shard to Drive (replace the prior copy
-            so shards don't accumulate). Non-fatal on failure."""
+            so shards don't accumulate). The new copy goes up before the old one is
+            deleted, so a failed upload (a full Drive) keeps the old shard.
+            Non-fatal on failure."""
             from ..drive.auth import DriveError
             try:
                 existing = client.find_file(shard_path.name, folder)
+                client.upload_file(shard_path, shard_path.name, folder)
                 if existing:
                     client.delete_file(existing)
-                client.upload_file(shard_path, shard_path.name, folder)
             except DriveError as exc:
                 self.log.error("drive:shard", str(exc)[:200])
 
