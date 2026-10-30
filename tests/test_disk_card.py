@@ -136,11 +136,16 @@ def test_low_drives_show_the_warning_word(make_win, lang):
              "E:\\": (100 * GiB, 50 * GiB)}
     win = make_win(lang, table)
     tab = _load(win)
-    warn = win.ctx.t("disk_card_low")
-    by_drive = {lbl.text().split(warn)[-1].split()[0]: lbl.text() for lbl, _ in tab.disk_rows}
-    assert warn.strip() and warn != "disk_card_low"
-    assert warn in by_drive["P:\\"] and warn in by_drive["O:\\"]
-    assert warn not in by_drive["L:\\"] and warn not in by_drive["E:\\"]
+    warn = win.ctx.t("disk_card_low").strip()
+    assert warn and warn != "disk_card_low"
+    by_drive = {lbl.text().split()[0]: w for (lbl, _), w in zip(tab.disk_rows, tab.disk_warns)}
+    for drive in ("P:\\", "O:\\"):
+        assert by_drive[drive].text() == warn and by_drive[drive].objectName() == "diskwarn"
+        assert by_drive[drive].wordWrap()
+    assert by_drive["L:\\"] is None and by_drive["E:\\"] is None
+    for (lbl, bar), w in zip(tab.disk_rows, tab.disk_warns):
+        assert warn not in lbl.text()
+        assert (warn in bar.accessibleDescription()) == (w is not None)
 
 
 @pytest.mark.parametrize("lang", ["en", "tr"])

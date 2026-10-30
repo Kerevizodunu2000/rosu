@@ -58,6 +58,8 @@ class DashboardTab(QWidget):
         self._disks: list[dict] = []   # last result of the Disks card
         self._disk_gen = 0   # a load's result is dropped when a newer load has started
         self.disk_rows: list[tuple[QLabel, QProgressBar | None]] = []
+        self.disk_warns: list[QLabel | None] = []   # the "Low space" badge per row
+        self._disk_boxes: list[QWidget] = []
 
         root = QVBoxLayout(self)
         root.setContentsMargins(18, 18, 18, 18)
@@ -218,37 +220,48 @@ class DashboardTab(QWidget):
     def _render_disks(self) -> None:
         t = self.ctx.t
         self.disk_title.setText(t("disk_card_title"))
-        for lbl, bar in self.disk_rows:
-            for w in (lbl, bar):
+        for box, (_lbl, bar) in zip(self._disk_boxes, self.disk_rows):
+            for w in (box, bar):
                 if w is not None:
                     self.disk_lay.removeWidget(w)
                     w.deleteLater()
-        self.disk_rows = []
+        self.disk_rows, self.disk_warns, self._disk_boxes = [], [], []
         for d in self._disks:
             places = ", ".join(t(f"disk_place_{k}") for k in d["labels"])
             lbl = QLabel(objectName="status")
             lbl.setWordWrap(True)
-            bar = None
+            warn = bar = None
             if d["readable"]:
                 figures = {"used": _fmt_drive_size(d["used"]),
                            "total": _fmt_drive_size(d["total"]),
                            "free": _fmt_drive_size(d["free"])}
                 text = t("disk_card_row", drive=d["drive"], places=places, **figures)
+                desc = text
                 if d["low"]:
-                    text = t("disk_card_low") + text
+                    warn = QLabel(t("disk_card_low").strip(), objectName="diskwarn")
+                    warn.setWordWrap(True)
+                    desc = t("disk_card_low") + text
                 bar = QProgressBar()
                 bar.setRange(0, 100)
                 bar.setValue(round(100 * d["used"] / d["total"]) if d["total"] else 0)
                 bar.setTextVisible(False)   # the label carries the numbers
                 bar.setAccessibleName(f"{d['drive']} {places}")
-                bar.setAccessibleDescription(text)
+                bar.setAccessibleDescription(desc)
             else:
                 text = t("disk_card_unreadable", drive=d["drive"], places=places)
             lbl.setText(text)
-            self.disk_lay.addWidget(lbl)
+            box = QWidget()
+            row = QHBoxLayout(box)
+            row.setContentsMargins(0, 0, 0, 0)
+            if warn is not None:
+                row.addWidget(warn, 0, Qt.AlignTop)
+            row.addWidget(lbl, 1)
+            self.disk_lay.addWidget(box)
             if bar is not None:
                 self.disk_lay.addWidget(bar)
             self.disk_rows.append((lbl, bar))
+            self.disk_warns.append(warn)
+            self._disk_boxes.append(box)
 
     # -- scanning ------------------------------------------------------------
     def refresh_scan(self) -> None:
