@@ -160,8 +160,36 @@ def test_remove_only_needs_a_recycle_bin_and_a_known_client_state(env, monkeypat
     assert svc.remove_from_client("stable", ["707 A - B"], save_first=False)["error"] \
         == "no_recycle_bin"
     assert (songs / "707 A - B").exists()
-    res = svc.remove_from_client("stable", ["707 A - B"], save_first=True)   # Library copy instead
-    assert res["removed"] == 1
+    before = set(cfg.library_path.glob("*.osz"))
+    res = svc.remove_from_client("stable", ["707 A - B"], save_first=True)   # no way round it
+    assert res["error"] == "no_recycle_bin" and res["removed"] == 0 and res["saved"] == 0
+    assert (songs / "707 A - B").exists()
+    assert set(cfg.library_path.glob("*.osz")) == before
+
+
+@pytest.mark.parametrize("save_first", [False, True])
+def test_remove_refuses_all_when_one_folder_has_no_recycle_bin(env, monkeypatch, save_first):
+    cfg, db, svc, songs, trash = env
+    ok, bad = _stable_set(songs, 808), _stable_set(songs, 809)
+    monkeypatch.setattr(client_remove, "recycle_bin_available", lambda path: path != bad)
+    before = set(cfg.library_path.glob("*.osz"))
+    res = svc.remove_from_client("stable", [ok.name, bad.name], save_first=save_first)
+    assert res["error"] == "no_recycle_bin" and res["removed"] == 0 and res["saved"] == 0
+    assert ok.exists() and bad.exists()
+    assert not any(trash.iterdir())
+    assert set(cfg.library_path.glob("*.osz")) == before
+
+
+def test_remove_stable_rechecks_the_recycle_bin_before_each_delete(env, monkeypatch):
+    cfg, db, svc, songs, trash = env
+    d = _stable_set(songs, 101)
+    monkeypatch.setattr(client_remove, "recycle_bin_available", lambda path: False)
+    res = {"source": "stable", "removed": 0, "kept": [], "failed": [], "saved": 0,
+           "cancelled": False}
+    svc._remove_stable(songs, {d.name: 101}, False, res, None, lambda: False)
+    assert res["failed"] == [d.name] and res["removed"] == 0
+    assert d.exists() and not any(trash.iterdir())
+    assert any(kind == "error" and a[0] == "remove:stable" for kind, a, _ in svc.log.lines)
 
 
 def test_refuses_names_outside_songs_and_a_running_client(env, monkeypatch):

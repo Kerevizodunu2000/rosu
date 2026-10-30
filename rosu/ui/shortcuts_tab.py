@@ -444,6 +444,7 @@ class ShortcutsTab(QWidget):
         # Always literal text: error strings can carry angle brackets (e.g. an
         # HTML-ish upstream error) and must never be auto-detected as rich text.
         self.status.setTextFormat(Qt.PlainText)
+        self.status.setWordWrap(True)   # a long message must not widen the window
         bottom.addWidget(self.status, 1)
         root.addLayout(bottom)
 

@@ -42,6 +42,9 @@ the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Pruning a Library set now puts a copy of the original in the Recycle Bin before it
   rewrites the set, so a failed Recycle Bin step no longer loses the unpruned original.
   On a drive without a Recycle Bin (removable or network), pruning is skipped.
+- On a drive with no Recycle Bin (removable, network), **Remove from osu!** no longer
+  deletes osu!(stable) folders for good, even with **Save to Library, then remove**: it
+  removes nothing and says why.
 - Pruning heavy assets keeps the background and audio a difficulty references from a
   subfolder (such as `sub/bg.jpg`) instead of removing them.
 - Exports and staged imports with pruning on no longer fill the Recycle Bin with a full
