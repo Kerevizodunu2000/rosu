@@ -10,6 +10,21 @@ the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+- Pruning a Library set now puts a copy of the original in the Recycle Bin before it
+  rewrites the set, so a failed Recycle Bin step no longer loses the unpruned original.
+  On a drive without a Recycle Bin (removable or network), pruning is skipped.
+- Pruning heavy assets keeps the background and audio a difficulty references from a
+  subfolder (such as `sub/bg.jpg`) instead of removing them.
+- Exports and staged imports with pruning on no longer fill the Recycle Bin with a full
+  copy of every set.
+- Save and Remove now checks every file of a set, not only the difficulties, so a set
+  whose Library copy was pruned or is incomplete is kept in osu!. The copy it saves
+  first is never auto-pruned.
+- Purging the Library marks as memory-only only the sets whose files actually went to the
+  Recycle Bin.
+- An interrupted mirror download no longer leaves a stray `.osz` in the Library.
+
 ## [1.10.0] - 2026-10-20
 
 **Find the same song across different sets — by listening to it.**
