@@ -49,4 +49,13 @@ credit you once a fix is released.
   (those belong to their respective rights holders; Rosu only organizes files the
   user already has).
 
+## Auto-update
+
+The Windows exe installs an update only when its manifest carries a valid
+Ed25519 signature from the release key and the download matches the signed size
+and SHA-256. The updater trusts the exe's own folder: anyone who can write there
+can already replace `rosu.exe`, so run Rosu from a folder only you can write to.
+Signed manifests don't expire. A bad release is withdrawn by deleting its release
+assets or by shipping a newer version.
+
 Thank you for helping keep Rosu and its users safe.
