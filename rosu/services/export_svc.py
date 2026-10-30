@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 from __future__ import annotations
 import datetime as _dt
+import os
 from pathlib import Path
 
 from .. import config, jobs, osu_import, parsing
@@ -88,11 +89,14 @@ class ExportMixin:
             def lib_files(only_drive: bool = False) -> list:
                 if not lib.exists():
                     return []
+                # All paths share the Library parent, so a normcased-name key sorts like Path.
                 if not only_drive:
-                    return in_star_range(sorted(lib.glob("*.osz")))
+                    return in_star_range(sorted(lib.glob("*.osz"),
+                                                key=lambda p: os.path.normcase(p.name)))
                 names = {r["filename"] for r in self.db.library_records()
                          if r.get("in_drive") and r.get("filename")}
-                return in_star_range(sorted(p for n in names if (p := lib / n).exists()))
+                return in_star_range(sorted((p for n in names if (p := lib / n).exists()),
+                                           key=lambda p: os.path.normcase(p.name)))
     
             if source == "library":
                 return lib_files()
