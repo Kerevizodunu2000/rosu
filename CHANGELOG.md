@@ -10,6 +10,9 @@ the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+- Exporting from a large Library is faster.
+
 ### Fixed
 - An archive is removed from Packs only after every beatmap in it was extracted. A
   cancelled Unpack, a beatmap that failed to extract or one with a name Rosu can't read
