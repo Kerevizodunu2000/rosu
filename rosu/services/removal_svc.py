@@ -133,7 +133,7 @@ class RemovalMixin:
 
         @staticmethod
         def _proven(want, candidates) -> bool:
-            """Does one of the ``candidates`` Library files hold every ``.osu`` of
+            """Does one of the ``candidates`` Library files hold every file of
             ``want`` (a :func:`client_remove.folder_fingerprint`) byte for byte?"""
             if not want:
                 return False
@@ -142,7 +142,7 @@ class RemovalMixin:
                 if p in seen or not p.is_file():
                     continue
                 seen.add(p)
-                if client_remove.covers(client_remove.osz_fingerprint(p), want):
+                if client_remove.covers(client_remove.osz_fingerprint(p, every_file=True), want):
                     return True
             return False
 
@@ -205,7 +205,7 @@ class RemovalMixin:
 
             With ``save_first`` each set is copied into the Library first and only
             the sets that are then PROVABLY in the Library (a Library ``.osz``
-            holding every one of its difficulties byte for byte) are removed;
+            holding every one of its files byte for byte) are removed;
             the rest are reported as ``kept``. Without it (stable only, and only
             where the Recycle Bin works) every chosen set is removed. osu!lazer
             is always saved first. Refuses while the client is running — or
@@ -299,7 +299,7 @@ class RemovalMixin:
                         continue
                     bid = client_import.beatmapset_id_for_folder(folder)
                     name = self._stable_save_name(folder, bid)
-                    want = client_remove.folder_fingerprint(folder)
+                    want = client_remove.folder_fingerprint(folder, every_file=True)
                     if self._proven(want, files.get(bid, []) + [lib / name]):
                         continue
                     if (lib / name).exists():
@@ -316,7 +316,7 @@ class RemovalMixin:
                 if not made or cancel():
                     return 0
                 res = self.import_osz_folder(stage, progress, source_label="local_osu_stable",
-                                             physical_copy=True)
+                                             physical_copy=True, auto_prune=False)
                 return int(res.get("new", 0))
             finally:
                 shutil.rmtree(stage, ignore_errors=True)
@@ -341,13 +341,13 @@ class RemovalMixin:
                         self.log.error("remove:lazer_export", err[:300])
                     return 0, {}
                 for name, bid in client_remove.parse_helper_exported(stdout).items():
-                    fp = client_remove.osz_fingerprint(out / name)
+                    fp = client_remove.osz_fingerprint(out / name, every_file=True)
                     wants.setdefault(bid, []).append((name, fp))
                 for name in self._drop_existing(out):
                     self.log.error("remove:save", f"{name}: a file with this name is "
                                    "already in the Library; not overwritten")
                 res = self.import_osz_folder(out, progress, source_label="local_osu_lazer",
-                                             physical_copy=True)
+                                             physical_copy=True, auto_prune=False)
                 return int(res.get("new", 0)), wants
             finally:
                 shutil.rmtree(stage, ignore_errors=True)
@@ -368,7 +368,7 @@ class RemovalMixin:
                     res["failed"].append(key)
                     self.log.error("remove:refused", f"not a Songs set folder: {key[:120]}")
                 elif save_first and not self._proven(
-                        client_remove.folder_fingerprint(folder),
+                        client_remove.folder_fingerprint(folder, every_file=True),
                         files.get(bid, []) + [lib / self._stable_save_name(folder, bid)]):
                     res["kept"].append(key)   # not provably in the Library: leave it
                 else:
