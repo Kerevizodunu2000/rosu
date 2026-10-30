@@ -14,8 +14,15 @@ the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Library refresh and other lookups by file name are faster on large libraries.
   Existing libraries get the speed-up the first time Rosu opens them.
 - Exporting from a large Library is faster.
+- Reading beatmap files and rating mania difficulties are faster with Rosu's optional
+  native module (release builds include it; Rosu runs without it). On a 10,000-set test
+  library, a Library refresh took 25.0 s instead of 34.8 s and reading the metadata of
+  1,000 sets 0.90 s instead of 1.60 s. Unpacking takes about as long as before: most of
+  its time goes to extracting files, star ratings and the database.
 
 ### Fixed
+- A beatmap with an infinite, NaN or huge number in it no longer stops a Library refresh
+  or reads as an empty set.
 - An archive is removed from Packs only after every beatmap in it was extracted. A
   cancelled Unpack, a beatmap that failed to extract or one with a name Rosu can't read
   now keeps the archive (the Logs tab says why), and the track count shows what was
