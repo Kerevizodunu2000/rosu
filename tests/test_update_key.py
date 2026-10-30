@@ -107,3 +107,25 @@ def test_keygen_prints_a_matching_pair(capsys):
     seed = bytes.fromhex(lines[0].rsplit(" ", 1)[1])
     pub = lines[1].rsplit(" ", 1)[1]
     assert len(seed) == 32 and ed25519.public_key(seed).hex() == pub
+
+
+def test_runs_isolated_without_site_packages(tmp_path):
+    """CI signs with ``python3 -I -S`` from the repo root; -I drops the script's
+    folder from sys.path, so the tool must find ``rosu`` by itself."""
+    import os
+    import subprocess
+    import sys
+    cmd = [sys.executable, "-I", "-S", str(TOOLS / "update_key.py")]
+    out = subprocess.run(cmd + ["keygen"], cwd=tmp_path, capture_output=True, text=True,
+                         timeout=60)
+    assert out.returncode == 0 and "public key" in out.stdout
+    exe = tmp_path / f"rosu-{TAG}-win64.exe"
+    exe.write_bytes(b"MZ")
+    env = {**os.environ, "ROSU_UPDATE_SIGNING_KEY": SEED.hex()}
+    out = subprocess.run(cmd + ["manifest", str(exe), TAG, str(tmp_path)], cwd=tmp_path,
+                         capture_output=True, text=True, env=env, timeout=60)
+    # The test seed never matches the committed UPDATE_PUBLIC_KEY (empty or real),
+    # so it refuses, after importing rosu.
+    assert out.returncode != 0 and "UPDATE_PUBLIC_KEY" in out.stderr
+    assert SEED.hex() not in out.stdout + out.stderr
+    assert not (tmp_path / "rosu-update.json").exists()
