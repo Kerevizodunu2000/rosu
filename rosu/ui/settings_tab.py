@@ -97,6 +97,10 @@ class SettingsTab(SettingsActionsMixin, SettingsDriveMixin, QWidget):
         self.cb_clear_before = QCheckBox(); self.cb_clear_before.setChecked(cfg.clear_output_before_extract)
         self.cb_auto_backup = QCheckBox(); self.cb_auto_backup.setChecked(cfg.auto_backup_after_extract)
         self.cb_check_updates = QCheckBox(); self.cb_check_updates.setChecked(cfg.check_updates)
+        self.cb_auto_update = QCheckBox(); self.cb_auto_update.setChecked(cfg.auto_update)
+        # auto-update needs the startup check: greyed out while that is off
+        self.cb_auto_update.setEnabled(cfg.check_updates)
+        self.cb_check_updates.toggled.connect(self.cb_auto_update.setEnabled)
         self.cb_crash_reports = QCheckBox(); self.cb_crash_reports.setChecked(getattr(cfg, "crash_reports", False))
         self.cb_auto_refresh = QCheckBox(); self.cb_auto_refresh.setChecked(cfg.auto_refresh_on_tab)
         self.cb_auto_prune = QCheckBox(); self.cb_auto_prune.setChecked(getattr(cfg, "auto_prune", False))
@@ -107,7 +111,8 @@ class SettingsTab(SettingsActionsMixin, SettingsDriveMixin, QWidget):
         self.cb_autosave = QCheckBox(); self.cb_autosave.setChecked(cfg.settings_autosave)
         for cb in (self.cb_physical,
                    self.cb_auto_backup, self.cb_clear_before, self.cb_auto_prune,
-                   self.cb_export_prune, self.cb_check_updates, self.cb_crash_reports,
+                   self.cb_export_prune, self.cb_check_updates, self.cb_auto_update,
+                   self.cb_crash_reports,
                    self.cb_auto_refresh, self.cb_autosave):
             root.addWidget(cb)
             
@@ -132,7 +137,7 @@ class SettingsTab(SettingsActionsMixin, SettingsDriveMixin, QWidget):
         # effect you need to SEE to choose. Physical-copy keeps its own guarded
         # confirm flow because turning it off deletes files.)
         for cb in (self.cb_auto_backup, self.cb_clear_before, self.cb_check_updates,
-                   self.cb_crash_reports, self.cb_watch,
+                   self.cb_auto_update, self.cb_crash_reports, self.cb_watch,
                    self.cb_auto_refresh, self.cb_auto_prune, self.cb_export_prune):
             cb.toggled.connect(self._on_setting_changed)
         self.cb_physical.toggled.connect(self._on_physical_toggled)
@@ -368,6 +373,7 @@ class SettingsTab(SettingsActionsMixin, SettingsDriveMixin, QWidget):
                 "auto_backup": self.cb_auto_backup.isChecked(),
                 "clear_before": self.cb_clear_before.isChecked(),
                 "check_updates": self.cb_check_updates.isChecked(),
+                "auto_update": self.cb_auto_update.isChecked(),
                 "crash_reports": self.cb_crash_reports.isChecked(),
                 "watch_enabled": self.cb_watch.isChecked(),
                 "watch_folder": self.watch.text(),
@@ -392,6 +398,7 @@ class SettingsTab(SettingsActionsMixin, SettingsDriveMixin, QWidget):
         boxes = ((self.cb_auto_backup, "auto_backup"),
                  (self.cb_clear_before, "clear_before"),
                  (self.cb_check_updates, "check_updates"),
+                 (self.cb_auto_update, "auto_update"),
                  (self.cb_crash_reports, "crash_reports"),
                  (self.cb_watch, "watch_enabled"),
                  (self.cb_auto_refresh, "auto_refresh"),
@@ -402,6 +409,7 @@ class SettingsTab(SettingsActionsMixin, SettingsDriveMixin, QWidget):
             cb.blockSignals(True)
             cb.setChecked(bool(snap[key]))
             cb.blockSignals(False)
+        self.cb_auto_update.setEnabled(self.cb_check_updates.isChecked())
         self.zip.blockSignals(True)
         idx = self.zip.findData(snap["zip"])
         if idx >= 0:
@@ -474,6 +482,8 @@ class SettingsTab(SettingsActionsMixin, SettingsDriveMixin, QWidget):
         self.cb_clear_before.setText(t("set_clear_output_before"))
         self.cb_check_updates.setText(t("set_check_updates"))
         self.cb_check_updates.setToolTip(t("tip_check_updates"))
+        self.cb_auto_update.setText(t("set_auto_update"))
+        self.cb_auto_update.setToolTip(t("tip_auto_update"))
         self.cb_crash_reports.setText(t("set_crash_reports"))
         self.cb_crash_reports.setToolTip(t("tip_crash_reports"))
         self.cb_auto_refresh.setText(t("set_auto_refresh"))
@@ -636,7 +646,8 @@ class SettingsTab(SettingsActionsMixin, SettingsDriveMixin, QWidget):
         w.start()
 
     # -- toggle commit model (v1.4.1) ----------------------------------------
-    _TOGGLE_KEYS = ("auto_backup", "clear_before", "check_updates", "crash_reports",
+    _TOGGLE_KEYS = ("auto_backup", "clear_before", "check_updates", "auto_update",
+                    "crash_reports",
                     "watch_enabled",
                     "auto_refresh", "enrich", "lazer_enabled", "stable_enabled",
                     "zip")
@@ -684,6 +695,7 @@ class SettingsTab(SettingsActionsMixin, SettingsDriveMixin, QWidget):
         cfg.auto_prune = self.cb_auto_prune.isChecked()
         cfg.export_prune = self.cb_export_prune.isChecked()
         cfg.check_updates = self.cb_check_updates.isChecked()
+        cfg.auto_update = self.cb_auto_update.isChecked()
         cfg.crash_reports = self.cb_crash_reports.isChecked()
         cfg.watch_enabled = self.cb_watch.isChecked()
         cfg.auto_refresh_on_tab = self.cb_auto_refresh.isChecked()

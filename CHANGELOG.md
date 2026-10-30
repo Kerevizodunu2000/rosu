@@ -10,6 +10,12 @@ the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- Automatic, signed updates for the Windows exe. When a newer release is out, Rosu
+  downloads it in the background, checks its signature and SHA-256, and installs it when
+  you click **Restart now** (or on the next start). A new version that fails to start is
+  rolled back and skipped. Turn it off with **Install updates automatically** in Settings.
+
 ### Changed
 - Library refresh and other lookups by file name are faster on large libraries.
   Existing libraries get the speed-up the first time Rosu opens them.

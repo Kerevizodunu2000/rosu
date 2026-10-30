@@ -6,10 +6,11 @@ import sys
 import uuid
 from pathlib import Path
 
+from PySide6.QtCore import QTimer
 from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtWidgets import QApplication, QMessageBox, QSplashScreen
 
-from . import __version__, config, logsvc, pathheal, theming
+from . import __version__, config, logsvc, pathheal, theming, updater
 from .db import Database
 from .i18n import I18N
 from .services import Services
@@ -94,6 +95,15 @@ def _heal_paths(cfg: config.Config, headless: bool) -> pathheal.Diagnosis | None
     return diag
 
 
+def _apply_update_on_exit(log) -> None:
+    """After Restart now: swap in the staged exe, or restart this one so the app
+    doesn't just vanish."""
+    reasons: list[str] = []
+    if updater.apply_staged(log=reasons.append) != updater.EXIT:
+        log.log("UPDATE_NOT_APPLIED", "WARN", reason="; ".join(reasons) or "unknown")
+        updater.relaunch()
+
+
 def run() -> int:
     argv = sys.argv[1:]
     if "--version" in argv:
@@ -105,6 +115,9 @@ def run() -> int:
     app.setWindowIcon(QIcon(asset_path("icon.png")))
 
     cfg = config.load_config()
+    # Roll back a new version that failed to start, or swap in a staged update.
+    if "--selftest" not in argv and updater.on_startup(cfg) == updater.EXIT:
+        return 0
     healed = _heal_paths(cfg, headless="--selftest" in argv)
     try:
         ctx = AppContext(cfg)
@@ -145,10 +158,13 @@ def run() -> int:
     win = MainWindow(ctx, app)
     win.setWindowIcon(QIcon(asset_path("icon.png")))
     win.showMaximized()   # start maximized so the wide tables fit on screen
+    QTimer.singleShot(0, updater.mark_healthy)   # this version starts fine: keep it
     if splash:
         splash.finish(win)
     code = app.exec()
 
     ctx.log.info("APP_STOP", reason="window closed")
     ctx.db.close()
+    if win.restart_for_update:
+        _apply_update_on_exit(ctx.log)
     return code

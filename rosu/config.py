@@ -77,6 +77,7 @@ class Config:
     auto_backup_after_extract: bool = False   # auto-run Copy to Library after extract
     zip_disposal: str = "recycle"
     check_updates: bool = True   # check GitHub for a newer release on startup
+    auto_update: bool = True     # download, verify and install it (frozen exe only)
     # v1.8: opt-in crash reports (exception type + scrubbed message + module:function
     # stack, see rosu/crash_report.py). OFF unless the user turns it on.
     crash_reports: bool = False
