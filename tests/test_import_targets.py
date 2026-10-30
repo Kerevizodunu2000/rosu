@@ -140,7 +140,7 @@ def test_stage_for_stable_falls_back_without_songs(tmp_path, monkeypatch):
     cfg, db, svc = _make_services(tmp_path)
     monkeypatch.setattr(client_import, "stable_songs_dir", lambda: None)
     files = [tmp_path / "a.osz", tmp_path / "b.osz"]
-    assert svc._stage_for_stable(files) == files
+    assert svc._stage_for_stable(files) == []
     db.close()
 
 

@@ -412,6 +412,16 @@ STRINGS: dict[str, dict[str, str]] = {
               "please DON'T close osu! until it finishes. You can close this window.",
         "tr": "osu!'ya gönderildi. osu! müzikleri arka planda içe aktarıyor — işlem "
               "bitene kadar lütfen osu!'yu KAPATMAYIN. Bu pencereyi kapatabilirsiniz."},
+    "import_stage_failed": {
+        "en": "{n} beatmaps could not be prepared for import and were not sent to "
+              "osu!. They are still in Output.",
+        "tr": "{n} müzik içe aktarmaya hazırlanamadı ve osu!'ya gönderilmedi. "
+              "Hâlâ Output'ta duruyorlar."},
+    "import_stage_disk_full": {
+        "en": "Disk full: {n} beatmaps could not be prepared for import and were not "
+              "sent to osu!. They are still in Output.",
+        "tr": "Disk dolu: {n} müzik içe aktarmaya hazırlanamadı ve osu!'ya "
+              "gönderilmedi. Hâlâ Output'ta duruyorlar."},
 
     # Physical-copy delete confirmation (item 17)
     "physical_off_title": {"en": "Delete physical copies?",
