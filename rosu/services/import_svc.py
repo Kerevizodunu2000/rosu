@@ -308,7 +308,8 @@ class ImportMixin:
                     
                     if getattr(self.cfg, "export_prune", False):
                         from ..prune import prune_osz
-                        prune_osz(dst, mode=getattr(self.cfg, "prune_mode", "video_only"))
+                        prune_osz(dst, mode=getattr(self.cfg, "prune_mode", "video_only"),
+                                  keep_original=False)
                 except OSError as exc:
                     # Do NOT substitute the Output original: osu! would consume it and
                     # break the "Output is preserved" guarantee, silently. Log and skip
