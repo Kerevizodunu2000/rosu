@@ -9,6 +9,7 @@ left untouched.
 from __future__ import annotations
 
 import shutil
+import sqlite3
 from pathlib import Path
 from typing import Callable
 
@@ -161,40 +162,50 @@ def refresh_library(library_dir: Path, db, when: str,
     * files that had a physical copy and are now gone -> marked "disappeared",
     * files that reappeared -> marked "present" again.
 
-    Returns ``{"added": int, "disappeared": int, "present": int}``.
+    A set that fails is skipped (the rest still refresh); a database error stops
+    the refresh.
+
+    Returns ``{"added", "disappeared", "enriched", "present": int, "skipped":
+    [{"file", "error"}]}``.
     """
     added = 0
     enriched = 0
+    skipped: list[dict] = []
     present_keys: set = set()
 
     for path, t in _scan_osz(library_dir):
         key = t.beatmapset_id if t.beatmapset_id is not None else t.filename
-        present_keys.add(key)
-        row = db.find_track_row(t.beatmapset_id, t.filename)
-        if row is None:
-            # manually-added file: read its metadata + per-difficulty data
-            meta, diffs, raw = read_osz_full(path)
-            track_id, _ = db.upsert_track(t, when, meta)
-            db.upsert_difficulties(
-                track_id, diffs, ratings.stars_for_diffs(diffs, raw), when)
-            db.apply_msd(track_id, msd.msd_for_diffs(diffs, raw), when)
-            db.set_library_state(track_id, True, "present", when)
-            added += 1
-        else:
-            # backfill metadata (imported before it existed) and/or difficulties
-            # (imported before v1.5). A single full read covers both.
-            needs_meta = row["bpm"] is None and row["mode"] is None
-            needs_diffs = not row["diffs_scanned_at"]
-            if needs_meta or needs_diffs:
+        present_keys.add(key)   # before the guarded work: a skipped set is still on disk
+        try:
+            row = db.find_track_row(t.beatmapset_id, t.filename)
+            if row is None:
+                # manually-added file: read its metadata + per-difficulty data
                 meta, diffs, raw = read_osz_full(path)
-                if needs_meta:
-                    db.upsert_track(t, when, meta)
-                    enriched += 1
+                track_id, _ = db.upsert_track(t, when, meta)
                 db.upsert_difficulties(
-                    row["id"], diffs, ratings.stars_for_diffs(diffs, raw), when)
-                db.apply_msd(row["id"], msd.msd_for_diffs(diffs, raw), when)
-            if row["library_status"] != "present" or row["in_library"] != 1:
-                db.set_library_state(row["id"], True, "present", when)
+                    track_id, diffs, ratings.stars_for_diffs(diffs, raw), when)
+                db.apply_msd(track_id, msd.msd_for_diffs(diffs, raw), when)
+                db.set_library_state(track_id, True, "present", when)
+                added += 1
+            else:
+                # backfill metadata (imported before it existed) and/or difficulties
+                # (imported before v1.5). A single full read covers both.
+                needs_meta = row["bpm"] is None and row["mode"] is None
+                needs_diffs = not row["diffs_scanned_at"]
+                if needs_meta or needs_diffs:
+                    meta, diffs, raw = read_osz_full(path)
+                    if needs_meta:
+                        db.upsert_track(t, when, meta)
+                        enriched += 1
+                    db.upsert_difficulties(
+                        row["id"], diffs, ratings.stars_for_diffs(diffs, raw), when)
+                    db.apply_msd(row["id"], msd.msd_for_diffs(diffs, raw), when)
+                if row["library_status"] != "present" or row["in_library"] != 1:
+                    db.set_library_state(row["id"], True, "present", when)
+        except sqlite3.DatabaseError:
+            raise   # a database failure stops the refresh; only a bad set is skipped
+        except Exception as exc:
+            skipped.append({"file": t.filename, "error": type(exc).__name__})
         if progress:
             progress(t.filename)
 
@@ -210,7 +221,7 @@ def refresh_library(library_dir: Path, db, when: str,
             disappeared += 1
 
     return {"added": added, "disappeared": disappeared, "enriched": enriched,
-            "present": len(present_keys)}
+            "present": len(present_keys), "skipped": skipped}
 
 
 def plan_library_dedup(entries: list[dict]) -> list[str]:
