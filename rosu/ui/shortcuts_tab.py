@@ -1141,14 +1141,17 @@ class ShortcutsTab(QWidget):
         if res.get("error") == "no_recycle_bin":
             self._set_status("lib_err_no_recycle_bin")
             return
-        if res.get("removed", 0) == 0:
+        removed, kept = res.get("removed", 0), res.get("too_large", 0)
+        if removed and kept:
+            self._set_status("sc_dedup_done_kept", removed=removed,
+                             freed=_fmt_size(res["freed_bytes"]), n=kept)
+        elif kept:
+            self._set_status("lib_kept_too_large", n=kept)
+        elif removed == 0:
             self._set_status("sc_dedup_none")
         else:
-            self._set_status("sc_dedup_done", removed=res["removed"],
+            self._set_status("sc_dedup_done", removed=removed,
                              freed=_fmt_size(res["freed_bytes"]))
-        if res.get("too_large"):
-            self._set_status_lit(self.status.text() + "  "
-                                 + self.ctx.t("lib_kept_too_large", n=res["too_large"]))
 
     def _present_restore(self, res) -> None:
         repaired = res.get("repaired", 0)

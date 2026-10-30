@@ -63,6 +63,24 @@ def test_dedup_refusal_and_too_large_on_the_shortcuts_status(ui):
     assert ctx.t("lib_kept_too_large", n=2) in win.shortcuts.status.text()
 
 
+def test_dedup_with_every_duplicate_too_large_says_only_that(ui):
+    ctx, win, _, _ = ui
+    win.shortcuts._present_dedup({"removed": 0, "freed_bytes": 0, "groups": 1, "too_large": 2})
+    assert win.shortcuts.status.text() == ctx.t("lib_kept_too_large", n=2)
+
+
+def test_combined_dedup_status_follows_a_language_switch(ui):
+    ctx, win, _, _ = ui
+    win.shortcuts._present_dedup({"removed": 1, "freed_bytes": 10, "groups": 1, "too_large": 2})
+    english = win.shortcuts.status.text()
+    ctx.i18n.set_language("tr")
+    win.retranslate()
+    turkish = win.shortcuts.status.text()
+    from rosu.ui.shortcuts_tab import _fmt_size
+    assert turkish != english
+    assert turkish == ctx.t("sc_dedup_done_kept", removed=1, freed=_fmt_size(10), n=2)
+
+
 def test_turkish_refusal_wraps_on_the_settings_label(ui):
     ctx, win, _, _ = ui
     ctx.i18n.set_language("tr")

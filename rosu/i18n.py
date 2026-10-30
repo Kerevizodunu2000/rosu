@@ -1498,6 +1498,11 @@ STRINGS: dict[str, dict[str, str]] = {
               "Dönüşüm'e gönderir, birini bırakır."},
     "sc_dedup_done": {"en": "Removed {removed} duplicate file(s), freed {freed}.",
                       "tr": "{removed} kopya dosya kaldırıldı, {freed} boşaldı."},
+    "sc_dedup_done_kept": {
+        "en": "Removed {removed} duplicate file(s), freed {freed}. {n} file(s) were kept "
+              "because they are larger than the Recycle Bin can hold.",
+        "tr": "{removed} kopya dosya kaldırıldı, {freed} boşaldı. {n} dosya, Geri Dönüşüm "
+              "Kutusu'nun alabileceğinden büyük olduğu için tutuldu."},
     "sc_dedup_none": {"en": "No duplicate files found.",
                       "tr": "Kopya dosya bulunamadı."},
     "sc_cancelled": {"en": "Cancelled.", "tr": "İptal edildi."},
