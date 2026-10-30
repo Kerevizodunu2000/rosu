@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """The Dashboard and Shortcuts tab show the free-space refusals and disk-full
 stops of Export, Import to osu!, Transfer and Unpack, in both languages (issue #46)."""
+import html
 import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -80,6 +81,32 @@ def test_failed_unpack_disk_full(win):
     assert win.reloads == [1] and win.shown == [1]
 
 
+@pytest.mark.parametrize("extract,key", [
+    ({"packs": 0, "no_space": NS}, None),
+    ({"disk_full": True, "full_drive": "E:\\"}, "extract_disk_full")])
+def test_failed_unpack_row_tooltip_is_translated(win, extract, key):
+    from rosu.ui.shortcuts_tab import JobRowWidget
+    job = _failed_unpack(extract)
+    row = JobRowWidget(job, win.shortcuts.queue, win.ctx)
+    row.update_view()
+    want = _no_space(win) if key is None else win.t(key, drive="E:\\")
+    assert row.toolTip() == want and row.toolTip() != job.error
+    other = "en" if win.lang == "tr" else "tr"
+    win.ctx.i18n.set_language(other)
+    row.update_view()   # a language change re-renders the row in place
+    assert row.toolTip() == (_no_space(win) if key is None
+                             else win.t(key, drive="E:\\"))
+    assert row.toolTip() != want
+
+
+def test_other_failed_rows_keep_the_error_tooltip(win):
+    from rosu.ui.shortcuts_tab import JobRowWidget
+    job = _failed_unpack({"packs": 1})
+    row = JobRowWidget(job, win.shortcuts.queue, win.ctx)
+    row.update_view()
+    assert row.toolTip() == job.error
+
+
 def test_other_failures_keep_their_handling(win):
     job = _failed_unpack({"packs": 1})
     win.shortcuts._on_job_failed(job)
@@ -100,10 +127,11 @@ def test_export_disk_full_with_archives(win, tmp_path):
                                    "cancelled": False, "disk_full": True,
                                    "full_drive": "E:\\"})
     want = win.t("export_disk_full", drive="E:\\")
-    assert want in win.shortcuts.status.text()
-    assert win.calls["warning"] == [want]
+    assert win.shortcuts.status.text().startswith(want)
+    assert win.calls["warning"] == []   # one dialog: the result dialog
     assert len(win.dialogs) == 1 and "exp.part01.zip" in win.dialogs[0]
-    assert "E:\\" in win.dialogs[0]
+    assert win.dialogs[0].startswith(html.escape(want))
+    assert win.t("sc_export_done", count=3, archives=1) not in win.dialogs[0]
 
 
 def test_export_disk_full_without_archives(win):

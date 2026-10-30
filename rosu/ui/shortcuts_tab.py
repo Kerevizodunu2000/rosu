@@ -151,6 +151,17 @@ def _describe_job(job, t) -> str:
     return line
 
 
+def _unpack_space_text(job, t) -> str:
+    """The translated reason an Unpack job stopped for space, or "" (``job.error``
+    stays the English record for the logs)."""
+    ex = (job.ctx.get("extract") or {}) if job.kind == "unpack" else {}
+    if ex.get("no_space"):
+        return no_space_text(t, ex["no_space"])
+    if ex.get("disk_full"):
+        return t("extract_disk_full", drive=ex["full_drive"])
+    return ""
+
+
 class JobRowWidget(QFrame):
     """One row in the İş Kuyruğu list: title + state chip + cancel, and a line
     per sub-step with a glyph and (for the active step) a thin progress bar.
@@ -217,7 +228,8 @@ class JobRowWidget(QFrame):
             + t(self.job.title_key, **self.job.title_kwargs))
         self.lbl_state.setText(t(_STATE_KEY.get(self.job.state, "job_state_pending")))
         self.btn_cancel.setVisible(self.job.state in (State.PENDING, State.RUNNING))
-        self.setToolTip(self.job.error or self.job.tooltip or "")
+        self.setToolTip(_unpack_space_text(self.job, t) or self.job.error
+                        or self.job.tooltip or "")
         detail = _describe_job(self.job, t)
         self.lbl_detail.setText(detail)
         self.lbl_detail.setVisible(bool(detail))
@@ -1060,9 +1072,9 @@ class ShortcutsTab(QWidget):
             self._set_status("sc_export_empty")
             return
         location = str(Path(archives[0]).parent) if archives else ""
-        msg = t("sc_export_done", count=res["count"], archives=len(archives))
-        self._set_status_lit(msg + "  " + t("sc_export_saved_to", path=location)
-                             + ("  " + full if full else ""))
+        # A disk-full stop leads with that, not "Exported {all sets}"
+        msg = full or t("sc_export_done", count=res["count"], archives=len(archives))
+        self._set_status_lit(msg + "  " + t("sc_export_saved_to", path=location))
         drive = res.get("drive") or {}
         dfiles = drive.get("files", [])
         links = [f["link"] for f in dfiles if f.get("link")]
@@ -1070,8 +1082,6 @@ class ShortcutsTab(QWidget):
         # Completion dialog: exactly WHERE it went + the archive filenames (+ links).
         body = [html.escape(msg), "", html.escape(t("sc_export_saved_to", path=location))]
         body += [f"• {html.escape(Path(a).name)}" for a in archives]
-        if full:
-            body += ["", html.escape(full)]
         if drive.get("error"):
             body += ["", html.escape(t("sc_export_upload_failed"))]
         if links:
@@ -1079,8 +1089,6 @@ class ShortcutsTab(QWidget):
             body += [f'<a href="{html.escape(u, quote=True)}">{html.escape(u)}</a>'
                      for u in links]
         self._export_result_dialog("<br>".join(body), links)
-        if full:
-            QMessageBox.warning(self, t("app_title"), full)
         if shared_no_link:
             # The file(s) were made public but the link couldn't be fetched — the
             # user must know so they can review/revoke the share in Drive.
@@ -1149,12 +1157,11 @@ class ShortcutsTab(QWidget):
         err = job.error or ""
         if job.kind == "watch_import":
             self.mw.folder_watch.job_failed(job.ctx.get("paths") or [])
-        ex = (job.ctx.get("extract") or {}) if job.kind == "unpack" else {}
-        if ex.get("no_space"):   # Unpack refused up front: nothing was sent
-            self._warn_status(no_space_text(t, ex["no_space"]))
-        elif ex.get("disk_full"):   # stopped part-way: some beatmaps were extracted
-            self._warn_status(t("extract_disk_full", drive=ex["full_drive"]))
-            self.mw.search.reload()
+        space = _unpack_space_text(job, t)
+        if space:   # Unpack refused, or stopped by a full disk: nothing was sent
+            self._warn_status(space)
+            if job.ctx["extract"].get("disk_full"):
+                self.mw.search.reload()   # some beatmaps were extracted
         elif job.kind == "export" and job.ctx.get("written"):
             archives = [str(a) for a in job.ctx["written"]]
             location = str(Path(archives[0]).parent)
