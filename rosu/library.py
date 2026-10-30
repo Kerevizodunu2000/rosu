@@ -157,7 +157,10 @@ def _copy_via_part(src_path: Path, target: Path) -> None:
         shutil.copy2(src_path, part)
         part.replace(target)
     except BaseException:
-        part.unlink(missing_ok=True)
+        try:
+            part.unlink(missing_ok=True)
+        except OSError:
+            pass   # the copy error below is the one that matters
         raise
 
 
