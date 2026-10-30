@@ -15,6 +15,9 @@ the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   downloads it in the background, checks its signature and SHA-256, and installs it when
   you click **Restart now** (or on the next start). A new version that fails to start is
   rolled back and skipped. Turn it off with **Install updates automatically** in Settings.
+  After an automatic update, Rosu says once which version was installed, with the release
+  notes when available. **Restart now** during a running task now waits for the task (and
+  any open dialog) to finish and then restarts; **Cancel restart** stops it.
 - Settings shows how much of your Google Drive storage is used, how much Rosu's folder
   takes and how much is in Drive's trash. A Drive backup now checks for free space first
   and doesn't start when the upload won't fit. If Drive fills up during a backup, it
@@ -36,6 +39,10 @@ the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Fixed
 - A refused or disk-full **Unpack** from the Shortcuts tab no longer goes on to send
   Output to osu!: the job shows as failed and says which drive is short.
+- Turning off the Library's physical copy and removing duplicates no longer delete files
+  for good when the Library is on a drive without a Recycle Bin: nothing is deleted and
+  Rosu says why. A Recycle Bin turned off for a drive now counts as no Recycle Bin, and a
+  file or set folder too large for the Recycle Bin is kept instead of deleted for good.
 - A full disk during **Copy to Library** no longer leaves a truncated beatmap in the
   Library or overwrites a good copy already there.
 - One set that fails no longer stops Refresh Library: it is skipped, counted in the

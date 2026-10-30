@@ -301,6 +301,7 @@ class SettingsTab(SettingsActionsMixin, SettingsDriveMixin, QWidget):
         root.addStretch(1)
         bottom = QHBoxLayout()
         self.saved_label = QLabel(objectName="status")
+        self.saved_label.setWordWrap(True)   # a long status must not widen the window
         self.btn_save = QPushButton()
         self.btn_save.clicked.connect(self._save)
         bottom.addWidget(self.saved_label, 1)
@@ -651,11 +652,27 @@ class SettingsTab(SettingsActionsMixin, SettingsDriveMixin, QWidget):
         self.saved_label.setText(t("working"))
         w = Worker(self.ctx.services.purge_library_files)
         self._threads.append(w)
-        w.succeeded.connect(lambda res: self._set_saved_text(
-            self.ctx.t("physical_off_done", n=res["deleted"])))
+        w.succeeded.connect(self._on_purge_done)
         w.failed.connect(lambda m: QMessageBox.critical(self, t("app_title"), m))
         w.finished.connect(lambda: self._threads.remove(w) if w in self._threads else None)
         w.start()
+
+    def _on_purge_done(self, res: dict) -> None:
+        t = self.ctx.t
+        if res.get("error") == "no_recycle_bin":
+            # nothing was deleted, so the physical copy is still kept: say so in the box
+            self.ctx.cfg.library_physical_copy = True
+            self.cb_physical.blockSignals(True)
+            self.cb_physical.setChecked(True)
+            self.cb_physical.blockSignals(False)
+            self.ctx.save_config()
+            QMessageBox.warning(self, t("app_title"), t("lib_err_no_recycle_bin"))
+            self._set_saved_text(t("lib_err_no_recycle_bin"))
+            return
+        text = t("physical_off_done", n=res["deleted"])
+        if res.get("too_large"):
+            text += "  " + t("lib_kept_too_large", n=res["too_large"])
+        self._set_saved_text(text)
 
     # -- toggle commit model (v1.4.1) ----------------------------------------
     _TOGGLE_KEYS = ("auto_backup", "clear_before", "check_updates", "auto_update",

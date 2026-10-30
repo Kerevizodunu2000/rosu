@@ -288,11 +288,14 @@ STRINGS: dict[str, dict[str, str]] = {
                            "tr": "Rosu {tag} indiriliyor… %{percent}"},
     "update_ready": {"en": "Rosu {tag} is ready.", "tr": "Rosu {tag} hazır."},
     "update_restart": {"en": "Restart now", "tr": "Şimdi yeniden başlat"},
-    "update_restart_later": {
-        "en": "A task is still running. The update will be installed the next time "
-              "Rosu starts.",
-        "tr": "Bir işlem hâlâ sürüyor. Güncelleme, Rosu bir sonraki açılışında "
-              "yüklenecek."},
+    "update_installed": {"en": "Rosu v{version} was installed.",
+                         "tr": "Rosu v{version} yüklendi."},
+    "update_dismiss": {"en": "Dismiss", "tr": "Kapat"},
+    "update_restart_armed": {
+        "en": "Rosu {tag} is ready. Rosu will restart when the current task finishes.",
+        "tr": "Rosu {tag} hazır. Geçerli işlem bitince Rosu yeniden başlayacak."},
+    "update_cancel_restart": {"en": "Cancel restart",
+                              "tr": "Yeniden başlatmayı iptal et"},
     "set_zip_disposal": {"en": "Processed .zip action", "tr": "İşlenen .zip işlemi"},
     "zip_recycle": {"en": "Move to Recycle Bin", "tr": "Geri Dönüşüm Kutusu'na taşı"},
     "zip_move": {"en": "Move to Processed/", "tr": "Processed/ klasörüne taşı"},
@@ -463,6 +466,16 @@ STRINGS: dict[str, dict[str, str]] = {
     "physical_off_confirm": {"en": "Delete files", "tr": "Dosyaları sil"},
     "physical_off_done": {"en": "Moved {n} .osz from Library to Recycle Bin (info kept).",
                           "tr": "{n} .osz Library'den Geri Dönüşüm Kutusu'na taşındı (bilgiler korundu)."},
+    "lib_err_no_recycle_bin": {
+        "en": "The Library is on a drive without a Recycle Bin (a removable or network "
+              "drive, or the Recycle Bin is turned off there), so deleted files could not "
+              "be brought back. Nothing was deleted.",
+        "tr": "Library, Geri Dönüşüm Kutusu olmayan bir sürücüde (çıkarılabilir ya da ağ "
+              "sürücüsü, veya orada Geri Dönüşüm Kutusu kapalı); silinen dosyalar geri "
+              "getirilemezdi. Hiçbir şey silinmedi."},
+    "lib_kept_too_large": {
+        "en": "{n} file(s) were kept because they are larger than the Recycle Bin can hold.",
+        "tr": "{n} dosya, Geri Dönüşüm Kutusu'nun alabileceğinden büyük olduğu için tutuldu."},
 
     # Auto-import from installed osu! clients (item 15)
     "set_import": {"en": "Import installed songs", "tr": "Yüklü şarkıları içe aktar"},
@@ -1509,6 +1522,11 @@ STRINGS: dict[str, dict[str, str]] = {
               "Dönüşüm'e gönderir, birini bırakır."},
     "sc_dedup_done": {"en": "Removed {removed} duplicate file(s), freed {freed}.",
                       "tr": "{removed} kopya dosya kaldırıldı, {freed} boşaldı."},
+    "sc_dedup_done_kept": {
+        "en": "Removed {removed} duplicate file(s), freed {freed}. {n} file(s) were kept "
+              "because they are larger than the Recycle Bin can hold.",
+        "tr": "{removed} kopya dosya kaldırıldı, {freed} boşaldı. {n} dosya, Geri Dönüşüm "
+              "Kutusu'nun alabileceğinden büyük olduğu için tutuldu."},
     "sc_dedup_none": {"en": "No duplicate files found.",
                       "tr": "Kopya dosya bulunamadı."},
     "sc_cancelled": {"en": "Cancelled.", "tr": "İptal edildi."},
