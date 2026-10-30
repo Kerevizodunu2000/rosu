@@ -99,6 +99,7 @@ class DashboardTab(QWidget):
 
         bottom = QHBoxLayout()
         self.status = QLabel(objectName="status")
+        self.status.setWordWrap(True)   # a long summary wraps instead of widening the window
         self.btn_cancel = QPushButton(objectName="secondary")
         self.btn_cancel.setVisible(False)
         self.btn_cancel.clicked.connect(self._on_cancel)
@@ -468,8 +469,11 @@ class DashboardTab(QWidget):
         return box.clickedButton() == yes, checkbox.isChecked()
 
     def _no_space_text(self, ns: dict) -> str:
-        return self.ctx.t("disk_no_space", drive=ns["drive"], need=_fmt_size(ns["need"]),
-                          free=_fmt_size(ns["free"]))
+        sizes = {"drive": ns["drive"], "need": _fmt_size(ns["need"]),
+                 "free": _fmt_size(ns["free"])}
+        if ns.get("staging"):   # the 7z temp folder, not the folder the user chose
+            return self.ctx.t("disk_no_space_temp", **sizes)
+        return self.ctx.t("disk_no_space", **sizes)
 
     def _after_extract(self, result) -> None:
         self._idle()
@@ -478,7 +482,8 @@ class DashboardTab(QWidget):
             self.status.setText(msg)
             QMessageBox.warning(self, self.ctx.t("app_title"), msg)
             return
-        warn = self.ctx.t("extract_disk_full") if result.get("disk_full") else None
+        warn = (self.ctx.t("extract_disk_full", drive=result["full_drive"])
+                if result.get("disk_full") else None)
         msg = self.ctx.t("extract_done", packs=result["packs"], tracks=result["tracks"])
         if result.get("loose"):
             msg += "  " + self.ctx.t("loose_done", n=result["loose"])
@@ -487,7 +492,7 @@ class DashboardTab(QWidget):
             if b.get("no_space"):
                 warn = self._no_space_text(b["no_space"])
             elif b.get("disk_full"):
-                warn = self.ctx.t("library_disk_full")
+                warn = self.ctx.t("library_disk_full", drive=b["full_drive"])
             msg += "  " + (warn or self.ctx.t("library_done", new=b["new"],
                                                dup=b["duplicates"]))
         rejected = result.get("rejected") or []
@@ -531,7 +536,8 @@ class DashboardTab(QWidget):
     def _after_copy(self, res) -> None:
         self._idle()
         warn = (self._no_space_text(res["no_space"]) if res.get("no_space")
-                else self.ctx.t("library_disk_full") if res.get("disk_full") else None)
+                else self.ctx.t("library_disk_full", drive=res["full_drive"])
+                if res.get("disk_full") else None)
         if warn:
             self.status.setText(warn)
         elif res["new"] == 0 and res["duplicates"] > 0:

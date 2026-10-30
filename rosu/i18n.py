@@ -58,17 +58,32 @@ STRINGS: dict[str, dict[str, str]] = {
     "library_done": {"en": "{new} added, {dup} duplicates — names saved to memory.",
                      "tr": "{new} eklendi, {dup} kopya ile karşılandı — isimler hafızaya eklendi."},
     "disk_no_space": {"en": "Not enough free space on {drive}: {need} needed, {free} free. "
-                            "Nothing was written.",
+                            "Nothing was written. Free up space on {drive} or choose "
+                            "another folder in Settings.",
                       "tr": "{drive} sürücüsünde yeterli boş alan yok: {need} gerekli, "
-                            "{free} boş. Hiçbir şey yazılmadı."},
-    "extract_disk_full": {"en": "Disk full: Unpack stopped. Beatmaps already extracted "
-                                "stay in Output and the archive stays in Packs.",
-                          "tr": "Disk dolu: arşiv açma durduruldu. Çıkarılan müzikler "
-                                "Output'ta, arşiv Packs'te kalıyor."},
-    "library_disk_full": {"en": "Disk full: Copy to Library stopped. Sets already copied "
-                                "stay in the Library.",
-                          "tr": "Disk dolu: Library'e kopyalama durduruldu. Kopyalanan "
-                                "setler Library'de kalıyor."},
+                            "{free} boş. Hiçbir şey yazılmadı. {drive} sürücüsünde yer "
+                            "açın ya da Ayarlar'dan başka bir klasör seçin."},
+    "disk_no_space_temp": {
+        "en": "Not enough free space on {drive} for the temporary staging folder Rosu "
+              "unpacks 7z archives into: {need} needed, {free} free. Nothing was "
+              "written. Free up space on {drive}.",
+        "tr": "Rosu'nun 7z arşivlerini açtığı geçici hazırlık klasörünün bulunduğu "
+              "{drive} sürücüsünde yeterli boş alan yok: {need} gerekli, {free} boş. "
+              "Hiçbir şey yazılmadı. {drive} sürücüsünde yer açın."},
+    "extract_disk_full": {"en": "{drive} is full: Unpack stopped. Beatmaps already "
+                                "extracted stay in Output and the archive stays in Packs. "
+                                "Free up space on {drive} or choose another folder in "
+                                "Settings.",
+                          "tr": "{drive} sürücüsü dolu: arşiv açma durduruldu. Çıkarılan "
+                                "müzikler Output'ta, arşiv Packs'te kalıyor. {drive} "
+                                "sürücüsünde yer açın ya da Ayarlar'dan başka bir klasör "
+                                "seçin."},
+    "library_disk_full": {"en": "{drive} is full: Copy to Library stopped. Sets already "
+                                "copied stay in the Library. Free up space on {drive} or "
+                                "choose another folder in Settings.",
+                          "tr": "{drive} sürücüsü dolu: Library'e kopyalama durduruldu. "
+                                "Kopyalanan setler Library'de kalıyor. {drive} sürücüsünde "
+                                "yer açın ya da Ayarlar'dan başka bir klasör seçin."},
     "library_all_present": {
         "en": "All {n} beatmaps are already in your Library — nothing to copy.",
         "tr": "{n} müziğin tamamı zaten kütüphanende — kopyalanacak bir şey yok."},

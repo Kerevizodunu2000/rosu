@@ -37,7 +37,8 @@ class LibraryMixin:
                 if not diskspace.is_disk_full(exc):
                     raise
                 self._warn("library:copy", f"Copy to Library stopped: disk full: {exc}")
-                return {**empty, "disk_full": True}
+                return {**empty, "disk_full": True,
+                        "full_drive": diskspace.space(self.cfg.library_path, 0).drive}
             self.log.info("LIBRARY_COPY", new=res["new"], duplicates=res["duplicates"],
                           dup_ids=res["dup_ids"][:50])
             return res
