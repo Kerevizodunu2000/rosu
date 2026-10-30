@@ -81,8 +81,11 @@ class LibraryMixin:
             when = now_iso()
             res = library.refresh_library(self.cfg.library_path, self.db, when, progress)
             self.rebuild()
+            for s in res["skipped"]:
+                self.log.error("refresh:skip", f"{s['file']}: {s['error']}")
             self.log.info("REFRESH", added=res["added"],
-                          disappeared=res["disappeared"], present=res["present"])
+                          disappeared=res["disappeared"], present=res["present"],
+                          skipped=len(res["skipped"]))
             return res
 
         def import_osz_folder(self, folder, progress=None, source_label=None,
@@ -354,7 +357,7 @@ class LibraryMixin:
                                           mode=mode, freed_bytes=freed_this,
                                           original_size=original_size)
                     except Exception as e:
-                        self.log.error("PRUNE_ERROR", file=name, error=str(e))
+                        self.log.error("PRUNE_ERROR", f"{name}: {type(e).__name__}")
                 if progress:
                     progress({"done": i + 1, "total": len(names), "file": name})
                     
@@ -489,7 +492,7 @@ class LibraryMixin:
                     freed_this = prune_mod.prune_folder(songs / name, mode=mode,
                                                         root=songs)
                 except Exception as exc:
-                    self.log.error("PRUNE_ERROR", folder=name, error=str(exc))
+                    self.log.error("PRUNE_ERROR", f"{name}: {type(exc).__name__}")
                     freed_this = 0
                 if freed_this > 0:
                     pruned += 1

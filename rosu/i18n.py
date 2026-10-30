@@ -77,6 +77,8 @@ STRINGS: dict[str, dict[str, str]] = {
     "refresh_done": {
         "en": "{added} added, {enriched} enriched, {disappeared} disappeared, {present} present.",
         "tr": "{added} eklendi, {enriched} zenginleştirildi, {disappeared} kayboldu, {present} mevcut."},
+    "refresh_skipped": {"en": "{n} skipped (see Logs).",
+                        "tr": "{n} atlandı (Loglar'a bakın)."},
     "osu_not_found": {"en": "osu! executable not found. Set it in Settings.",
                       "tr": "osu! çalıştırılabilir dosyası bulunamadı. Ayarlar'dan belirtin."},
     "import_no_lazer_exe": {

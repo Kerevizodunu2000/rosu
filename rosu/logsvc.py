@@ -41,7 +41,7 @@ ACTIONS: dict[str, tuple[tuple[str, ...], str]] = {
     "LIBRARY_PURGE": (("deleted",), "Deleted the Library's physical .osz copies (kept metadata)"),
     "OSU_IMPORT":    (("batch", "files"), "Button: Import to osu! sent a batch to osu!lazer"),
     "OSU_IMPORT_DONE": (("files", "batches"), "Import to osu! finished dispatching"),
-    "REFRESH":       (("added", "disappeared", "present"), "Button: Refresh Library Data finished"),
+    "REFRESH":       (("added", "disappeared", "present", "skipped"), "Button: Refresh Library Data finished"),
     "CLIENT_IMPORT": (("client", "added", "made"), "Auto-imported songs from an installed osu! client"),
     "REFERENCE_SYNC": (("packs",), "Fetched the authoritative pack list from the osu! API"),
     "OSU_IMPORT_CANCEL": (("sent", "total"), "User cancelled osu! import dispatch"),
