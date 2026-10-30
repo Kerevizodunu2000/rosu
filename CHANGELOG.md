@@ -11,6 +11,8 @@ the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Changed
+- Library refresh and other lookups by file name are faster on large libraries.
+  Existing libraries get the speed-up the first time Rosu opens them.
 - Exporting from a large Library is faster.
 
 ### Fixed

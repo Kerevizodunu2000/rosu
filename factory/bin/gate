@@ -10,6 +10,9 @@ The gate runs the main checkout's factory/checks.sh inside the job's worktree,
 so a branch can't change the checks it is judged by. It also fails when the
 branch modifies or deletes a file matching config.json `protected_paths`
 (fnmatch patterns, where `*` also matches `/`). Adding new files is fine.
+Exact paths listed one per line in jobs/<job-id>/protected-exceptions.txt
+(written by the orchestrator with the owner's approval) are allowed, and the
+report still lists them.
 """
 
 import fnmatch
@@ -38,18 +41,26 @@ def git(worktree, *args):
     return res.stdout
 
 
-def protected_changes(worktree):
-    """Existing files under protected_paths that the branch modified or deleted."""
+def protected_changes(worktree, allowed):
+    """Existing files under protected_paths that the branch modified or deleted:
+    (blocking, allowed by the job's exception list)."""
     diff = git(worktree, "diff", "--name-status", f"origin/{CONFIG['base_branch']}...HEAD")
-    hits = []
+    hits, excepted = [], []
     for line in diff.splitlines():
         status, *paths = line.split("\t")
         if status.startswith("A"):
             continue
         old = paths[0]  # for renames and copies, the original path
         if any(fnmatch.fnmatch(old, pattern) for pattern in CONFIG["protected_paths"]):
-            hits.append(f"{status[0]} {old}")
-    return hits
+            (excepted if old in allowed else hits).append(f"{status[0]} {old}")
+    return hits, excepted
+
+
+def exceptions(job_id):
+    path = FACTORY / "jobs" / job_id / "protected-exceptions.txt"
+    if not path.exists():
+        return set()
+    return {ln.strip() for ln in path.read_text().splitlines() if ln.strip() and not ln.startswith("#")}
 
 
 def run_checks(worktree):
@@ -65,7 +76,7 @@ def gate(job_id, merge):
         die(f"{job_id} hasn't started a build round")
     round_dir = FACTORY / "jobs" / job_id / f"round-{job['round']}"
     commit = git(worktree, "rev-parse", "HEAD").strip()
-    protected = protected_changes(worktree)
+    protected, excepted = protected_changes(worktree, exceptions(job_id))
     code, log, seconds = run_checks(worktree)
     verdict = "PASS" if code == 0 and not protected else "FAIL"
     name = "merge-checks" if merge else "checks"
@@ -74,7 +85,9 @@ def gate(job_id, merge):
     (round_dir / f"{name}.md").write_text(
         f"GATE: {verdict}\nCOMMIT: {commit}\n\n"
         "## Protected paths\n"
-        + ("\n".join(f"- {p}" for p in protected) if protected else "None changed.")
+        + ("\n".join(f"- {p}" for p in protected) if protected else "None changed (blocking).")
+        + ("\n\nAllowed by protected-exceptions.txt:\n" + "\n".join(f"- {p}" for p in excepted)
+           if excepted else "")
         + f"\n\n## checks.sh\nExit {code} in {seconds}s. Last {TAIL} lines of {name}.log:\n\n```\n{tail}\n```\n"
     )
     print(f"GATE: {verdict} ({job_id} round {job['round']}, checks.sh exit {code} in {seconds}s"
