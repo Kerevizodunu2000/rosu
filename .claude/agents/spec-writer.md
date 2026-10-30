@@ -72,7 +72,8 @@ The approver escalates to a human when one of these is a product decision.
   service, a component, a doc convention), name it in Context and require it.
 - Require tests for every logic change (the owner's rule), in the repo's test
   layout. Existing test files under `protected_paths` in
-  `factory/config.json` must not be modified: new tests go in new files.
+  `factory/config.json` must not be modified: new tests go in new files,
+  unless the path is listed in the job's `protected-exceptions.txt`.
 - Include the doc updates the change needs as requirements: `CHANGELOG.md`
   under `[Unreleased]` for user-visible changes, and any doc `AGENTS.md` lists.
 - Every new user-facing string goes into `rosu/i18n.py` in both English and Turkish.
