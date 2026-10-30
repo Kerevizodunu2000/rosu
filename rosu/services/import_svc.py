@@ -1,22 +1,25 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 from __future__ import annotations
 import datetime as _dt
-import errno
 import threading
 import time
 from pathlib import Path
 
-from .. import config, osu_import, parsing
+from .. import config, diskspace, osu_import, parsing
 
 _CLIENT_LABEL = {"lazer": "osu!lazer", "stable": "osu!(stable)"}
 
 def now_iso() -> str:
     return _dt.datetime.now().replace(microsecond=0).isoformat()
 
-# shortcut: duplicates diskspace.is_disk_full; switch to it once #43 is merged
-def _is_disk_full(exc) -> bool:
-    return isinstance(exc, OSError) and (
-        exc.errno == errno.ENOSPC or getattr(exc, "winerror", None) in (112, 39))
+_is_disk_full = diskspace.is_disk_full
+
+
+def _size(path) -> int:
+    try:
+        return Path(path).stat().st_size
+    except OSError:
+        return 0
 
 def _sample_export(files, limit):
     if limit is None or limit <= 0 or len(files) <= limit:
@@ -245,11 +248,32 @@ class ImportMixin:
                 # Disabled in Settings — never launch/write to this client (the UI
                 # already hides its controls; this is the belt-and-suspenders guard).
                 return {"disabled": True, "sent": 0, "files": 0, "batches": 0}
+            from .. import client_import
             _eff = cancel if cancel is not None else self._cancel.is_set
+            # Pre-flight: the staged copies and what the client writes from them
+            # (same drive: the needs add up). Nothing is staged on a refusal.
+            need = sum(_size(f) for f in files)
+            if target == "stable":
+                exe = self.cfg.osu_stable_exe or config.detect_stable_exe()
+                install = self._stable_install_dir(exe)
+                places = [] if install is None else [
+                    (install / "_rosu_import", need),
+                    (client_import.stable_songs_dir() or install / "Songs", need)]
+            else:
+                exe = self.cfg.osu_lazer_exe or config.detect_osu_exe()
+                data = client_import.lazer_data_dir()
+                places = [(self.cfg.data_path / "_import_stage", need)]
+                if data is not None:
+                    places.append((data, need))
+            no_space = diskspace.shortfall(places)
+            if no_space:
+                self._warn("import:space", f"Import to {_CLIENT_LABEL.get(target, target)} "
+                           "refused: " + str(diskspace.NotEnoughSpace(**no_space)))
+                return {"no_space": no_space, "sent": 0, "files": 0, "batches": 0,
+                        "stage_failed": 0, "disk_full": False}
             n_in = len(files)
             failed: list = []
             if target == "stable":
-                exe = self.cfg.osu_stable_exe or config.detect_stable_exe()
                 # osu!(stable) *moves* each .osz into its Songs folder on import; a
                 # cross-drive move fails with "Error moving file". Stage copies on the
                 # install drive so the move is a same-drive rename, and the source is
@@ -258,7 +282,6 @@ class ImportMixin:
                 files = self._stage_for_stable(files, exe, failed)
                 batch_kw = {"max_batch_files": 1}
             else:
-                exe = self.cfg.osu_lazer_exe or config.detect_osu_exe()
                 # osu!lazer consumes the source .osz on import; stage copies so the
                 # source survives too, consistent with stable.
                 files = self._stage_copies(files, self.cfg.data_path / "_import_stage",
@@ -284,7 +307,7 @@ class ImportMixin:
             self.log.info("OSU_IMPORT_DONE", target=target, files=res["files"],
                           batches=res["batches"])
             res["stage_failed"] = n_in - len(files)
-            res["disk_full"] = any(_is_disk_full(e) for e in failed)
+            res["disk_full"] = any(diskspace.is_disk_full(e) for e in failed)
             return res
 
         def _stage_copies(self, files, stage_dir, failed=None):
@@ -339,6 +362,16 @@ class ImportMixin:
             same-drive rename. Derives the install dir from the configured exe (custom
             paths work), falling back to auto-detection; returns ``[]`` (never the
             originals) if neither can be located."""
+            install = self._stable_install_dir(exe)
+            if install is None:
+                self.log.error("import:stage", "osu!(stable) folder not found")
+                return []
+            return self._stage_copies(files, install / "_rosu_import", failed)
+
+        def _stable_install_dir(self, exe=None) -> Path | None:
+            """The osu!(stable) install folder: from the configured exe (custom
+            paths work), else the auto-detected Songs folder's parent; None if
+            neither can be located."""
             from .. import client_import
             install = None
             if exe:
@@ -349,10 +382,7 @@ class ImportMixin:
             if install is None or not install.exists():
                 songs = client_import.stable_songs_dir()
                 install = songs.parent if songs else None
-            if install is None:
-                self.log.error("import:stage", "osu!(stable) folder not found")
-                return []
-            return self._stage_copies(files, install / "_rosu_import", failed)
+            return install
 
         def installed_summary(self, progress=None) -> dict:
             """Read-only counts for the Shortcuts (Kısayollar) tab: how many beatmap
@@ -465,7 +495,8 @@ class ImportMixin:
             self.log.info("LIBRARY_TO_CLIENT", client=target,
                           sent=res.get("sent", 0), skipped=skipped)
             return {"target": target, "sent": res.get("sent", 0),
-                    "skipped": skipped, "cancelled": res.get("cancelled", False)}
+                    "skipped": skipped, "cancelled": res.get("cancelled", False),
+                    **{k: res[k] for k in ("no_space", "disk_full") if k in res}}
 
         def unpack_and_import(self, targets, skip_duplicates: bool = True,
                               progress=None) -> dict:
@@ -484,7 +515,9 @@ class ImportMixin:
             else:
                 extract_res = {"packs": 0, "tracks": 0}
             imports: dict = {}
-            if not self._cancel.is_set():
+            # A refused or disk-full Unpack sends nothing: Output is incomplete.
+            stopped = extract_res.get("no_space") or extract_res.get("disk_full")
+            if not self._cancel.is_set() and not stopped:
                 files = osu_import.output_osz_files(self.cfg.output_path)
                 for target in targets:
                     if self._cancel.is_set():
@@ -549,7 +582,8 @@ class ImportMixin:
                               found=found, transferred=transferred, skipped=skipped)
                 return {"source": source, "target": target, "found": found,
                         "transferred": transferred, "skipped": skipped,
-                        "cancelled": res.get("cancelled", False)}
+                        "cancelled": res.get("cancelled", False),
+                        **{k: res[k] for k in ("no_space", "disk_full") if k in res}}
             finally:
                 shutil.rmtree(stage, ignore_errors=True)
 
