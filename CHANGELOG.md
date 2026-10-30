@@ -19,6 +19,10 @@ the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   takes and how much is in Drive's trash. A Drive backup now checks for free space first
   and doesn't start when the upload won't fit. If Drive fills up during a backup, it
   stops cleanly and keeps everything uploaded so far; run it again after freeing space.
+- **Unpack** and **Copy to Library** check the free space first. When it is short they
+  refuse before writing anything, with a message naming the drive, the space needed and
+  the space free. A disk that fills up during the run stops it cleanly with "disk full":
+  beatmaps already written stay, and the archive stays in Packs.
 
 ### Changed
 - Library refresh and other lookups by file name are faster on large libraries.
@@ -26,6 +30,8 @@ the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Exporting from a large Library is faster.
 
 ### Fixed
+- A full disk during **Copy to Library** no longer leaves a truncated beatmap in the
+  Library or overwrites a good copy already there.
 - One set that fails no longer stops Refresh Library: it is skipped, counted in the
   status line and detailed in the Logs tab.
 - A map with an infinite beat length gets no BPM instead of 0.
