@@ -15,7 +15,7 @@ from typing import BinaryIO, Callable
 
 import py7zr.exceptions
 
-from . import archives, client_remove, msd, ratings
+from . import archives, client_remove, diskspace, msd, ratings
 from .beatmap import read_osz_full
 from .models import ExtractPlan, ParsedPack, ParsedTrack
 from .parsing import parse_osz_entry, parse_pack_name
@@ -92,10 +92,12 @@ def extract_pack(archive_path: Path, parsed: ParsedPack, output_dir: Path, db,
     Each .osz is best-effort: a broken entry is logged and skipped, never
     stopping the extraction. Non-``.osz`` members are noted as ``extra_files``
     so a pack that also carried readmes/images can be flagged (item 25).
+    A full disk is the exception: it stops the loop and sets ``disk_full``.
     Returns ``{"tracks": int, "failed": int, "cancelled": bool,
-    "subfolders": [..], "extra_files": [..]}``: ``tracks`` counts the entries
-    extracted and recorded, ``failed`` every ``.osz`` member skipped for any
-    reason but cancel, so the caller disposes the archive only when it is whole.
+    "disk_full": bool, "subfolders": [..], "extra_files": [..]}``: ``tracks``
+    counts the entries extracted and recorded, ``failed`` every ``.osz`` member
+    skipped for any reason but cancel, so the caller disposes the archive only
+    when it is whole.
     """
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -104,7 +106,7 @@ def extract_pack(archive_path: Path, parsed: ParsedPack, output_dir: Path, db,
     subfolders: set[str] = set()
     extra_files: list[str] = []
     tracks = failed = 0
-    cancelled = False
+    cancelled = disk_full = False
     with archives.open_reader(archive_path) as r:
         members = r.members()
         # Reject zip-bombs / path-traversal up front, before any DB write or
@@ -152,11 +154,14 @@ def extract_pack(archive_path: Path, parsed: ParsedPack, output_dir: Path, db,
                 if log is not None:
                     log.log("ERROR", "WARN", "", where=f"extract:{parsed.code}",
                             detail=f"{t.filename}: {exc}")
+                if diskspace.is_disk_full(exc):   # every later member would fail too
+                    disk_full = True
+                    break
             if progress:
                 progress(parsed.full_name, t.filename)
 
     return {"tracks": tracks, "failed": failed, "cancelled": cancelled,
-            "subfolders": sorted(subfolders), "extra_files": extra_files}
+            "disk_full": disk_full, "subfolders": sorted(subfolders), "extra_files": extra_files}
 
 
 def _stream_copy(src: BinaryIO, target: Path, max_bytes: int | None = None) -> None:

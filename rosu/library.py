@@ -13,7 +13,7 @@ import sqlite3
 from pathlib import Path
 from typing import Callable
 
-from . import msd, ratings
+from . import diskspace, msd, ratings
 from .beatmap import read_osz_full
 from .parsing import parse_osz_entry
 
@@ -48,9 +48,21 @@ def copy_to_library(output_dir: Path, library_dir: Path, db, when: str,
     tagged with a synthetic source pack so its provenance shows in the Sources
     column (item 9).
 
+    With ``physical_copy``, a read-only pre-pass first sums what would be copied
+    and raises ``diskspace.NotEnoughSpace`` before any write when it doesn't fit.
+    Each file goes through a ``.part``, so a failed copy (a full disk included,
+    which propagates) never leaves a truncated file or replaces a good one.
+
     Returns ``{"new": int, "duplicates": int, "dup_ids": [...]}``.
     """
     library_dir = Path(library_dir)
+    if physical_copy:
+        need = sum(src_path.stat().st_size for src_path, t in _scan_osz(output_dir)
+                   if _copy_decision(src_path, library_dir / t.filename,
+                                     db.find_track_row(t.beatmapset_id, t.filename))[1])
+        sp = diskspace.space(library_dir, need) if need > 0 else None
+        if sp is not None and not sp.fits:
+            raise diskspace.NotEnoughSpace(sp.drive, need + diskspace.MARGIN, sp.free)
     library_dir.mkdir(parents=True, exist_ok=True)
 
     local_pack_id = None
@@ -81,39 +93,16 @@ def copy_to_library(output_dir: Path, library_dir: Path, db, when: str,
 
         if physical_copy:
             target = library_dir / t.filename
-            
-            is_pruned = False
-            original_size = None
-            if row:
-                # use try-except in case column is missing before migrations
-                try:
-                    is_pruned = bool(row["is_pruned"])
-                    original_size = row["original_size"]
-                except IndexError:
-                    pass
-            
-            
-            same_file = False
-            if target.exists():
-                st_size = target.stat().st_size
-                if st_size == src_path.stat().st_size:
-                    same_file = True
-                elif is_pruned and original_size == src_path.stat().st_size:
-                    same_file = True
-            
-            if not same_file:
-                if is_pruned and target.exists():
-                    # Do not overwrite an already pruned target with an unpruned version
-                    pass
-                else:
-                    shutil.copy2(src_path, target)   # new file, or refreshed on size change
-                    if auto_prune:
-                        from .prune import prune_osz
-                        original_size_before = target.stat().st_size
-                        freed = prune_osz(target, mode=prune_mode)
-                        if freed > 0:
-                            db.set_pruned_state(track_id, True, original_size_before,
-                                                when=when, mode=prune_mode)
+            same_file, copy = _copy_decision(src_path, target, row)
+            if copy:
+                _copy_via_part(src_path, target)   # new file, or refreshed on size change
+                if auto_prune:
+                    from .prune import prune_osz
+                    original_size_before = target.stat().st_size
+                    freed = prune_osz(target, mode=prune_mode)
+                    if freed > 0:
+                        db.set_pruned_state(track_id, True, original_size_before,
+                                            when=when, mode=prune_mode)
             db.set_library_state(track_id, True, "present", when)
             # A byte-identical file already in Library is an existing copy even if the
             # DB row wasn't flagged yet (manual/restored files) — don't count it new.
@@ -132,6 +121,47 @@ def copy_to_library(output_dir: Path, library_dir: Path, db, when: str,
             progress(t.filename)
 
     return {"new": new, "duplicates": duplicates, "dup_ids": dup_ids}
+
+
+def _copy_decision(src_path: Path, target: Path, row) -> tuple[bool, bool]:
+    """``(same_file, copy)`` for one Output file. Shared by the free-space
+    pre-pass and the copy loop so they can't drift."""
+    is_pruned = False
+    original_size = None
+    if row:
+        # use try-except in case column is missing before migrations
+        try:
+            is_pruned = bool(row["is_pruned"])
+            original_size = row["original_size"]
+        except IndexError:
+            pass
+
+    same_file = False
+    if target.exists():
+        st_size = target.stat().st_size
+        if st_size == src_path.stat().st_size:
+            same_file = True
+        elif is_pruned and original_size == src_path.stat().st_size:
+            same_file = True
+    # Do not overwrite an already pruned target with an unpruned version
+    copy = not same_file and not (is_pruned and target.exists())
+    return same_file, copy
+
+
+def _copy_via_part(src_path: Path, target: Path) -> None:
+    """Copy to ``<target>.part``, then replace ``target``. On any failure only
+    the ``.part`` is removed: the existing target and the source stay as they
+    were, and the error propagates."""
+    part = target.with_name(target.name + ".part")
+    try:
+        shutil.copy2(src_path, part)
+        part.replace(target)
+    except BaseException:
+        try:
+            part.unlink(missing_ok=True)
+        except OSError:
+            pass   # the copy error below is the one that matters
+        raise
 
 
 def _upsert_with_meta(db, src_path: Path, t, when: str) -> int:

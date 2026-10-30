@@ -3,7 +3,7 @@ from __future__ import annotations
 import datetime as _dt
 from pathlib import Path
 
-from .. import jobs, library
+from .. import diskspace, jobs, library
 
 _CLIENT_LABEL = {"lazer": "osu!lazer", "stable": "osu!(stable)"}
 
@@ -19,11 +19,26 @@ def _sample_export(files, limit):
 
 class LibraryMixin:
         def copy_library(self, progress=None) -> dict:
+            """Copy to Library. A free-space refusal or a full disk comes back as
+            ``no_space`` / ``disk_full`` in the result, so the Dashboard can
+            translate it; any other error propagates."""
             when = now_iso()
-            res = library.copy_to_library(
-                self.cfg.output_path, self.cfg.library_path, self.db, when,
-                self.cfg.library_physical_copy, progress,
-                auto_prune=self.cfg.auto_prune, prune_mode=self.cfg.prune_mode)
+            empty = {"new": 0, "duplicates": 0, "dup_ids": []}
+            try:
+                res = library.copy_to_library(
+                    self.cfg.output_path, self.cfg.library_path, self.db, when,
+                    self.cfg.library_physical_copy, progress,
+                    auto_prune=self.cfg.auto_prune, prune_mode=self.cfg.prune_mode)
+            except diskspace.NotEnoughSpace as exc:
+                self._warn("library:space", f"Copy to Library refused: {exc}")
+                return {**empty, "no_space": {"drive": exc.drive, "need": exc.need,
+                                              "free": exc.free}}
+            except OSError as exc:
+                if not diskspace.is_disk_full(exc):
+                    raise
+                self._warn("library:copy", f"Copy to Library stopped: disk full: {exc}")
+                return {**empty, "disk_full": True,
+                        "full_drive": diskspace.space(self.cfg.library_path, 0).drive}
             self.log.info("LIBRARY_COPY", new=res["new"], duplicates=res["duplicates"],
                           dup_ids=res["dup_ids"][:50])
             return res
