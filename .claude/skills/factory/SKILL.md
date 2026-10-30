@@ -252,6 +252,15 @@ again (`merge-checks.md`), pushes, and merges the PR (in MCP mode it queues
 the merge; see GitHub). A conflict or a failing gate sends the job to
 needs-human with the reason.
 
+The gate runs `checks.sh` only; the repo's CI may run more (e2e, audits).
+Before the merge itself (`gh pr merge`, or the queued `pr_merge` in MCP
+mode), read the PR's check runs on its head commit: wait while any is
+pending, and when one has failed, don't merge. Run
+`job merge-failed <job> "<the failing check and its error>"` (in gh mode,
+`gh pr merge` refuses on its own when checks are required). To send it back
+to the builder, comment the fix on the PR as the operator and run
+`/factory rework <n>`.
+
 ### Needs human
 
 The PR is ready for review and the issue is labeled `factory:needs-human`.

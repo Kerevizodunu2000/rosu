@@ -1,8 +1,10 @@
-PySide6>=6.6
+PySide6>=6.12
 openpyxl>=3.1
 Send2Trash>=1.8
 rapidfuzz>=3.0
-py7zr>=1.1.3
+py7zr>=1.1.4
+# py7zr's Brotli codec: 1.2.1 fixes an out-of-bounds write in the decoder (GHSA-9v8h-qqgm-4m35).
+brotli>=1.2.1
 keyring>=24
 # Local star-rating / difficulty computation (v1.5). Compiled Rust wheel; pinned
 # for reproducibility. OPTIONAL at runtime — rosu.ratings import-guards it, so the
