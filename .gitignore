@@ -84,6 +84,9 @@ coverage.xml
 # tools/fetch_fpcalc.py (CI runs it before building), never committed.
 rosu/assets/fpcalc/
 
+# --- Rust build output for the native module (native/osu_core) ----------------
+native/osu_core/target/
+
 # --- .NET build output for the bundled lazer helper --------------------------
 tools/RosuLazerExport/bin/
 tools/RosuLazerExport/obj/

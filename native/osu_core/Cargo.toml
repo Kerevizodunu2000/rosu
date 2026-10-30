@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+[package]
+name = "rosu-native-osu-core"
+version = "0.1.0"
+edition = "2024"
+description = "Rosu's native .osu parser and mania skillset rating (PyO3 module)"
+license = "GPL-3.0-or-later"
+publish = false
+
+[lib]
+name = "rosu_native_osu_core"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.30.1", features = ["abi3-py313"] }

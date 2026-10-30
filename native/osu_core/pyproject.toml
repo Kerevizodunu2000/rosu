@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+[build-system]
+requires = ["maturin>=1.16,<2"]
+build-backend = "maturin"
+
+[project]
+name = "rosu-native-osu-core"
+version = "0.1.0"
+description = "Rosu's native .osu parser and mania skillset rating (optional; Rosu runs without it)"
+requires-python = ">=3.13"
+license = "GPL-3.0-or-later"
+
+[tool.maturin]
+module-name = "rosu_native_osu_core"
