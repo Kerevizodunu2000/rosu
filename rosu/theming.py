@@ -174,6 +174,11 @@ QLabel#banner {{ background-color: {banner_bg}; color: {banner_text};
     border: 1px solid {banner_border}; border-radius: 6px; padding: 8px 12px; }}
 QLabel#h1 {{ font-size: 20px; font-weight: 700; color: {text}; }}
 QLabel#status {{ color: {muted}; }}
+QFrame#diskcard {{ border: 1px solid {border}; border-radius: 6px; }}
+QFrame#diskcard QLabel {{ color: {text}; }}
+/* banner_text is under 4.5:1 on some palettes; text on banner_bg passes on all. */
+QFrame#diskcard QLabel#diskwarn {{ color: {text}; font-weight: 600; background-color: {banner_bg};
+    border: 1px solid {banner_border}; border-radius: 4px; padding: 0 6px; }}
 QToolTip {{ background-color: {surface}; color: {text};
     border: 1px solid {accent}; border-radius: 4px; padding: 4px 8px; }}
 QScrollBar:vertical {{ background: {bg}; width: 12px; margin: 0; }}

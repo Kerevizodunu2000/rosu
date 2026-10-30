@@ -70,6 +70,24 @@ STRINGS: dict[str, dict[str, str]] = {
         "tr": "Rosu'nun 7z arşivlerini açtığı geçici hazırlık klasörünün bulunduğu "
               "{drive} sürücüsünde yeterli boş alan yok: {need} gerekli, {free} boş. "
               "Hiçbir şey yazılmadı. {drive} sürücüsünde yer açın."},
+    "disk_no_space_reexport": {
+        "en": "Not enough free space on {drive} for the temporary folder Rosu re-exports "
+              "your osu! beatmaps into: {need} needed, {free} free. Nothing was written. "
+              "Free up space on {drive}.",
+        "tr": "Rosu'nun osu! müziklerini yeniden dışa aktardığı geçici klasörün bulunduğu "
+              "{drive} sürücüsünde yeterli boş alan yok: {need} gerekli, {free} boş. "
+              "Hiçbir şey yazılmadı. {drive} sürücüsünde yer açın."},
+    "disk_card_title": {"en": "Disks", "tr": "Diskler"},
+    "disk_card_row": {"en": "{drive} {places}: {used} / {total} used, {free} free",
+                      "tr": "{drive} {places}: {used} / {total} kullanıldı, {free} boş"},
+    "disk_card_low": {"en": "Low space: ", "tr": "Az boş alan: "},
+    "disk_card_unreadable": {"en": "{drive} {places}: can't read this drive",
+                             "tr": "{drive} {places}: bu sürücü okunamıyor"},
+    "disk_place_packs": {"en": "Packs", "tr": "Packs"},
+    "disk_place_output": {"en": "Output", "tr": "Output"},
+    "disk_place_library": {"en": "Library", "tr": "Library"},
+    "disk_place_stable": {"en": "osu!(stable) Songs", "tr": "osu!(stable) Songs"},
+    "disk_place_lazer": {"en": "osu!lazer", "tr": "osu!lazer"},
     "extract_disk_full": {"en": "{drive} is full: Unpack stopped. Beatmaps already "
                                 "extracted stay in Output and the archive stays in Packs. "
                                 "Free up space on {drive} or choose another folder in "

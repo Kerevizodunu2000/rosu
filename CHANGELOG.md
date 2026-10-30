@@ -30,6 +30,12 @@ the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   anything, with a message naming the drive. A disk that fills up during an export stops
   it cleanly: the archives already finished are kept and nothing is uploaded. Moving loose
   `.osz` from Packs to Output on another drive is checked too.
+- The Dashboard has a **Disks** card: one row per drive holding Packs, Output, Library,
+  osu!(stable) Songs or osu!lazer, with used, total and free space and a bar. A drive
+  under 10% or 5 GB free is marked "Low space"; a drive Rosu can't read says so. Export
+  from osu!lazer, osu!(stable) or both now checks the temporary folder's free space
+  before re-exporting and refuses with nothing written when it won't fit. The folder
+  watcher, Library move and Drive restore share the same free-space check.
 
 ### Changed
 - Library refresh and other lookups by file name are faster on large libraries.

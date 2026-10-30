@@ -22,7 +22,7 @@ import shutil
 import zipfile
 from pathlib import Path
 
-from .. import jobs
+from .. import diskspace, jobs
 from ..columns import has_library_copy
 
 _SHARD_CAP = 64 * 1024 * 1024          # a manifest shard is JSON text — never this big
@@ -52,10 +52,7 @@ def _int(v, default: int = 0) -> int:
 
 
 def _free_bytes(path: Path) -> int | None:
-    try:
-        return shutil.disk_usage(path).free
-    except OSError:
-        return None
+    return diskspace.space(path, 0).free
 
 
 def _device_of(chunk: str) -> str:

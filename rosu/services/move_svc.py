@@ -27,7 +27,7 @@ import stat
 import tempfile
 from pathlib import Path
 
-from .. import jobs
+from .. import diskspace, jobs
 from ..fsutil import dir_writable, place_new
 
 _BUF = 1024 * 1024
@@ -174,14 +174,10 @@ class LibraryMoveMixin:
                         conflicts.append(f.name)
                 if progress:
                     progress({"kind": "move_plan", "done": i, "total": len(files)})
-            try:
-                free = shutil.disk_usage(existing).free
-            except OSError:
-                free = None
+            sp = diskspace.space(existing, total, _FREE_MARGIN)
             return {**base, "files": len(files), "bytes": total, "same": same,
                     "conflicts": conflicts[:200], "subfolders": dirs, "links": links,
-                    "free": free,
-                    "enough_space": free is None or free >= total + _FREE_MARGIN}
+                    "free": sp.free, "enough_space": sp.fits}
 
         def _move_files(self, files, new: Path, verified: dict, made: list, res: dict,
                         progress, cancel) -> None:

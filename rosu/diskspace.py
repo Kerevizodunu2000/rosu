@@ -7,6 +7,7 @@ tests can monkeypatch it.
 from __future__ import annotations
 
 import errno
+import os
 import shutil
 from pathlib import Path
 from typing import NamedTuple
@@ -50,6 +51,60 @@ def shortfall(places, margin: int = MARGIN) -> dict | None:
         if not sp.fits:
             return {"drive": sp.drive, "need": need + margin, "free": sp.free}
     return None
+
+
+LOW_PCT = 0.10                 # a drive is "low" under 10% free ...
+LOW_BYTES = 5 * 1024 ** 3      # ... or under 5 GiB free
+
+
+def usage(places) -> list[dict]:
+    """Per-drive usage for ``(label, path)`` pairs: one entry per distinct drive,
+    ``{"drive", "labels", "used", "total", "free", "readable", "low"}``. A ``None``
+    or missing path is skipped. Never raises; an unreadable drive has ``None``
+    numbers and ``low=False``."""
+    drives: dict[str, dict] = {}
+    for label, path in places:
+        try:
+            if path is None or not Path(path).exists():
+                continue
+        except OSError:
+            continue
+        sp = space(path, 0)
+        d = drives.setdefault(sp.drive, {"drive": sp.drive, "labels": [], "used": None,
+                                         "total": sp.total, "free": sp.free,
+                                         "readable": sp.free is not None, "low": False})
+        d["labels"].append(label)
+    for d in drives.values():
+        if d["readable"]:
+            d["used"] = d["total"] - d["free"]
+            d["low"] = d["free"] < d["total"] * LOW_PCT or d["free"] < LOW_BYTES
+    return list(drives.values())
+
+
+def tree_size(path, cancel=None) -> int:
+    """Total bytes of the files under ``path`` from directory metadata only (no
+    opens, no symlinks followed). 0 for a missing path; stops early when
+    ``cancel()`` is true."""
+    total = 0
+    todo = [str(path)]
+    while todo:
+        if cancel is not None and cancel():
+            break
+        try:
+            with os.scandir(todo.pop()) as it:
+                for e in it:
+                    try:
+                        if e.is_symlink():
+                            continue
+                        if e.is_dir(follow_symlinks=False):
+                            todo.append(e.path)
+                        elif e.is_file(follow_symlinks=False):
+                            total += e.stat(follow_symlinks=False).st_size
+                    except OSError:
+                        pass
+        except OSError:
+            pass
+    return total
 
 
 def is_disk_full(exc: BaseException) -> bool:
