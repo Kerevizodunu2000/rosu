@@ -453,6 +453,16 @@ STRINGS: dict[str, dict[str, str]] = {
     "physical_off_confirm": {"en": "Delete files", "tr": "Dosyaları sil"},
     "physical_off_done": {"en": "Moved {n} .osz from Library to Recycle Bin (info kept).",
                           "tr": "{n} .osz Library'den Geri Dönüşüm Kutusu'na taşındı (bilgiler korundu)."},
+    "lib_err_no_recycle_bin": {
+        "en": "The Library is on a drive without a Recycle Bin (a removable or network "
+              "drive, or the Recycle Bin is turned off there), so deleted files could not "
+              "be brought back. Nothing was deleted.",
+        "tr": "Library, Geri Dönüşüm Kutusu olmayan bir sürücüde (çıkarılabilir ya da ağ "
+              "sürücüsü, veya orada Geri Dönüşüm Kutusu kapalı); silinen dosyalar geri "
+              "getirilemezdi. Hiçbir şey silinmedi."},
+    "lib_kept_too_large": {
+        "en": "{n} file(s) were kept because they are larger than the Recycle Bin can hold.",
+        "tr": "{n} dosya, Geri Dönüşüm Kutusu'nun alabileceğinden büyük olduğu için tutuldu."},
 
     # Auto-import from installed osu! clients (item 15)
     "set_import": {"en": "Import installed songs", "tr": "Yüklü şarkıları içe aktar"},
