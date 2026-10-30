@@ -771,18 +771,30 @@ class ExportMixin:
                     "skipped": local_count - total, "cancelled": cancelled}
 
         def _push_shard(self, client, shard_path, folder) -> None:
-            """Publish this device's manifest shard to Drive (replace the prior copy
-            so shards don't accumulate). The new copy goes up before the old one is
-            deleted, so a failed upload (a full Drive) keeps the old shard.
+            """Publish this device's manifest shard to Drive, then delete every
+            other file with the shard's name in the folder, so other devices never
+            read a stale copy. Uploading first means a failed upload (a full Drive)
+            keeps the old shard; a failed delete is retried on the next push.
             Non-fatal on failure."""
             from ..drive.auth import DriveError
             try:
-                existing = client.find_file(shard_path.name, folder)
-                client.upload_file(shard_path, shard_path.name, folder)
-                if existing:
-                    client.delete_file(existing)
+                new_id = client.upload_file(shard_path, shard_path.name, folder)
+                if not new_id:
+                    return   # can't tell the new copy apart: delete nothing
+                stale = [f["id"] for f in client.list_folder(folder)
+                         if f.get("name") == shard_path.name and f.get("id") != new_id]
             except DriveError as exc:
                 self.log.error("drive:shard", str(exc)[:200])
+                return
+            failed = 0
+            for fid in stale:
+                try:
+                    client.delete_file(fid)
+                except DriveError:
+                    failed += 1
+            if failed:
+                self.log.error("drive:shard", f"{failed} of {len(stale)} old shard "
+                                              "copies not deleted")
 
         def _drive_next_chunk_index(self, client, folder, entries) -> int:
             """Next append-only chunk index for THIS device, reconciled with Drive.

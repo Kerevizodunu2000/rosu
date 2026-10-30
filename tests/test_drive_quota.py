@@ -259,41 +259,99 @@ def test_drive_storage_errors(tmp_path, monkeypatch):
     db.close()
 
 
-class OrderClient(FakeClient):
-    def __init__(self, fail_upload=False):
-        super().__init__()
+class ShardClient:
+    """A Drive folder that gives every upload its own id, so same-named shard
+    copies are told apart, and logs every call in order."""
+
+    def __init__(self, files, fail_upload=False, fail_delete=(), new_id=None):
+        self.files = list(files)
         self.ops = []
         self.fail_upload = fail_upload
-
-    def find_file(self, name, parent):
-        self.ops.append("find")
-        return super().find_file(name, parent)
+        self.fail_delete = set(fail_delete)
+        self.new_id = new_id
+        self.n = 0
 
     def upload_file(self, path, name, parent, progress=None, cancel=None, **kw):
         self.ops.append("upload")
         if self.fail_upload:
             raise DriveQuotaExceeded("full")
-        return super().upload_file(path, name, parent, progress, cancel, **kw)
+        self.n += 1
+        fid = f"new{self.n}"
+        self.files.append({"id": fid, "name": name})
+        return fid if self.new_id is None else self.new_id
+
+    def list_folder(self, parent):
+        self.ops.append("list")
+        return [dict(f) for f in self.files]
 
     def delete_file(self, file_id):
-        self.ops.append("delete")
-        super().delete_file(file_id)
+        self.ops.append("delete " + file_id)
+        if file_id in self.fail_delete:
+            raise DriveError("delete -> 500")
+        self.files = [f for f in self.files if f["id"] != file_id]
 
 
-# 10
-@pytest.mark.parametrize("fail_upload", [False, True])
-def test_push_shard_uploads_before_deleting(tmp_path, monkeypatch, fail_upload):
+class RecLog:
+    def __init__(self):
+        self.errors = []
+
+    def info(self, *a, **k):
+        pass
+
+    def error(self, where, detail):
+        self.errors.append((where, detail))
+
+
+def _shard(tmp_path, monkeypatch):
     cfg, db, svc = _make_services(tmp_path, monkeypatch)
+    svc.log = RecLog()
     shard = cfg.drive_cache_path / manifest.shard_name("devTEST")
     shard.parent.mkdir(parents=True, exist_ok=True)
     shard.write_text("{}")
-    fake = OrderClient(fail_upload)
-    fake._folder.append(shard.name)                  # the previous copy on Drive
+    return db, svc, shard
+
+
+# 10
+def test_push_shard_uploads_then_deletes_every_stale_copy(tmp_path, monkeypatch):
+    db, svc, shard = _shard(tmp_path, monkeypatch)
+    fake = ShardClient([{"id": "old1", "name": shard.name},
+                        {"id": "old2", "name": shard.name},
+                        {"id": "c0", "name": "chunk-devTEST-0000.zip"}])
+    svc._push_shard(fake, shard, "FOLDER")
+    assert fake.ops[0] == "upload"                   # before any delete
+    assert sorted(fake.ops[2:]) == ["delete old1", "delete old2"]
+    assert fake.files == [{"id": "c0", "name": "chunk-devTEST-0000.zip"},
+                          {"id": "new1", "name": shard.name}]
+    assert svc.log.errors == []
+    db.close()
+
+
+def test_push_shard_keeps_old_copies_when_the_upload_fails(tmp_path, monkeypatch):
+    db, svc, shard = _shard(tmp_path, monkeypatch)
+    fake = ShardClient([{"id": "old1", "name": shard.name}], fail_upload=True)
     svc._push_shard(fake, shard, "FOLDER")           # never raises
-    if fail_upload:
-        assert fake.ops == ["find", "upload"]
-        assert fake.deleted == [] and shard.name in fake._folder   # old one kept
-    else:
-        assert fake.ops == ["find", "upload", "delete"]
-        assert fake.deleted == ["id-" + shard.name]
+    assert fake.ops == ["upload"]
+    assert fake.files == [{"id": "old1", "name": shard.name}]
+    db.close()
+
+
+def test_push_shard_deletes_nothing_without_the_new_id(tmp_path, monkeypatch):
+    db, svc, shard = _shard(tmp_path, monkeypatch)
+    fake = ShardClient([{"id": "old1", "name": shard.name}], new_id="")
+    svc._push_shard(fake, shard, "FOLDER")
+    assert fake.ops == ["upload"]
+    db.close()
+
+
+def test_push_shard_retries_a_failed_delete_next_time(tmp_path, monkeypatch):
+    db, svc, shard = _shard(tmp_path, monkeypatch)
+    fake = ShardClient([{"id": "old1", "name": shard.name},
+                        {"id": "old2", "name": shard.name}], fail_delete={"old2"})
+    svc._push_shard(fake, shard, "FOLDER")
+    assert [f["id"] for f in fake.files] == ["old2", "new1"]
+    assert svc.log.errors == [("drive:shard", "1 of 2 old shard copies not deleted")]
+
+    fake.fail_delete.clear()
+    svc._push_shard(fake, shard, "FOLDER")           # the next backup's push
+    assert [f["id"] for f in fake.files] == ["new2"]
     db.close()
