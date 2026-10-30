@@ -587,15 +587,28 @@ class DashboardTab(QWidget):
         if res.get("disabled"):   # client turned off mid-flight (v1.4) — no dispatch
             self.status.setText(self.ctx.t("sc_client_disabled"))
             return
+        t = self.ctx.t
+        n = res.get("stage_failed", 0)
+        warn = t("import_stage_disk_full" if res.get("disk_full")
+                 else "import_stage_failed", n=n) if n > 0 else ""
+        if warn and res["files"] == 0:   # nothing was staged, so nothing was sent
+            self.status.setText(warn)
+            QMessageBox.warning(self, t("app_title"), warn)
+            return
         if res.get("cancelled"):
-            self.status.setText(self.ctx.t("import_cancelled",
-                                           sent=res.get("sent", 0), total=res["files"]))
+            text = t("import_cancelled", sent=res.get("sent", 0), total=res["files"])
         else:
-            self.status.setText(self.ctx.t("import_done", files=res["files"],
-                                           batches=res["batches"]))
-            # osu! keeps importing in the background after dispatch (item 18).
-            QMessageBox.information(self, self.ctx.t("app_title"),
-                                    self.ctx.t("osu_keep_open"))
+            text = t("import_done", files=res["files"], batches=res["batches"])
+        # osu! keeps importing in the background after dispatch (item 18).
+        keep_open = "" if res.get("cancelled") else t("osu_keep_open")
+        if warn:
+            self.status.setText(text + "  " + warn)
+            QMessageBox.warning(self, t("app_title"),
+                                warn + ("\n\n" + keep_open if keep_open else ""))
+        else:
+            self.status.setText(text)
+            if keep_open:
+                QMessageBox.information(self, t("app_title"), keep_open)
 
     # -- Refresh Library -----------------------------------------------------
     def on_refresh(self) -> None:

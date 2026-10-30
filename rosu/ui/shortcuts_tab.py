@@ -1023,6 +1023,13 @@ class ShortcutsTab(QWidget):
         ex = res.get("extract", {})
         skipped = sum(v.get("skipped", 0) for v in res.get("imports", {}).values())
         self._set_status("sc_unpack_done2", tracks=ex.get("tracks", 0), skipped=skipped)
+        imports = res.get("imports", {}).values()
+        failed = sum(v.get("stage_failed", 0) for v in imports)
+        if failed > 0:
+            t = self.ctx.t
+            key = ("import_stage_disk_full" if any(v.get("disk_full") for v in imports)
+                   else "import_stage_failed")
+            QMessageBox.warning(self, t("app_title"), t(key, n=failed))
         self.mw.search.reload()
 
     def _present_export(self, res) -> None:
