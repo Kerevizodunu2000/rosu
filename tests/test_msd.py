@@ -174,3 +174,24 @@ def test_skillset_bounds_pathological_span():
     res = msd.skillset(notes, 7)
     assert _t.perf_counter() - t0 < 1.0    # returns fast — no runaway loop
     assert res is None                     # span too large → refuse to rate
+
+
+def test_read_mania_notes_overflowing_values():
+    """1e400 reads as inf: an x or time that overflows skips its line, an end that
+    overflows keeps the note with no end; none of them raises."""
+    osu = ("[General]\nMode: 3\n\n[HitObjects]\n"
+           "64,192,1000,1,0,0:0:0:0:\n"
+           "1e400,192,1100,1,0,0:0:0:0:\n"          # x overflows → skipped
+           "64,192,1e400,1,0,0:0:0:0:\n"            # time overflows → skipped
+           "448,192,1200,128,0,1e400:0:0:0:0:\n"    # end overflows → end None
+           f"{'9' * 30},192,1300,1,0,0:0:0:0:\n"    # x beyond 64 bits → skipped
+           f"64,192,1400,{'9' * 30},0,0:0:0:0:\n")  # type beyond 64 bits → skipped
+    assert beatmap.read_mania_notes(osu.encode("utf-8"), 4) == [(1000, 0, None), (1200, 3, None)]
+
+
+def test_msd_for_diffs_with_an_overflowing_note():
+    from rosu.models import DiffMeta
+    raw = _mania_osu_bytes() + b"\n1e400,192,1e400,128,0,1e400:0:0:0:0:\n"
+    out = msd.msd_for_diffs([DiffMeta(filename="m.osu", mode_int=3, keycount=4)], {"m.osu": raw})
+    assert out["m.osu"] == msd.msd_for_diffs(
+        [DiffMeta(filename="m.osu", mode_int=3, keycount=4)], {"m.osu": _mania_osu_bytes()})["m.osu"]

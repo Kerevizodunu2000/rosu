@@ -19,6 +19,7 @@ Reference: https://osu.ppy.sh/wiki/en/Client/File_formats/osu_%28file_format%29
 from __future__ import annotations
 
 import hashlib
+import math
 import zipfile
 from collections import Counter
 from pathlib import Path
@@ -47,6 +48,24 @@ _META_KEYS = {
     "Source": "source",
     "Tags": "tags",
 }
+
+# One rule for every integer read from a .osu: a value outside the signed 64-bit
+# range is malformed (it would overflow SQLite and float maths further on).
+_I64_MIN, _I64_MAX = -(2**63), 2**63 - 1
+
+
+def _int64(value: int) -> int:
+    """``value``, or ``ValueError`` when it is outside the signed 64-bit range."""
+    if not _I64_MIN <= value <= _I64_MAX:
+        raise ValueError("integer out of the 64-bit range")
+    return value
+
+
+def _finite(value: float) -> float:
+    """``value``, or ``ValueError`` for inf/nan (``1e400`` reads as inf)."""
+    if not math.isfinite(value):
+        raise ValueError("non-finite number")
+    return value
 
 
 def _dominant_bpm(beat_lengths: list[float]) -> float | None:
@@ -83,7 +102,7 @@ def parse_osu_sections(text: str) -> dict:
         if section == "General":
             if line.startswith("Mode:"):
                 try:
-                    mode_int = int(line.split(":", 1)[1].strip())
+                    mode_int = _int64(int(line.split(":", 1)[1].strip()))
                 except ValueError:
                     pass
         elif section == "Metadata":
@@ -97,7 +116,7 @@ def parse_osu_sections(text: str) -> dict:
             if ":" in line:
                 key, _, value = line.partition(":")
                 try:
-                    diff_vals[key.strip()] = float(value.strip())
+                    diff_vals[key.strip()] = _finite(float(value.strip()))
                 except ValueError:
                     pass
         elif section == "TimingPoints":
@@ -113,7 +132,7 @@ def parse_osu_sections(text: str) -> dict:
             parts = line.split(",")
             if len(parts) >= 3:
                 try:
-                    last_time = max(last_time, int(parts[2]))
+                    last_time = max(last_time, _int64(int(parts[2])))
                 except ValueError:
                     pass
 
@@ -160,6 +179,8 @@ def read_osu_diff(raw: bytes, filename: str) -> DiffMeta:
     diff = parsed["difficulty"]
     cs = diff.get("CircleSize")
     keycount = round(cs) if (mode_int == 3 and cs is not None) else None
+    if keycount is not None and not _I64_MIN <= keycount <= _I64_MAX:
+        keycount = None   # CircleSize: 1e300 is no key count
     return DiffMeta(
         filename=filename,
         version=parsed["meta"].get("Version"),   # [Metadata] Version = diff name
@@ -210,10 +231,10 @@ def read_mania_notes(raw: bytes, keycount: int) -> list[tuple[int, int, int | No
         if len(parts) < 4:
             continue
         try:
-            x = int(float(parts[0]))
+            x = _int64(int(float(parts[0])))
             time = int(float(parts[2]))
-            otype = int(parts[3])
-        except ValueError:
+            otype = _int64(int(parts[3]))
+        except (ValueError, OverflowError):   # int(inf) overflows: skip like a bad line
             continue
         if time < 0 or time > _MAX_NOTE_TIME_MS:
             continue   # hostile/broken timestamp (DoS guard) — see _MAX_NOTE_TIME_MS
@@ -223,7 +244,7 @@ def read_mania_notes(raw: bytes, keycount: int) -> list[tuple[int, int, int | No
         if otype & 128 and len(parts) >= 6:      # mania hold note (end:hitsample)
             try:
                 end = int(float(parts[5].split(":", 1)[0]))
-            except ValueError:
+            except (ValueError, OverflowError):
                 end = None
             if end is not None and (end < 0 or end > _MAX_NOTE_TIME_MS):
                 end = None
