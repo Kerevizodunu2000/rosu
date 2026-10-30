@@ -61,6 +61,27 @@ def test_drive_source_order(tmp_path):
     db.close()
 
 
+CASE_PAIR = ["a.osz", "B.osz"]   # plain and case-folded order differ; Path order is per platform
+
+
+def test_library_source_case_order_matches_path(tmp_path):
+    cfg, db, svc = _svc(tmp_path)
+    _write(cfg, CASE_PAIR)
+    got = svc._gather_export_sources("library", tmp_path / "stage")
+    assert [p.name for p in got] == [p.name for p in sorted(cfg.library_path.glob("*.osz"))]
+    db.close()
+
+
+def test_drive_source_case_order_matches_path(tmp_path):
+    cfg, db, svc = _svc(tmp_path)
+    _write(cfg, CASE_PAIR)
+    for i, n in enumerate(CASE_PAIR):
+        _add_lib(db, i + 1, n, in_drive=1)
+    got = svc._gather_export_sources("drive", tmp_path / "stage")
+    assert [p.name for p in got] == [p.name for p in sorted(cfg.library_path / n for n in CASE_PAIR)]
+    db.close()
+
+
 def test_export_zip_member_order(tmp_path):
     cfg, db, svc = _svc(tmp_path)
     _write(cfg, NAMES)
