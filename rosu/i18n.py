@@ -632,6 +632,14 @@ STRINGS: dict[str, dict[str, str]] = {
     "drive_connected": {"en": "Connected.", "tr": "Bağlı."},
     "drive_folder_line": {"en": "Backing up into this Drive folder:",
                           "tr": "Yedekleme şu Drive klasörüne yapılıyor:"},
+    "drive_storage_name": {"en": "Google Drive storage",
+                           "tr": "Google Drive depolama alanı"},
+    "drive_storage_line": {
+        "en": "Google Drive: {used} of {total} used · Rosu folder: {rosu} · "
+              "Trash: {trash}",
+        "tr": "Google Drive: {total} alanın {used} kadarı dolu · Rosu klasörü: "
+              "{rosu} · Çöp kutusu: {trash}"},
+    "drive_storage_unlimited": {"en": "Unlimited", "tr": "Sınırsız"},
     "drive_folder_scope_note": {
         "en": "Rosu can only see the files it created itself (the narrow "
               "drive.file permission), so a “Rosu” folder you made by hand — or "
@@ -893,6 +901,31 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "Backup cancelled — {uploaded} tracks in {chunks} archive(s) uploaded.",
         "tr": "Yedek iptal edildi — {uploaded} müzik {chunks} arşiv yüklendi."},
     "drive_backup_failed": {"en": "Drive backup failed.", "tr": "Drive yedeği başarısız."},
+    "drive_full_status": {"en": "Not enough Google Drive space for this backup.",
+                          "tr": "Bu yedek için Google Drive'da yeterli yer yok."},
+    "drive_full_precheck": {
+        "en": "The backup did not start: it needs {needed} on Google Drive, but "
+              "only {free} is free. Drive's trash holds {trash}; emptying it may help.",
+        "tr": "Yedekleme başlamadı: Google Drive'da {needed} gerekiyor ama yalnızca "
+              "{free} boş. Drive'ın çöp kutusunda {trash} var; çöpü boşaltmak "
+              "yardımcı olabilir."},
+    "drive_full_stopped_status": {"en": "Google Drive is full — backup stopped.",
+                                  "tr": "Google Drive dolu — yedekleme durdu."},
+    "drive_full_stopped_individual": {
+        "en": "Google Drive is full. {uploaded} tracks were backed up before the "
+              "backup stopped, and they are kept. Free some space (emptying Drive's "
+              "trash may help) and run the backup again.",
+        "tr": "Google Drive dolu. Yedekleme durmadan önce {uploaded} müzik "
+              "yedeklendi ve bunlar korunuyor. Biraz yer aç (Drive'ın çöp kutusunu "
+              "boşaltmak yardımcı olabilir) ve yedeklemeyi yeniden başlat."},
+    "drive_full_stopped": {
+        "en": "Google Drive is full. {uploaded} tracks in {chunks} archive(s) were "
+              "backed up before the backup stopped, and they are kept. Free some "
+              "space (emptying Drive's trash may help) and run the backup again.",
+        "tr": "Google Drive dolu. Yedekleme durmadan önce {uploaded} müzik {chunks} "
+              "arşiv halinde yedeklendi ve bunlar korunuyor. Biraz yer aç "
+              "(Drive'ın çöp kutusunu boşaltmak yardımcı olabilir) ve yedeklemeyi "
+              "yeniden başlat."},
 
     # Tooltips (item 14)
     "tip_extract": {"en": "Unpack the archives in your Packs folder into Output.",

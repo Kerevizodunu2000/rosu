@@ -220,6 +220,8 @@ class MainWindow(QMainWindow):
             return
         self._prev_index = index
         widget = self.tabs.widget(index)
+        if widget is self.settings:
+            self.settings.refresh_drive_storage()   # "when the panel opens"
         if self.ctx.cfg.auto_refresh_on_tab and hasattr(widget, "on_shown"):
             widget.on_shown()
 

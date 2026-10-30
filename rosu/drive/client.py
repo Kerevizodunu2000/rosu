@@ -18,7 +18,7 @@ import urllib.request
 from pathlib import Path
 from typing import Callable
 
-from .auth import DriveAuth, DriveCancelled, DriveError
+from .auth import DriveAuth, DriveCancelled, DriveError, DriveQuotaExceeded
 
 _API = "https://www.googleapis.com/drive/v3"
 _UPLOAD = "https://www.googleapis.com/upload/drive/v3"
@@ -56,6 +56,19 @@ def _json(data: bytes, context: str) -> dict:
     if not isinstance(payload, dict):
         raise DriveError(f"malformed Drive response ({context})")
     return payload
+
+
+def _upload_error(status: int, body: bytes, message: str) -> DriveError:
+    """A 403 whose reason is ``storageQuotaExceeded`` means the Drive is full;
+    any other failure stays a plain :class:`DriveError`."""
+    if status == 403:
+        try:
+            errors = json.loads(body)["error"]["errors"]
+            if any(e.get("reason") == "storageQuotaExceeded" for e in errors):
+                return DriveQuotaExceeded(message)
+        except (ValueError, KeyError, TypeError, AttributeError):
+            pass
+    return DriveError(message)
 
 
 class DriveClient:
@@ -130,6 +143,26 @@ class DriveClient:
             if not page_token:
                 return files
 
+    def storage_quota(self) -> dict:
+        """The account's storage quota from ``about.get`` (``drive.file`` is
+        enough). ``limit`` is None when the account is unlimited. Drive sends
+        int64 values as JSON strings, hence ``int()``."""
+        _st, _h, data = self._api("GET", "/about?fields=storageQuota")
+        quota = _json(data, "storage quota").get("storageQuota")
+        if not isinstance(quota, dict) or quota.get("usage") is None:
+            raise DriveError("malformed Drive response (storage quota)")
+
+        def num(key: str, missing):
+            value = quota.get(key)
+            # str() first so a float or a bool is rejected, not truncated.
+            return missing if value is None else int(str(value))
+        try:
+            return {"limit": num("limit", None), "usage": num("usage", 0),
+                    "usage_in_drive": num("usageInDrive", 0),
+                    "usage_in_drive_trash": num("usageInDriveTrash", 0)}
+        except ValueError as exc:
+            raise DriveError("malformed Drive response (storage quota)") from exc
+
     def delete_file(self, file_id: str) -> None:
         self._api("DELETE", f"/files/{urllib.parse.quote(file_id)}")
 
@@ -173,7 +206,8 @@ class DriveClient:
                      "X-Upload-Content-Length": str(size)},
             body=meta)
         if not 200 <= status < 300:
-            raise DriveError(f"resumable init failed: {status} {body[:200]!r}")
+            raise _upload_error(status, body,
+                                f"resumable init failed: {status} {body[:200]!r}")
         session = hdrs.get("Location") or hdrs.get("location")
         if not session:
             raise DriveError("resumable upload: no session URI returned")
@@ -201,7 +235,7 @@ class DriveClient:
                     if progress:
                         progress(sent, size)
                     continue
-                raise DriveError(f"upload chunk failed: {st} {bd[:200]!r}")
+                raise _upload_error(st, bd, f"upload chunk failed: {st} {bd[:200]!r}")
         raise DriveError("resumable upload did not complete")
 
     def download_file(self, file_id: str, dest: Path,
