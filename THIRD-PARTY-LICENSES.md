@@ -13,6 +13,12 @@ same list is shown in-app under **Settings → About / Licenses**.
 | [Send2Trash](https://github.com/arsenetar/send2trash) | moving files to the Recycle Bin | BSD-3-Clause |
 | [RapidFuzz](https://github.com/rapidfuzz/RapidFuzz) | fuzzy search ranking | MIT |
 | [rosu-pp-py](https://github.com/MaxOhn/rosu-pp-py) | local per-difficulty star ratings (compiled Rust/PyO3 wheel; import-guarded) | MIT |
+| [PyO3](https://github.com/PyO3/pyo3) (`pyo3`, `pyo3-ffi`) | Rust ↔ Python bindings compiled into Rosu's optional native module `rosu_native_osu_core` (`native/osu_core`) | MIT OR Apache-2.0 |
+| [libc](https://github.com/rust-lang/libc) (`libc`), [once_cell](https://github.com/matklad/once_cell) (`once_cell`) | PyO3 runtime dependencies compiled into `rosu_native_osu_core` | MIT OR Apache-2.0 |
+| [portable-atomic](https://github.com/taiki-e/portable-atomic) (`portable-atomic`) | PyO3 dependency for targets without native atomics; listed in `Cargo.lock` but not compiled into Rosu's Windows build | Apache-2.0 OR MIT |
+| [PyO3](https://github.com/PyO3/pyo3) build crates (`pyo3-macros`, `pyo3-macros-backend`, `pyo3-build-config`), [heck](https://github.com/withoutboats/heck) (`heck`), [proc-macro2](https://github.com/dtolnay/proc-macro2) (`proc-macro2`), [quote](https://github.com/dtolnay/quote) (`quote`), [syn](https://github.com/dtolnay/syn) (`syn`) | build-time only (macros and build script for `rosu_native_osu_core`); not shipped | MIT OR Apache-2.0 |
+| [target-lexicon](https://github.com/bytecodealliance/target-lexicon) (`target-lexicon`) | build-time only (PyO3's build script); not shipped | Apache-2.0 WITH LLVM-exception |
+| [unicode-ident](https://github.com/dtolnay/unicode-ident) (`unicode-ident`) | build-time only (used by the macro crates); not shipped | (MIT OR Apache-2.0) AND Unicode-3.0 |
 | [keyring](https://github.com/jaraco/keyring) | OS-native credential storage for the Google Drive OAuth refresh token | MIT |
 | [pywin32-ctypes](https://github.com/enthought/pywin32-ctypes) | keyring's Windows Credential Manager backend | BSD-3-Clause |
 | [jaraco.classes](https://github.com/jaraco/jaraco.classes), [jaraco.functools](https://github.com/jaraco/jaraco.functools), [jaraco.context](https://github.com/jaraco/jaraco.context), [more-itertools](https://github.com/more-itertools/more-itertools) | small utility libraries required by keyring | MIT |

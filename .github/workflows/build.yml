@@ -20,7 +20,33 @@ jobs:
           python-version: '3.14'
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
+      - name: Install the Rust toolchain
+        run: |
+          rustup toolchain install stable --profile minimal --component clippy,rustfmt
+          rustup default stable
+      - name: Check the native module (fmt, clippy, cargo test)
+        working-directory: native/osu_core
+        run: |
+          cargo fmt --check
+          cargo clippy --all-targets -- -D warnings
+          cargo test
+      - name: Check the native module's dependencies (cargo deny)
+        working-directory: native/osu_core
+        run: |
+          cargo install --locked cargo-deny@0.20.2
+          cargo deny check
+      - name: Build the native module wheel (abi3)
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
+        with:
+          working-directory: native/osu_core
+          maturin-version: v1.16.0
+          command: build
+          args: --release --out target/wheels
+      - name: Install the native module wheel
+        run: pip install --no-index --find-links native/osu_core/target/wheels rosu-native-osu-core
       - name: Run tests
+        env:
+          ROSU_REQUIRE_NATIVE: "1"
         run: python -m pytest tests/ -q
       - name: Embed OAuth client for Drive (from secret, if present)
         shell: bash
@@ -48,6 +74,9 @@ jobs:
         run: python tools/fetch_fpcalc.py windows
       - name: Build single .exe
         run: pyinstaller rosu.spec
+      - name: Check the exe bundles the native module
+        shell: bash
+        run: pyi-archive_viewer --list --recursive --brief dist/rosu.exe | grep rosu_native_osu_core
       - name: Smoke-test the frozen build
         run: dist/rosu.exe --selftest
       - name: Upload build artifact
