@@ -26,6 +26,10 @@ the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   refuse before writing anything, with a message naming the drive, the space needed and
   the space free. A disk that fills up during the run stops it cleanly with "disk full":
   beatmaps already written stay, and the archive stays in Packs.
+- **Export** and **Import to osu!** check the free space first and refuse before writing
+  anything, with a message naming the drive. A disk that fills up during an export stops
+  it cleanly: the archives already finished are kept and nothing is uploaded. Moving loose
+  `.osz` from Packs to Output on another drive is checked too.
 
 ### Changed
 - Library refresh and other lookups by file name are faster on large libraries.
@@ -35,6 +39,8 @@ the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and progress bars.
 
 ### Fixed
+- A refused or disk-full **Unpack** from the Shortcuts tab no longer goes on to send
+  Output to osu!: the job shows as failed and says which drive is short.
 - Turning off the Library's physical copy and removing duplicates no longer delete files
   for good when the Library is on a drive without a Recycle Bin: nothing is deleted and
   Rosu says why. A Recycle Bin turned off for a drive now counts as no Recycle Bin, and a

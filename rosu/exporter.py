@@ -19,6 +19,8 @@ from __future__ import annotations
 import zipfile
 from pathlib import Path
 
+from . import diskspace
+
 
 def plan_volumes(sizes: list[int], split_bytes: int | None) -> list[list[int]]:
     """Group item indices (0..len(sizes)-1) into volumes whose summed size
@@ -145,7 +147,8 @@ def write_export(files: list[Path], dest_base: Path, fmt: str = "zip",
     given, it is called after every member with
     ``{"kind": "export", "done", "total", "name"}``. ``cancel`` (a no-arg
     predicate) is polled before each volume; when it returns True writing stops
-    and the volumes finished so far are returned.
+    and the volumes finished so far are returned. A disk-full ``OSError``
+    re-raises with those volumes attached as ``exc.written``.
     """
     if fmt not in ("zip", "7z"):
         raise ValueError(f"unsupported export format: {fmt!r}")
@@ -176,8 +179,14 @@ def write_export(files: list[Path], dest_base: Path, fmt: str = "zip",
             out_path = dest_base.parent / (
                 f"{dest_base.name}.part{vol_num:0{width}d}{suffix}")
         members = [(names[i], existing[i]) for i in vol]
-        if not _write_volume(members, out_path, fmt, progress, cancel,
-                             counter, total, prune_mode=prune_mode):
+        try:
+            ok = _write_volume(members, out_path, fmt, progress, cancel,
+                               counter, total, prune_mode=prune_mode)
+        except OSError as exc:
+            if diskspace.is_disk_full(exc):
+                exc.written = written   # the finished volumes stay, as on a cancel
+            raise
+        if not ok:
             break   # cancelled mid-volume — stop, keep the volumes finished so far
         written.append(out_path)
     return written

@@ -105,6 +105,10 @@ class ExtractMixin:
                     tracks = []   # unreadable: the loop below keeps and reports it
                 total += len(tracks)
                 need_out += sum(t.size_bytes for t in tracks)
+            # loose .osz are moved to Output at the end: a copy across drives
+            if (diskspace.space(self.cfg.packs_path, 0).drive
+                    != diskspace.space(self.cfg.output_path, 0).drive):
+                need_out += sum(p.stat().st_size for p in self.cfg.packs_path.glob("*.osz"))
             for where, need, staging in ((self.cfg.output_path, need_out, False),
                                          (tempfile.gettempdir(), largest_7z, True)):
                 sp = diskspace.space(where, need) if need > 0 else None

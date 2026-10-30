@@ -36,6 +36,22 @@ def space(path, need: int, margin: int = MARGIN) -> Space:
     return Space(usage.free, usage.total, usage.free >= need + margin, p.anchor)
 
 
+def shortfall(places, margin: int = MARGIN) -> dict | None:
+    """Check ``(path, need)`` places at once: needs on the same drive add up and
+    each drive is checked once. ``None`` when every drive fits, else
+    ``{"drive", "need" (with the margin), "free"}`` for the first that doesn't.
+    A place with ``need <= 0`` is ignored; an unreadable drive never blocks."""
+    drives: dict[str, list] = {}
+    for path, need in places:
+        if need > 0:
+            drives.setdefault(space(path, 0).drive, [path, 0])[1] += need
+    for path, need in drives.values():
+        sp = space(path, need, margin)
+        if not sp.fits:
+            return {"drive": sp.drive, "need": need + margin, "free": sp.free}
+    return None
+
+
 def is_disk_full(exc: BaseException) -> bool:
     """True for an OSError meaning "no space left": ENOSPC, or Windows
     ERROR_DISK_FULL (112) / ERROR_HANDLE_DISK_FULL (39)."""
