@@ -34,7 +34,7 @@ def download_osz(beatmapset_id: int, dest_path: Path | str, progress=None) -> bo
                 return False
             downloaded = 0
 
-            with NamedTemporaryFile(delete=False, suffix=".osz", dir=Path(dest_path).parent) as tmp:
+            with NamedTemporaryFile(delete=False, suffix=".osz.part", dir=Path(dest_path).parent) as tmp:
                 tmp_path = Path(tmp.name)
                 while True:
                     chunk = resp.read(8192)

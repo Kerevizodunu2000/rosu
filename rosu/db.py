@@ -853,15 +853,21 @@ class Database:
             return self._conn.execute(
                 "SELECT * FROM tracks WHERE filename=?", (filename,)).fetchone()
 
-    def mark_library_memory(self, when: str) -> int:
+    def mark_library_memory(self, when: str, filenames=None) -> int:
         """After the physical .osz copies are deleted, keep the rows but mark them
-        memory-only (item 17). Returns how many rows changed."""
+        memory-only (item 17). ``filenames`` limits it to those Library files
+        (None: every row). Returns how many rows changed."""
+        sql = ("UPDATE tracks SET in_library=0, library_status='memory', "
+               "status_changed_at=? WHERE in_library=1")
         with self._lock:
-            cur = self._conn.execute(
-                "UPDATE tracks SET in_library=0, library_status='memory', "
-                "status_changed_at=? WHERE in_library=1", (when,))
+            if filenames is None:
+                changed = self._conn.execute(sql, (when,)).rowcount
+            else:
+                # One statement per name: a Library can exceed SQLite's variable limit.
+                changed = self._conn.executemany(  # rowcount sums every run
+                    sql + " AND filename=?", [(when, fn) for fn in filenames]).rowcount
             self._conn.commit()
-            return cur.rowcount
+            return changed
 
     def library_tracks(self) -> list[dict]:
         with self._lock:

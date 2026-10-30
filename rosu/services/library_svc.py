@@ -30,19 +30,21 @@ class LibraryMixin:
 
         def purge_library_files(self, progress=None) -> dict:
             """Move every physical .osz in Library to the Recycle Bin but keep the
-            rows as memory-only (item 17). Metadata stays; the files go."""
+            rows as memory-only (item 17). Metadata stays; the files go. Only
+            the rows whose file actually reached the Recycle Bin are marked."""
             from send2trash import send2trash
-            deleted = 0
+            trashed: list[str] = []
             files = list(self.cfg.library_path.glob("*.osz"))
             for i, p in enumerate(files, 1):
                 try:
                     send2trash(str(p))
-                    deleted += 1
-                except OSError:
-                    pass
+                    trashed.append(p.name)
+                except Exception:
+                    pass   # still on disk: its row stays in the Library
                 if progress:
                     progress({"kind": "purge", "done": i, "total": len(files)})
-            self.db.mark_library_memory(now_iso())
+            deleted = len(trashed)
+            self.db.mark_library_memory(now_iso(), trashed)
             self.rebuild()
             self.log.info("LIBRARY_PURGE", deleted=deleted)
             return {"deleted": deleted}
