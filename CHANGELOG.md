@@ -15,6 +15,10 @@ the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   downloads it in the background, checks its signature and SHA-256, and installs it when
   you click **Restart now** (or on the next start). A new version that fails to start is
   rolled back and skipped. Turn it off with **Install updates automatically** in Settings.
+- Settings shows how much of your Google Drive storage is used, how much Rosu's folder
+  takes and how much is in Drive's trash. A Drive backup now checks for free space first
+  and doesn't start when the upload won't fit. If Drive fills up during a backup, it
+  stops cleanly and keeps everything uploaded so far; run it again after freeing space.
 
 ### Changed
 - Library refresh and other lookups by file name are faster on large libraries.
