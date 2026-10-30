@@ -1145,10 +1145,19 @@ class ShortcutsTab(QWidget):
         self.on_shown()   # refresh the counts even after a failure
 
     def _present_dedup(self, res) -> None:
-        if res.get("removed", 0) == 0:
+        if res.get("error") == "no_recycle_bin":
+            self._set_status("lib_err_no_recycle_bin")
+            return
+        removed, kept = res.get("removed", 0), res.get("too_large", 0)
+        if removed and kept:
+            self._set_status("sc_dedup_done_kept", removed=removed,
+                             freed=_fmt_size(res["freed_bytes"]), n=kept)
+        elif kept:
+            self._set_status("lib_kept_too_large", n=kept)
+        elif removed == 0:
             self._set_status("sc_dedup_none")
         else:
-            self._set_status("sc_dedup_done", removed=res["removed"],
+            self._set_status("sc_dedup_done", removed=removed,
                              freed=_fmt_size(res["freed_bytes"]))
 
     def _present_restore(self, res) -> None:

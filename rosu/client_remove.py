@@ -115,18 +115,81 @@ def resolve_stable_folder(songs_dir: Path, name: str) -> Path | None:
     return target if is_set_folder(target) else None
 
 
-def recycle_bin_available(path: Path) -> bool:
-    """Will the Recycle Bin take files deleted under ``path``? Only fixed local
-    drives have one; on a removable or network drive Windows deletes for good
-    without asking (send2trash suppresses the prompt). Non-Windows: True."""
-    if sys.platform != "win32":
-        return True
+_BITBUCKET = r"Software\Microsoft\Windows\CurrentVersion\Explorer\BitBucket\Volume"
+
+
+def _volume_bin(path: Path) -> dict:
+    """Windows only: the drive type and the per-user Recycle Bin settings of the
+    volume holding ``path``. Reads the registry (KEY_READ), never writes it."""
     import ctypes
+    import shutil
+    import winreg
+    from ctypes import wintypes
+    k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    k32.GetDriveTypeW.argtypes = [wintypes.LPCWSTR]
+    k32.GetDriveTypeW.restype = wintypes.UINT
+    k32.GetVolumePathNameW.argtypes = [wintypes.LPCWSTR, wintypes.LPWSTR, wintypes.DWORD]
+    k32.GetVolumePathNameW.restype = wintypes.BOOL
+    k32.GetVolumeNameForVolumeMountPointW.argtypes = [wintypes.LPCWSTR, wintypes.LPWSTR,
+                                                      wintypes.DWORD]
+    k32.GetVolumeNameForVolumeMountPointW.restype = wintypes.BOOL
     try:
-        drive = os.path.splitdrive(str(Path(path).resolve()))[0]
-        if not drive or drive.startswith("\\\\"):
-            return False   # UNC share: never a Recycle Bin
-        return ctypes.windll.kernel32.GetDriveTypeW(drive + "\\") == 3   # DRIVE_FIXED
+        resolved = str(Path(path).resolve())
+        mount = ctypes.create_unicode_buffer(32768)   # MAX path length in wide chars
+        if not k32.GetVolumePathNameW(resolved, mount, len(mount)):
+            raise ctypes.WinError(ctypes.get_last_error())
+        # The volume's own mount point, not the drive letter: a USB stick mounted into
+        # a folder on C: is removable. A UNC share is DRIVE_REMOTE: never a Recycle Bin.
+        fixed = k32.GetDriveTypeW(mount.value) == 3   # DRIVE_FIXED
+        name = ctypes.create_unicode_buffer(64)   # "\\?\Volume{GUID}\" is 49 chars
+        if not k32.GetVolumeNameForVolumeMountPointW(mount.value, name, len(name)):
+            raise ctypes.WinError(ctypes.get_last_error())
+        guid = name.value[name.value.index("{"):name.value.index("}") + 1]
+        values: dict[str, int | None] = {"NukeOnDelete": None, "MaxCapacity": None}
+        try:
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, _BITBUCKET + "\\" + guid,
+                                0, winreg.KEY_READ) as key:
+                for v in values:
+                    try:
+                        values[v] = int(winreg.QueryValueEx(key, v)[0])
+                    except FileNotFoundError:
+                        pass   # missing value: the Windows default
+        except FileNotFoundError:
+            pass   # missing key: the Windows defaults
+        return {"fixed": fixed, "nuke": values["NukeOnDelete"],
+                "max_mb": values["MaxCapacity"], "total": shutil.disk_usage(mount.value).total}
+    except (ctypes.ArgumentError, ValueError, TypeError) as exc:
+        # a wrong ctypes signature or an odd registry value: fail closed
+        raise OSError(f"Recycle Bin settings unreadable: {exc}") from exc
+
+
+def recycle_bin_available(path: Path, reader=None) -> bool:
+    """Will the Recycle Bin take files deleted under ``path``? Only on a fixed local
+    drive whose bin is not turned off (``NukeOnDelete``); elsewhere Windows deletes
+    for good without asking (send2trash suppresses the prompt). Errors: False.
+    Non-Windows without a ``reader``: True."""
+    if reader is None and sys.platform != "win32":
+        return True
+    try:
+        info = (reader or _volume_bin)(path)
+        return bool(info["fixed"]) and not info["nuke"]
+    except (OSError, AttributeError):
+        return False
+
+
+def recycle_bin_fits(path: Path, reader=None) -> bool:
+    """Does ``path`` (a file, or a folder's total) fit in its volume's Recycle Bin?
+    The limit is ``MaxCapacity`` MB, or 5% of the volume when unset; a bigger item
+    Windows deletes for good. Errors: False. Non-Windows without a ``reader``: True."""
+    if reader is None and sys.platform != "win32":
+        return True
+    try:
+        info = (reader or _volume_bin)(path)
+        p = Path(path)
+        size = folder_size(p) if p.is_dir() else p.stat().st_size
+        limit = (info["max_mb"] * 1024 * 1024 if info["max_mb"] is not None
+                 else info["total"] * 5 // 100)
+        return size <= limit
     except (OSError, AttributeError):
         return False
 
