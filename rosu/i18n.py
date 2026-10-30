@@ -104,9 +104,9 @@ STRINGS: dict[str, dict[str, str]] = {
     "btn_browse_archives": {"en": "Choose archives…", "tr": "Arşiv seç…"},
     "btn_purge_known": {"en": "Remove already-added", "tr": "Eklenmişleri kaldır"},
     "tip_purge_known": {
-        "en": "Recycle / move / delete the archives already in your library "
+        "en": "Recycle / move the archives fully added to your library "
               "(uses your 'Processed .zip action' setting).",
-        "tr": "Zaten kütüphanende olan arşivleri geri dönüşüme taşı / sil "
+        "tr": "Tamamen kütüphanende olan arşivleri geri dönüşüme gönder / taşı "
               "('İşlenen .zip işlemi' ayarını kullanır)."},
     "purge_known_confirm": {
         "en": "Remove {n} already-added archive(s) from Packs? Uses your "
@@ -128,6 +128,10 @@ STRINGS: dict[str, dict[str, str]] = {
               "Library'nde yedekli ve osu!'ya aktarılmış durumdalar."},
     "clear_output_done": {"en": "Cleared {n} file(s) from Output.",
                           "tr": "Output'tan {n} dosya temizlendi."},
+    "disposal_kept": {"en": "Kept {n} file(s) instead of removing them; the Logs tab "
+                            "says why.",
+                      "tr": "{n} dosya kaldırılmak yerine tutuldu; nedeni Loglar "
+                            "sekmesinde."},
     "nothing_to_unpack": {
         "en": "Nothing new to unpack — everything in Packs is already added. "
               "Choose archives to import, or use 'Remove already-added'.",
@@ -245,7 +249,6 @@ STRINGS: dict[str, dict[str, str]] = {
     "set_zip_disposal": {"en": "Processed .zip action", "tr": "İşlenen .zip işlemi"},
     "zip_recycle": {"en": "Move to Recycle Bin", "tr": "Geri Dönüşüm Kutusu'na taşı"},
     "zip_move": {"en": "Move to Processed/", "tr": "Processed/ klasörüne taşı"},
-    "zip_delete": {"en": "Delete permanently", "tr": "Kalıcı sil"},
     "zip_drive": {"en": "Upload to Drive & remove locally",
                   "tr": "Drive'a yükle & lokalden kaldır"},
     "btn_browse": {"en": "Browse…", "tr": "Gözat…"},

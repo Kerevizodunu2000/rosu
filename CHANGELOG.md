@@ -10,6 +10,25 @@ the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+- An archive is removed from Packs only after every beatmap in it was extracted. A
+  cancelled Unpack, a beatmap that failed to extract or one with a name Rosu can't read
+  now keeps the archive (the Logs tab says why), and the track count shows what was
+  really extracted.
+- One corrupt or unreadable archive no longer stops the whole Unpack: it is skipped and
+  left in Packs.
+- On a drive with no Recycle Bin (removable, network), Rosu no longer removes archives or
+  Output files for good: they are kept and the Dashboard says how many.
+- **Remove already-added** removes an archive only when every beatmap in it is in the
+  library; a partly added or unreadable archive stays.
+- A loose `.osz` that replaces a file already in Output sends the old one to the Recycle
+  Bin instead of deleting it.
+- An export named with a dot (`my.maps.zip`) is written under that name, not `my.zip`.
+
+### Removed
+- The **Delete permanently** processed-archive action. Existing settings switch to
+  Recycle Bin.
+
 ## [1.10.0] - 2026-10-20
 
 **Find the same song across different sets — by listening to it.**
