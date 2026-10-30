@@ -13,7 +13,7 @@ from __future__ import annotations
 PALETTES: dict[str, dict[str, str]] = {
     "dark": dict(
         bg="#181825", surface="#262638", table="#202032", alt="#262638",
-        text="#e6e6f0", muted="#a8a8c0", border="#313244",
+        text="#e6e6f0", muted="#a8a8c0", border="#313244", bar_border="#313244",
         accent="#ff6aa2", accent_text="#1a1a26", accent_hover="#ff85b5",
         secondary="#313244", secondary_text="#e6e6f0",
         header_bg="#2f2f47", header_text="#c8c8e0",
@@ -21,33 +21,33 @@ PALETTES: dict[str, dict[str, str]] = {
         banner_bg="#402633", banner_text="#ffb3cd", banner_border="#ff6aa2"),
     "white": dict(
         bg="#f7f7fb", surface="#ffffff", table="#ffffff", alt="#f4f4fa",
-        text="#1e1e2e", muted="#77778c", border="#e0e0ea",
-        accent="#ff5a97", accent_text="#ffffff", accent_hover="#ff74a9",
+        text="#1e1e2e", muted="#6d6d81", border="#e0e0ea", bar_border="#8d8d93",
+        accent="#ed548c", accent_text="#ffffff", accent_hover="#e66898",
         secondary="#e6e6ef", secondary_text="#1e1e2e",
         header_bg="#f0f0f6", header_text="#55556a",
-        sel_bg="#ff5a97", sel_text="#ffffff",
+        sel_bg="#ed548c", sel_text="#ffffff",
         banner_bg="#ffe6ee", banner_text="#b02864", banner_border="#ff8ab5"),
     "pink": dict(
         bg="#ffe3ef", surface="#fff7fb", table="#fff7fb", alt="#ffeef5",
-        text="#3d1f2e", muted="#94577a", border="#ffbdd6",
-        accent="#ff4f92", accent_text="#ffffff", accent_hover="#ff69a3",
+        text="#3d1f2e", muted="#915578", border="#ffbdd6", bar_border="#a37989",
+        accent="#fa4d8f", accent_text="#ffffff", accent_hover="#ed6298",
         secondary="#ffd0e2", secondary_text="#7a2f4f",
         header_bg="#ffe0ec", header_text="#a5326a",
-        sel_bg="#ff4f92", sel_text="#ffffff",
+        sel_bg="#fa4d8f", sel_text="#ffffff",
         banner_bg="#ffd0e0", banner_text="#a51f57", banner_border="#ff4f92"),
     # Pink · Light — clearly pink (surfaces are pink-tinted, not the white theme's
     # pure #ffffff), so it no longer reads like the White theme (item 2).
     "pink-white": dict(
         bg="#ffe7f1", surface="#fff4f9", table="#fff4f9", alt="#ffdcec",
-        text="#3d1f2e", muted="#9a5b7a", border="#ffbcd6",
-        accent="#ff3d86", accent_text="#ffffff", accent_hover="#ff5f9c",
+        text="#3d1f2e", muted="#8e5470", border="#ffbcd6", bar_border="#a67a8b",
+        accent="#ff3d86", accent_text="#ffffff", accent_hover="#f55b96",
         secondary="#ffd0e2", secondary_text="#7a2f4f",
         header_bg="#ffd2e5", header_text="#a5326a",
         sel_bg="#ff3d86", sel_text="#ffffff",
         banner_bg="#ffd0e0", banner_text="#a51f57", banner_border="#ff5f9c"),
     "pink-dark": dict(
         bg="#201019", surface="#2c1826", table="#281624", alt="#331b2c",
-        text="#ffe3ef", muted="#c893ad", border="#452638",
+        text="#ffe3ef", muted="#c893ad", border="#452638", bar_border="#452638",
         accent="#ff4f92", accent_text="#201019", accent_hover="#ff69a3",
         secondary="#3a2030", secondary_text="#ffd0e2",
         header_bg="#3a2030", header_text="#ffb3d1",
@@ -56,7 +56,7 @@ PALETTES: dict[str, dict[str, str]] = {
     # Pink · Darker — deeper than pink-dark: near-black with a rose undertone (item 23).
     "pink-darker": dict(
         bg="#140a10", surface="#1f0e18", table="#1a0c14", alt="#250f1b",
-        text="#ffd9e8", muted="#b87f9a", border="#3a1c2c",
+        text="#ffd9e8", muted="#b87f9a", border="#3a1c2c", bar_border="#3a1c2c",
         accent="#ff3d86", accent_text="#140a10", accent_hover="#ff5f9c",
         secondary="#2a1420", secondary_text="#ffc2da",
         header_bg="#2a1420", header_text="#ff9dc2",
@@ -64,7 +64,7 @@ PALETTES: dict[str, dict[str, str]] = {
         banner_bg="#2a1420", banner_text="#ff9dc2", banner_border="#ff3d86"),
     "nord": dict(
         bg="#2e3440", surface="#3b4252", table="#2e3440", alt="#3b4252",
-        text="#eceff4", muted="#aab1c2", border="#434c5e",
+        text="#eceff4", muted="#aab1c2", border="#434c5e", bar_border="#434c5e",
         accent="#88c0d0", accent_text="#2e3440", accent_hover="#8fbcbb",
         secondary="#434c5e", secondary_text="#eceff4",
         header_bg="#434c5e", header_text="#d8dee9",
@@ -72,7 +72,7 @@ PALETTES: dict[str, dict[str, str]] = {
         banner_bg="#4c566a", banner_text="#e5e9f0", banner_border="#bf616a"),
     "dracula": dict(
         bg="#282a36", surface="#343746", table="#282a36", alt="#2f3240",
-        text="#f8f8f2", muted="#9aa0c0", border="#44475a",
+        text="#f8f8f2", muted="#9aa0c0", border="#44475a", bar_border="#44475a",
         accent="#bd93f9", accent_text="#282a36", accent_hover="#ff79c6",
         secondary="#44475a", secondary_text="#f8f8f2",
         header_bg="#44475a", header_text="#f8f8f2",
@@ -80,7 +80,7 @@ PALETTES: dict[str, dict[str, str]] = {
         banner_bg="#44475a", banner_text="#ff79c6", banner_border="#ff5555"),
     "catppuccin-mocha": dict(
         bg="#1e1e2e", surface="#313244", table="#1e1e2e", alt="#232336",
-        text="#cdd6f4", muted="#a6adc8", border="#45475a",
+        text="#cdd6f4", muted="#a6adc8", border="#45475a", bar_border="#45475a",
         accent="#f5c2e7", accent_text="#1e1e2e", accent_hover="#cba6f7",
         secondary="#313244", secondary_text="#cdd6f4",
         header_bg="#313244", header_text="#bac2de",
@@ -88,15 +88,15 @@ PALETTES: dict[str, dict[str, str]] = {
         banner_bg="#45475a", banner_text="#f5c2e7", banner_border="#f38ba8"),
     "catppuccin-latte": dict(
         bg="#eff1f5", surface="#ffffff", table="#ffffff", alt="#e6e9ef",
-        text="#4c4f69", muted="#6c6f85", border="#ccd0da",
-        accent="#ea76cb", accent_text="#ffffff", accent_hover="#8839ef",
+        text="#4c4f69", muted="#64677c", border="#ccd0da", bar_border="#878990",
+        accent="#ce68b3", accent_text="#ffffff", accent_hover="#8839ef",
         secondary="#e6e9ef", secondary_text="#4c4f69",
         header_bg="#e6e9ef", header_text="#5c5f77",
-        sel_bg="#ea76cb", sel_text="#ffffff",
+        sel_bg="#ce68b3", sel_text="#ffffff",
         banner_bg="#f7dff0", banner_text="#d20f39", banner_border="#ea76cb"),
     "solarized-dark": dict(
         bg="#002b36", surface="#073642", table="#002b36", alt="#073642",
-        text="#93a1a1", muted="#839496", border="#586e75",
+        text="#93a1a1", muted="#839496", border="#586e75", bar_border="#586e75",
         accent="#268bd2", accent_text="#fdf6e3", accent_hover="#2aa198",
         secondary="#073642", secondary_text="#93a1a1",
         header_bg="#073642", header_text="#93a1a1",
@@ -104,8 +104,8 @@ PALETTES: dict[str, dict[str, str]] = {
         banner_bg="#073642", banner_text="#b58900", banner_border="#dc322f"),
     "solarized-light": dict(
         bg="#fdf6e3", surface="#ffffff", table="#fdf6e3", alt="#eee8d5",
-        text="#586e75", muted="#657b83", border="#ded8c0",
-        accent="#268bd2", accent_text="#fdf6e3", accent_hover="#2aa198",
+        text="#586e75", muted="#586b72", border="#ded8c0", bar_border="#908c7d",
+        accent="#268bd2", accent_text="#fdf6e3", accent_hover="#299c93",
         secondary="#eee8d5", secondary_text="#586e75",
         header_bg="#eee8d5", header_text="#586e75",
         sel_bg="#268bd2", sel_text="#fdf6e3",
@@ -158,7 +158,7 @@ QHeaderView::section {{ background-color: {header_bg}; color: {header_text};
     padding: 6px; border: none; border-right: 1px solid {border}; font-weight: 600; }}
 QTableCornerButton::section {{ background: {header_bg}; border: none; }}
 
-QProgressBar {{ border: 1px solid {border}; border-radius: 6px;
+QProgressBar {{ border: 1px solid {bar_border}; border-radius: 6px;
     background: {surface}; text-align: center; color: {text}; }}
 QProgressBar::chunk {{ background-color: {accent}; border-radius: 5px; }}
 
