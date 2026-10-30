@@ -116,6 +116,7 @@ def test_unpack_refused_up_front_writes_nothing(svc, trashed, free):
     res = svc.extract([(path, parsed)])
     assert res["no_space"] == {"drive": svc.cfg.output_path.resolve().anchor,
                                "need": 1030 + diskspace.MARGIN, "free": 1 * MiB}
+    assert "staging" not in res["no_space"]
     assert res["packs"] == 0 and res["tracks"] == 0 and res["kept"] == 1
     assert _names(svc.cfg.output_path) == ["9 Old - Map.osz"]
     assert _counts(svc) == before
@@ -130,6 +131,7 @@ def test_7z_refused_when_temp_folder_is_short(svc, trashed, free):
     res = svc.extract([(path, parsed)])
     assert res["no_space"]["free"] == 1 * MiB
     assert res["no_space"]["need"] == 1030 + diskspace.MARGIN
+    assert res["no_space"]["staging"] is True   # the Dashboard names the temp folder
     assert _names(svc.cfg.output_path) == []
     assert _names(tempfile.gettempdir()) == []
     assert _counts(svc) == {"packs": 0, "tracks": 0, "track_sources": 0}
@@ -143,11 +145,8 @@ def test_7z_with_room_extracts(svc, trashed, free):
     assert "no_space" not in res and res["tracks"] == 3
 
 
-def test_unpack_stops_on_a_full_disk(svc, trashed, free, monkeypatch):
-    svc.cfg.auto_backup_after_extract = True
-    path, parsed = _pack(svc)
-    free(5_000 * MiB)
-    written = []
+def _full_on(monkeypatch, part_name, written):
+    """``Path.open`` for ``part_name`` writes 5 bytes, then raises ENOSPC."""
     real_open = Path.open
 
     class FullAfterSomeBytes:
@@ -168,11 +167,19 @@ def test_unpack_stops_on_a_full_disk(svc, trashed, free, monkeypatch):
 
     def fake_open(self, mode="r", *a, **k):
         f = real_open(self, mode, *a, **k)
-        if self.name == "2 C - D.osz.part" and "w" in mode:
+        if self.name == part_name and "w" in mode:
             return FullAfterSomeBytes(f)
         return f
 
     monkeypatch.setattr(Path, "open", fake_open)
+
+
+def test_unpack_stops_on_a_full_disk(svc, trashed, free, monkeypatch):
+    svc.cfg.auto_backup_after_extract = True
+    path, parsed = _pack(svc)
+    free(5_000 * MiB)
+    written = []
+    _full_on(monkeypatch, "2 C - D.osz.part", written)
     res = svc.extract([(path, parsed)])
     assert written == [5]                                   # bytes reached the .part
     out = svc.cfg.output_path
@@ -183,9 +190,22 @@ def test_unpack_stops_on_a_full_disk(svc, trashed, free, monkeypatch):
     assert not (out / "3 E - F.osz").exists()               # never attempted
     assert path.exists() and trashed == []
     assert res["disk_full"] is True and res["kept"] == 1
+    assert res["full_drive"] == out.resolve().anchor        # the root, never a path
     assert "backup" not in res
     assert _names(svc.cfg.library_path) == []               # auto-copy skipped
-    assert any("disk is full" in w for w in svc.log.warns)
+    assert any("is full; Unpack stopped" in w for w in svc.log.warns)
+
+
+def test_disk_full_counts_only_the_packs_reached(svc, trashed, free, monkeypatch):
+    first, p1 = _pack(svc)
+    second, p2 = _pack(svc, name="S9 - Other.zip", entries=(("7 G - H.osz", 10),))
+    free(5_000 * MiB)
+    _full_on(monkeypatch, "2 C - D.osz.part", [])
+    res = svc.extract([(first, p1), (second, p2)])
+    assert res["disk_full"] is True
+    assert res["packs"] == 1 and res["tracks"] == 1          # the second was never started
+    assert first.exists() and second.exists() and trashed == []
+    assert not (svc.cfg.output_path / "7 G - H.osz").exists()
 
 
 def test_7z_staging_disk_full_stops_unpack(svc, trashed, free, monkeypatch):
@@ -201,6 +221,7 @@ def test_7z_staging_disk_full_stops_unpack(svc, trashed, free, monkeypatch):
     monkeypatch.setattr(py7zr.SevenZipFile, "extractall", full)
     res = svc.extract([(path, parsed)])
     assert res["disk_full"] is True
+    assert res["full_drive"] == Path(tempfile.gettempdir()).resolve().anchor
     assert path.exists() and trashed == []
     assert _names(svc.cfg.output_path) == []
     assert _names(tempfile.gettempdir()) == []              # staging cleaned up
@@ -275,7 +296,7 @@ def test_copy_stops_on_a_full_disk(svc, free, monkeypatch):
     assert svc.db.find_track_row(1, "1 A - B.osz")["in_library"] == 1
     _assert_output(svc, files)
     assert svc.copy_library() == {"new": 0, "duplicates": 0, "dup_ids": [],
-                                  "disk_full": True}
+                                  "disk_full": True, "full_drive": lib.resolve().anchor}
     assert not list(lib.glob("*.part"))
 
 
@@ -292,6 +313,23 @@ def test_refresh_failure_keeps_the_old_library_file(svc, free, monkeypatch, exc)
     assert (lib / "1 A - B.osz").read_bytes() == b"X" * 50
     assert _names(lib) == ["1 A - B.osz"]
     _assert_output(svc, files)
+
+
+def test_failed_part_cleanup_does_not_mask_the_copy_error(svc, free, monkeypatch):
+    _output(svc, files=(("1 A - B.osz", b"a" * 100),))
+    free(5_000 * MiB)
+    _failing_copy2(monkeypatch, _enospc())
+    real_unlink = Path.unlink
+
+    def stuck(self, *a, **k):
+        if self.name.endswith(".part"):
+            raise PermissionError(errno.EACCES, "in use")
+        return real_unlink(self, *a, **k)
+
+    monkeypatch.setattr(Path, "unlink", stuck)
+    with pytest.raises(OSError) as ei:
+        _copy(svc)
+    assert ei.value.errno == errno.ENOSPC                     # not the unlink's EACCES
 
 
 def test_other_copy_errors_still_propagate(svc, free, monkeypatch):
@@ -323,30 +361,40 @@ def test_dashboard_shows_space_messages(qapp, tmp_path, monkeypatch):
                         lambda *a, **k: warned.append(a))
     d, t = win.dashboard, ctx.t
     ns = {"drive": "D:\\", "need": 300 * MiB, "free": 1 * MiB}
+    ns_temp = {**ns, "drive": "C:\\", "staging": True}
     base = {"packs": 1, "tracks": 1, "rejected": [], "loose": 0, "kept": 0}
     keys = ("disk_no_space", "extract_disk_full", "library_disk_full",
-            "library_done", "extract_done")
+            "library_done", "extract_done", "{drive}")
     try:
         for lang in ("en", "tr"):
             ctx.i18n.set_language(lang)
             no_space = t("disk_no_space", drive="D:\\", need=dashboard_tab._fmt_size(300 * MiB),
                          free=dashboard_tab._fmt_size(1 * MiB))
+            no_space_temp = t("disk_no_space_temp", drive="C:\\",
+                              need=dashboard_tab._fmt_size(300 * MiB),
+                              free=dashboard_tab._fmt_size(1 * MiB))
+            lib_full = t("library_disk_full", drive="E:\\")
             done = t("extract_done", packs=1, tracks=1)
             cases = [
                 (d._after_extract, {**base, "packs": 0, "tracks": 0, "kept": 1,
                                     "no_space": ns}, no_space),
-                (d._after_extract, {**base, "kept": 1, "disk_full": True},
-                 done + "  " + t("disposal_kept", n=1) + "  " + t("extract_disk_full")),
+                (d._after_extract, {**base, "packs": 0, "tracks": 0, "kept": 1,
+                                    "no_space": ns_temp}, no_space_temp),
+                (d._after_extract, {**base, "kept": 1, "disk_full": True,
+                                    "full_drive": "D:\\"},
+                 done + "  " + t("disposal_kept", n=1) + "  "
+                 + t("extract_disk_full", drive="D:\\")),
                 (d._after_extract, {**base, "backup": {"new": 0, "duplicates": 0,
                                                        "dup_ids": [], "no_space": ns}},
                  done + "  " + no_space),
                 (d._after_extract, {**base, "backup": {"new": 0, "duplicates": 0,
-                                                       "dup_ids": [], "disk_full": True}},
-                 done + "  " + t("library_disk_full")),
+                                                       "dup_ids": [], "disk_full": True,
+                                                       "full_drive": "E:\\"}},
+                 done + "  " + lib_full),
                 (d._after_copy, {"new": 0, "duplicates": 0, "dup_ids": [],
                                  "no_space": ns}, no_space),
                 (d._after_copy, {"new": 0, "duplicates": 0, "dup_ids": [],
-                                 "disk_full": True}, t("library_disk_full")),
+                                 "disk_full": True, "full_drive": "E:\\"}, lib_full),
             ]
             for handler, result, expected in cases:
                 warned.clear()
@@ -355,9 +403,45 @@ def test_dashboard_shows_space_messages(qapp, tmp_path, monkeypatch):
                 assert text == expected
                 assert not any(k in text for k in keys)
                 assert len(warned) == 1
+            assert "C:\\" in no_space_temp and "7z" in no_space_temp
+            assert lib_full.count("E:\\") == 2                # names the drive and the next step
             if lang == "tr":
                 assert "boş" in no_space          # really Turkish, not the en fallback
     finally:
+        ctx.i18n.set_language("en")
+        win.close()
+        ctx.db.close()
+
+
+def test_dashboard_status_wraps_the_longest_unpack_summary(qapp, tmp_path, monkeypatch):
+    from rosu import theming
+    from rosu.app import AppContext
+    from rosu.ui import dashboard_tab
+    from rosu.ui.main_window import MainWindow
+    monkeypatch.setattr(config, "save_config", lambda cfg: None)
+    cfg = config._fill_defaults(config.Config(root=str(tmp_path)))
+    cfg.check_updates = False
+    ctx = AppContext(cfg)
+    qapp.setStyleSheet(theming.stylesheet_for("dark"))
+    win = MainWindow(ctx, qapp)
+    monkeypatch.setattr(dashboard_tab.QMessageBox, "warning", lambda *a, **k: None)
+    status = win.dashboard.status
+    # every part an Unpack summary can carry, plus the disk-full sentence
+    longest = {"packs": 12, "tracks": 1234, "loose": 56, "kept": 7, "disk_full": True,
+               "full_drive": "D:\\", "rejected": [{"code": "S1", "reason": "total"}]}
+    try:
+        for lang in ("en", "tr"):
+            ctx.i18n.set_language(lang)
+            win.retranslate()
+            win.dashboard._after_extract(longest)
+            status.ensurePolished()
+            assert ctx.t("extract_disk_full", drive="D:\\") in status.text()
+            assert status.fontMetrics().horizontalAdvance(status.text()) > 1280  # one line won't fit
+            # The label's own minimum width, not the tab's: other widgets set the
+            # tab's width per platform font.
+            assert status.minimumSizeHint().width() < 1280
+    finally:
+        qapp.setStyleSheet("")
         ctx.i18n.set_language("en")
         win.close()
         ctx.db.close()
