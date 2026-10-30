@@ -274,6 +274,18 @@ class SettingsTab(SettingsActionsMixin, SettingsDriveMixin, QWidget):
         self.lbl_drive_folder.setTextInteractionFlags(Qt.TextBrowserInteraction)
         wire_link_hover(self.lbl_drive_folder)
         root.addWidget(self.lbl_drive_folder)
+        # Storage quota (per mille: byte counts overflow Qt's 32-bit int range).
+        self.bar_drive_storage = QProgressBar()
+        self.bar_drive_storage.setRange(0, 1000)
+        self.bar_drive_storage.setTextVisible(False)
+        self.bar_drive_storage.setVisible(False)
+        root.addWidget(self.bar_drive_storage)
+        self.lbl_drive_storage = QLabel(objectName="status")
+        self.lbl_drive_storage.setWordWrap(True)
+        self.lbl_drive_storage.setVisible(False)
+        root.addWidget(self.lbl_drive_storage)
+        self._storage_worker: Worker | None = None
+        self._storage_res: dict | None = None
 
         # About / licenses
         about_row = QHBoxLayout()
