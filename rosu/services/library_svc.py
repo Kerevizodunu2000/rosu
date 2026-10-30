@@ -56,7 +56,9 @@ class LibraryMixin:
             too_large = 0
             files = list(self.cfg.library_path.glob("*.osz"))
             for i, p in enumerate(files, 1):
-                if not client_remove.recycle_bin_available(p):
+                if not p.exists():
+                    self.log.error("library:purge", f"{p.name}: no longer on disk; skipped")
+                elif not client_remove.recycle_bin_available(p):
                     self.log.error("library:purge", f"{p.name}: no Recycle Bin on this drive; left in place")
                 elif not client_remove.recycle_bin_fits(p):
                     too_large += 1
@@ -582,7 +584,9 @@ class LibraryMixin:
             for i, name in enumerate(names, 1):
                 if _eff():
                     break
-                if not client_remove.recycle_bin_available(lib / name):
+                if not (lib / name).exists():
+                    self.log.error("dedup", f"{name}: no longer on disk; skipped")
+                elif not client_remove.recycle_bin_available(lib / name):
                     self.log.error("dedup", f"{name}: no Recycle Bin on this drive; left in place")
                 elif not client_remove.recycle_bin_fits(lib / name):
                     too_large += 1

@@ -155,3 +155,37 @@ def test_remove_stable_keeps_a_folder_too_large_for_the_bin(env, monkeypatch, tm
     assert res["failed"] == [big.name] and res["removed"] == 1
     assert big.exists() and not folders[1].exists()
     assert any("too large" in a[1] for a in _errors(svc, "remove:stable"))
+
+
+def _fits_like_windows(p):
+    return Path(p).exists()   # the real check fails closed on a missing file
+
+
+def test_dedup_skips_a_file_gone_since_the_plan_without_calling_it_too_large(env, monkeypatch):
+    cfg, db, svc, calls = env
+    _library(cfg, db, (1, 2))
+    dups = [_duplicate(cfg, 1), _duplicate(cfg, 2)]
+    (cfg.library_path / dups[0]).unlink()   # gone between the plan and the run
+    monkeypatch.setattr(client_remove, "recycle_bin_fits", _fits_like_windows)
+    res = svc.dedup_library(names=dups)
+    assert res["too_large"] == 0 and res["removed"] == 1 and res["freed_bytes"] == 20
+    errors = [a[1] for a in _errors(svc, "dedup")]
+    assert errors == [f"{dups[0]}: no longer on disk; skipped"]
+
+
+def test_purge_skips_files_gone_mid_run_without_calling_them_too_large(env, monkeypatch):
+    cfg, db, svc, calls = env
+    _library(cfg, db)
+    trash = cfg.library_path.parent / "trash"
+
+    def trash_and_lose_the_rest(path):
+        calls.append(path)
+        shutil.move(path, str(trash / Path(path).name))
+        for other in cfg.library_path.glob("*.osz"):
+            other.unlink()   # another program removed them meanwhile
+    monkeypatch.setattr("send2trash.send2trash", trash_and_lose_the_rest)
+    monkeypatch.setattr(client_remove, "recycle_bin_fits", _fits_like_windows)
+    res = svc.purge_library_files()
+    assert res == {"deleted": 1, "too_large": 0}
+    errors = [a[1] for a in _errors(svc, "library:purge")]
+    assert len(errors) == 2 and all(e.endswith(": no longer on disk; skipped") for e in errors)
