@@ -24,6 +24,15 @@ def _fmt_size(n: int) -> str:
     return f"{n / (1024 * 1024):,.1f} MB"
 
 
+def no_space_text(t, ns: dict) -> str:
+    """The translated refusal for a ``no_space`` result (shared with Shortcuts)."""
+    sizes = {"drive": ns["drive"], "need": _fmt_size(ns["need"]),
+             "free": _fmt_size(ns["free"])}
+    if ns.get("staging"):   # the 7z temp folder, not the folder the user chose
+        return t("disk_no_space_temp", **sizes)
+    return t("disk_no_space", **sizes)
+
+
 class DashboardTab(QWidget):
     def __init__(self, main_window):
         super().__init__()
@@ -469,17 +478,10 @@ class DashboardTab(QWidget):
         box.exec()
         return box.clickedButton() == yes, checkbox.isChecked()
 
-    def _no_space_text(self, ns: dict) -> str:
-        sizes = {"drive": ns["drive"], "need": _fmt_size(ns["need"]),
-                 "free": _fmt_size(ns["free"])}
-        if ns.get("staging"):   # the 7z temp folder, not the folder the user chose
-            return self.ctx.t("disk_no_space_temp", **sizes)
-        return self.ctx.t("disk_no_space", **sizes)
-
     def _after_extract(self, result) -> None:
         self._idle()
         if result.get("no_space"):   # refused up front: nothing changed
-            msg = self._no_space_text(result["no_space"])
+            msg = no_space_text(self.ctx.t, result["no_space"])
             self.status.setText(msg)
             QMessageBox.warning(self, self.ctx.t("app_title"), msg)
             return
@@ -491,7 +493,7 @@ class DashboardTab(QWidget):
         if "backup" in result:
             b = result["backup"]
             if b.get("no_space"):
-                warn = self._no_space_text(b["no_space"])
+                warn = no_space_text(self.ctx.t, b["no_space"])
             elif b.get("disk_full"):
                 warn = self.ctx.t("library_disk_full", drive=b["full_drive"])
             msg += "  " + (warn or self.ctx.t("library_done", new=b["new"],
@@ -536,7 +538,7 @@ class DashboardTab(QWidget):
 
     def _after_copy(self, res) -> None:
         self._idle()
-        warn = (self._no_space_text(res["no_space"]) if res.get("no_space")
+        warn = (no_space_text(self.ctx.t, res["no_space"]) if res.get("no_space")
                 else self.ctx.t("library_disk_full", drive=res["full_drive"])
                 if res.get("disk_full") else None)
         if warn:
@@ -588,6 +590,11 @@ class DashboardTab(QWidget):
             self.status.setText(self.ctx.t("sc_client_disabled"))
             return
         t = self.ctx.t
+        if res.get("no_space"):   # refused up front: nothing staged or sent
+            msg = no_space_text(t, res["no_space"])
+            self.status.setText(msg)
+            QMessageBox.warning(self, t("app_title"), msg)
+            return
         n = res.get("stage_failed", 0)
         warn = t("import_stage_disk_full" if res.get("disk_full")
                  else "import_stage_failed", n=n) if n > 0 else ""
