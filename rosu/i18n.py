@@ -882,6 +882,13 @@ STRINGS: dict[str, dict[str, str]] = {
               "yardımcı olabilir."},
     "drive_full_stopped_status": {"en": "Google Drive is full — backup stopped.",
                                   "tr": "Google Drive dolu — yedekleme durdu."},
+    "drive_full_stopped_individual": {
+        "en": "Google Drive is full. {uploaded} tracks were backed up before the "
+              "backup stopped, and they are kept. Free some space (emptying Drive's "
+              "trash may help) and run the backup again.",
+        "tr": "Google Drive dolu. Yedekleme durmadan önce {uploaded} müzik "
+              "yedeklendi ve bunlar korunuyor. Biraz yer aç (Drive'ın çöp kutusunu "
+              "boşaltmak yardımcı olabilir) ve yedeklemeyi yeniden başlat."},
     "drive_full_stopped": {
         "en": "Google Drive is full. {uploaded} tracks in {chunks} archive(s) were "
               "backed up before the backup stopped, and they are kept. Free some "

@@ -98,7 +98,8 @@ def test_opening_settings_loads_storage(win):
 @pytest.mark.parametrize("res,phrase", [
     ({"error": "drive_full", "needed": 2 * _GIB, "free": _GIB, "trash": 0},
      "did not start"),
-    ({"error": "drive_full", "uploaded": 3, "chunks": 1}, "3 tracks"),
+    ({"error": "drive_full", "uploaded": 3, "chunks": 1}, "3 tracks in 1 archive"),
+    ({"error": "drive_full", "uploaded": 3, "chunks": 0}, "3 tracks were backed up"),
 ])
 def test_after_backup_drive_full_is_not_a_generic_failure(win, monkeypatch, res, phrase):
     from rosu.ui import dashboard_tab
@@ -119,5 +120,7 @@ def test_after_backup_drive_full_is_not_a_generic_failure(win, monkeypatch, res,
     win.dashboard._after_backup(res)
     assert [kind for kind, _ in shown] == ["warning"]
     assert phrase in shown[0][1] and "trash" in shown[0][1]
+    if res.get("chunks") == 0:   # individual mode never mentions archives
+        assert "archive" not in shown[0][1]
     assert win.dashboard.status.text() != win.ctx.t("drive_backup_failed")
     assert refreshed == [1]

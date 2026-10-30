@@ -629,8 +629,11 @@ class DashboardTab(QWidget):
                         trash=_fmt_drive_size(res["trash"]))
             else:                 # ran out mid-upload; what went up is kept
                 self.status.setText(t("drive_full_stopped_status"))
-                msg = t("drive_full_stopped", uploaded=res["uploaded"],
-                        chunks=res["chunks"])
+                if res["chunks"]:
+                    msg = t("drive_full_stopped", uploaded=res["uploaded"],
+                            chunks=res["chunks"])
+                else:             # individual mode: no archives to count
+                    msg = t("drive_full_stopped_individual", uploaded=res["uploaded"])
             QMessageBox.warning(self, t("app_title"), msg)
             return
         if res.get("error"):
