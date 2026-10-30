@@ -1,10 +1,12 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 from __future__ import annotations
 import datetime as _dt
+import errno
 import os
+import tempfile
 from pathlib import Path
 
-from .. import config, jobs, osu_import, parsing
+from .. import config, diskspace, jobs, osu_import, parsing
 
 _CLIENT_LABEL = {"lazer": "osu!lazer", "stable": "osu!(stable)"}
 # Headroom a backup must leave on Drive (the shard, Drive's own rounding).
@@ -39,9 +41,7 @@ class ExportMixin:
             link. Returns ``{"source","count","archives":[...], ["drive": {...}]}``.
             """
             import shutil
-            import tempfile
     
-            from .. import exporter
             self._cancel.clear()   # own the token for this export (gather → write)
             stage = Path(tempfile.mkdtemp(prefix="rosu_export_"))
             try:
@@ -51,14 +51,19 @@ class ExportMixin:
                 if not files or self._cancel.is_set():
                     return {"source": source, "count": 0, "archives": [],
                             "cancelled": self._cancel.is_set()}
-                pm = self.cfg.prune_mode if getattr(self.cfg, "export_prune", False) else None
-                written = exporter.write_export(files, Path(dest_base), fmt, split_bytes,
-                                                progress, cancel=self._cancel.is_set,
-                                                prune_mode=pm)
+                no_space = self._export_no_space(files, dest_base)
+                if no_space:
+                    return {"source": source, "count": 0, "archives": [],
+                            "cancelled": False, "no_space": no_space}
+                written, full_drive = self._write_export(
+                    files, dest_base, fmt, split_bytes, progress, self._cancel.is_set)
                 cancelled = self._cancel.is_set()
                 result = {"source": source, "count": len(files),
                           "archives": [str(a) for a in written], "cancelled": cancelled}
-                if upload_to_drive and not cancelled:
+                if full_drive:
+                    result["disk_full"] = True
+                    result["full_drive"] = full_drive
+                if upload_to_drive and not cancelled and not full_drive:
                     result["drive"] = self._upload_export_to_drive(written, share,
                                                                    progress)
                 self.log.info("EXPORT", source=source, sets=len(files),
@@ -66,6 +71,42 @@ class ExportMixin:
                 return result
             finally:
                 shutil.rmtree(stage, ignore_errors=True)
+
+        def _export_no_space(self, files, dest_base) -> dict | None:
+            """Pre-flight for an export: the destination needs every file, and with
+            prune on the temp folder needs the largest one (copied one at a time).
+            Returns the ``no_space`` dict on a refusal, else None."""
+            sizes = [p.stat().st_size for p in map(Path, files) if p.exists()]
+            places = [(Path(dest_base).parent, sum(sizes))]
+            if getattr(self.cfg, "export_prune", False):
+                places.append((tempfile.gettempdir(), max(sizes, default=0)))
+            no_space = diskspace.shortfall(places)
+            if no_space:
+                self._warn("export:space",
+                           "Export refused: " + str(diskspace.NotEnoughSpace(**no_space)))
+            return no_space
+
+        def _write_export(self, files, dest_base, fmt, split_bytes, progress, cancel):
+            """``exporter.write_export`` that stops cleanly on a full disk. Returns
+            ``(written, full_drive)``; ``full_drive`` is None unless the disk filled
+            (then it is the destination's drive, or the temp folder's when prune is
+            on and it has less free space)."""
+            from .. import exporter
+            pm = self.cfg.prune_mode if getattr(self.cfg, "export_prune", False) else None
+            try:
+                return exporter.write_export(files, Path(dest_base), fmt, split_bytes,
+                                             progress, cancel=cancel, prune_mode=pm), None
+            except OSError as exc:
+                if not diskspace.is_disk_full(exc):
+                    raise
+                places = [Path(dest_base).parent] + ([tempfile.gettempdir()] if pm else [])
+                spaces = [diskspace.space(p, 0) for p in places]
+                full_drive = min(spaces, key=lambda sp: float("inf") if sp.free is None
+                                 else sp.free).drive
+                written = getattr(exc, "written", [])
+                self._warn("export:disk_full", f"{full_drive} is full: Export stopped "
+                                               f"after {len(written)} archive(s)")
+                return written, full_drive
 
         def _gather_export_sources(self, source: str, stage, progress=None,
                                    cancel=None, star_range=None) -> list:
@@ -217,6 +258,15 @@ class ExportMixin:
                     ctx["extract"] = self.extract(approved, progress, cancel=cancel)
                 else:
                     ctx["extract"] = {"packs": 0, "tracks": 0}
+                ex = ctx["extract"]
+                # Raise so the queue marks the job FAILED and never runs (or ticks)
+                # the sends; OSError is never reported as a crash.
+                if ex.get("no_space"):
+                    ns = ex["no_space"]
+                    raise OSError(errno.ENOSPC, str(diskspace.NotEnoughSpace(
+                        ns["drive"], ns["need"], ns["free"])))
+                if ex.get("disk_full"):
+                    raise OSError(errno.ENOSPC, f"{ex['full_drive']} is full: Unpack stopped")
     
             def s_send(target):
                 def _run(ctx, progress, cancel):
@@ -276,6 +326,7 @@ class ExportMixin:
                 res = self._dispatch_to_client(target, osz, progress, cancel=cancel)
                 ctx["transferred"] = res.get("sent", 0)
                 ctx["send_cancelled"] = res.get("cancelled", False)
+                ctx["space"] = {k: res[k] for k in ("no_space", "disk_full") if k in res}
     
             job.steps = [jobs.Step("job_step_enumerate", jobs.Lane.DISK, s_enumerate),
                          jobs.Step("job_step_export_client", jobs.Lane.DISK, s_export),
@@ -285,7 +336,8 @@ class ExportMixin:
                 res = {"source": source, "target": target, "found": ctx.get("found", 0),
                        "transferred": ctx.get("transferred", 0),
                        "skipped": ctx.get("skipped", 0),
-                       "cancelled": job.cancel_cb() or ctx.get("send_cancelled", False)}
+                       "cancelled": job.cancel_cb() or ctx.get("send_cancelled", False),
+                       **ctx.get("space", {})}
                 self.log.info("CLIENT_TRANSFER", source=source, target=target,
                               found=res["found"], transferred=res["transferred"],
                               skipped=res["skipped"])
@@ -325,8 +377,6 @@ class ExportMixin:
             upload step is on the DRIVE lane, so once an export starts uploading the
             DISK lane frees for the next queued job (disk work ↔ Drive upload)."""
             import shutil
-            import tempfile
-            from .. import exporter
             dest_base = Path(dest_base)
             name = f"{dest_base.name}{'.7z' if fmt == '7z' else '.zip'}"
             job = jobs.Job(jobs.new_id(), "job_export", kind="export",
@@ -361,13 +411,15 @@ class ExportMixin:
                 if not files or cancel():
                     ctx["written"] = []
                     return
-                pm = self.cfg.prune_mode if getattr(self.cfg, "export_prune", False) else None
-                ctx["written"] = exporter.write_export(
-                    files, Path(dest_base), fmt, split_bytes, progress, cancel=cancel,
-                    prune_mode=pm)
+                ctx["no_space"] = self._export_no_space(files, dest_base)
+                if ctx["no_space"]:
+                    ctx["written"] = []
+                    return
+                ctx["written"], ctx["full_drive"] = self._write_export(
+                    files, dest_base, fmt, split_bytes, progress, cancel)
     
             def s_upload(ctx, progress, cancel):
-                if cancel() or not ctx.get("written"):
+                if cancel() or not ctx.get("written") or ctx.get("full_drive"):
                     return
                 res = self._upload_export_to_drive(
                     ctx["written"], share, progress, cancel=cancel)
@@ -397,6 +449,11 @@ class ExportMixin:
                        "cancelled": job.cancel_cb() and not written}
                 if "drive" in ctx:
                     res["drive"] = ctx["drive"]
+                if ctx.get("no_space"):
+                    res["no_space"] = ctx["no_space"]
+                if ctx.get("full_drive"):
+                    res["disk_full"] = True
+                    res["full_drive"] = ctx["full_drive"]
                 self.log.info("EXPORT", source=source, sets=res["count"],
                               archives=len(written), fmt=fmt, cancelled=res["cancelled"])
                 return res
