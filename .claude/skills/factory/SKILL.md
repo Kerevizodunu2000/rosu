@@ -127,8 +127,9 @@ environment variable `FACTORY_GITHUB`:
   2. **Writes.** `job` queues comments, labels, "ready for review" and merges
      in `factory/.github-cache/outbox.jsonl`. After every `job` command, run
      `job outbox`, perform each line in order with the MCP tools
-     (`add_issue_comment` for issue and PR comments, `issue_write` to add or
-     remove a label, `update_pull_request` with `draft: false` for
+     (`add_issue_comment` for issue and PR comments; `issue_write` with
+     method `update` and the issue's **full** new label list (its current labels,
+     plus `add`, minus `remove`: the list replaces all labels) for `label`; `update_pull_request` with `draft: false` for
      `pr_ready`, `merge_pull_request` with the given method for `pr_merge`),
      and mark each with `job outbox-done <id>`. Comments keep their body
      verbatim: the first line `<!-- factory -->` is how the factory recognises
