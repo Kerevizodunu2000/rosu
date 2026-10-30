@@ -288,11 +288,14 @@ STRINGS: dict[str, dict[str, str]] = {
                            "tr": "Rosu {tag} indiriliyor… %{percent}"},
     "update_ready": {"en": "Rosu {tag} is ready.", "tr": "Rosu {tag} hazır."},
     "update_restart": {"en": "Restart now", "tr": "Şimdi yeniden başlat"},
-    "update_restart_later": {
-        "en": "A task is still running. The update will be installed the next time "
-              "Rosu starts.",
-        "tr": "Bir işlem hâlâ sürüyor. Güncelleme, Rosu bir sonraki açılışında "
-              "yüklenecek."},
+    "update_installed": {"en": "Rosu v{version} was installed.",
+                         "tr": "Rosu v{version} yüklendi."},
+    "update_dismiss": {"en": "Dismiss", "tr": "Kapat"},
+    "update_restart_armed": {
+        "en": "Rosu {tag} is ready. Rosu will restart when the current task finishes.",
+        "tr": "Rosu {tag} hazır. Geçerli işlem bitince Rosu yeniden başlayacak."},
+    "update_cancel_restart": {"en": "Cancel restart",
+                              "tr": "Yeniden başlatmayı iptal et"},
     "set_zip_disposal": {"en": "Processed .zip action", "tr": "İşlenen .zip işlemi"},
     "zip_recycle": {"en": "Move to Recycle Bin", "tr": "Geri Dönüşüm Kutusu'na taşı"},
     "zip_move": {"en": "Move to Processed/", "tr": "Processed/ klasörüne taşı"},

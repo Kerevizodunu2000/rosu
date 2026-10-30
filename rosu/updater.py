@@ -337,16 +337,24 @@ def on_startup(cfg, *, exe: Path | None = None, replace=os.replace,
     return CONTINUE
 
 
-def mark_healthy(*, exe: Path | None = None) -> None:
-    """The window came up: forget the swap, keep ``skip``, drop ``.old``/``.bad``."""
+def mark_healthy(*, exe: Path | None = None) -> str | None:
+    """The window came up: forget the swap, keep ``skip``, drop ``.old``/``.bad``.
+
+    Returns the version just installed (the state's ``to``) when a swap to this
+    version was pending and the state was cleared, else ``None``. A failed clear
+    returns ``None``: the next start rolls back, so nothing was installed."""
     if not _frozen():
-        return
+        return None
     f = _files(exe)
     st = _read_state(f)
+    installed = None
     if st["from"] is not None or st["to"] is not None or st["boots"] is not None:
         try:
             _write_state(f, st["skip"])
+            if st["to"] == __version__ and st["boots"] is not None:
+                installed = st["to"]
         except OSError:
             pass
     for key in ("old", "bad"):
         _unlink(f[key])
+    return installed
