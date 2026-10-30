@@ -308,21 +308,9 @@ No. Unpacking, the Library, Search, ratings and Standard-series gap detection al
 The exe isn't code-signed with a paid certificate, so SmartScreen doesn't know it yet. See *Installation* above, and check the `.sha256` if you want to verify your download.
 
 **macOS or Linux?**
-Not yet. Cross-platform builds are on the roadmap.
+Not yet.
 
 </details>
-
-## Roadmap
-
-- [x] **v1.0** public essentials · **v1.1** Library Health & disk insight · **v1.2** Shortcuts tab · **v1.3** job queue · **v1.4** Settings overhaul + hosted bug report
-- [x] **v1.5** per-difficulty star ratings, query-syntax search & osu!-API enrichment · **v1.6** mania skillset ratings, visual Filters panel & star-range export
-- [x] **v1.7** space saving (Prune), collection sync & mirror-based map repair · **v1.8** remove from osu!, Drive backup browser + restore, report tracking & opt-in crash reports
-- [x] **v1.9** browsing depth (saved searches, column choice, cover gallery, search history, CSV/JSON export, Logs table), Library move across drives & the opt-in watch folder · **v1.10** same-song detection by audio fingerprint
-- [x] **On `main`, in the next release:** signed auto-update, disk-space checks, Recycle Bin guards, Drive storage quota
-- [ ] **v2.0**: the capstone, a whole-app review and polish pass with no new feature scope
-- [ ] **Later**: a music player, sync hardening, an AI coach, streamer overlays, and cross-platform builds (macOS/Linux)
-
-See [`CHANGELOG.md`](CHANGELOG.md) for the full, version-by-version history.
 
 ## Community & support
 
