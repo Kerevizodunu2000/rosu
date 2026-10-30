@@ -2,7 +2,7 @@
 """Time the slow paths of Rosu's service layer on a generated library.
 
     python tools/make_big_library.py TARGET --n 100000
-    python tools/profile_library.py TARGET [--sample 1000] [--json OUT.json] [--markdown OUT.md]
+    python tools/profile_library.py TARGET [--sample 1000] [--no-profile] [--json OUT.json] [--markdown OUT.md]
 
 Runs on the folder made by ``make_big_library.py`` and nothing else: it refuses a
 folder without that tool's marker, and a folder it has already profiled (the
@@ -12,7 +12,9 @@ with the pack zips, ``Exports/`` and a ``tmp/`` work folder). It imports only th
 Qt-free service layer.
 
 Each path is run once with cProfile and tracemalloc on, so the wall times include
-that overhead: use them to rank the paths, not as absolute speeds. tracemalloc sees
+that overhead: use them to rank the paths, not as absolute speeds. ``--no-profile``
+times each path with ``time.perf_counter`` only (no peak memory, no top list), for
+before/after speed comparisons. tracemalloc sees
 Python allocations only, and cProfile sees only the calling thread. Paths run in
 dependency order (refresh, then the reopen that is ``startup``, search, prescan,
 extract, export, read_metadata, fingerprint) and are reported in the order of NAMES.
@@ -104,8 +106,16 @@ def open_services(root: Path):
     return cfg, db, Services(cfg, db, log)
 
 
-def measure(name: str, fn):
-    """Run ``fn()`` once under cProfile and tracemalloc → ``(entry, fn's value)``."""
+def measure(name: str, fn, profile: bool = True):
+    """Run ``fn()`` once under cProfile and tracemalloc → ``(entry, fn's value)``.
+
+    With ``profile=False`` only the wall time is taken: peak memory ``None``, no top list.
+    """
+    if not profile:
+        t0 = time.perf_counter()
+        value = fn()
+        return ({"name": name, "status": "ok", "wall_s": round(time.perf_counter() - t0, 4),
+                 "peak_mem_bytes": None, "top": [], "detail": None}, value)
     prof = cProfile.Profile()
     tracemalloc.start(1)
     t0 = time.perf_counter()
@@ -133,7 +143,10 @@ def skipped(name: str, reason: str) -> dict:
             "top": [], "detail": reason}
 
 
-def run(target: Path, sample: int) -> tuple[int, int, list[dict]]:
+def run(target: Path, sample: int, profile: bool = True) -> tuple[int, int, list[dict]]:
+    def timed(name, fn):
+        return measure(name, fn, profile)
+
     tempfile.tempdir = str(target / "tmp")   # before any service: stages stay inside TARGET
     Path(tempfile.tempdir).mkdir(exist_ok=True)
     lib_files = sorted((target / "Library").glob("*.osz"))
@@ -144,7 +157,7 @@ def run(target: Path, sample: int) -> tuple[int, int, list[dict]]:
     try:
         cfg, db, svc = open_services(target)   # first open on the empty DB: not measured
         opened.append(db)
-        results["refresh"], res = measure("refresh", svc.refresh)
+        results["refresh"], res = timed("refresh", svc.refresh)
         results["refresh"]["detail"] = res
         db.close()
 
@@ -152,7 +165,7 @@ def run(target: Path, sample: int) -> tuple[int, int, list[dict]]:
             c, d, s = open_services(target)
             opened.append(d)
             return c, d, s
-        results["startup"], (cfg, db, svc) = measure("startup", reopen)
+        results["startup"], (cfg, db, svc) = timed("startup", reopen)
         results["startup"]["detail"] = {"reopened_after_refresh": True, "sets": n}
 
         def search():
@@ -163,22 +176,22 @@ def run(target: Path, sample: int) -> tuple[int, int, list[dict]]:
                 out.append({"query": query or "(all)", "tags": tags, "rows": len(page["rows"]),
                             "total": page["total"], "wall_s": round(time.perf_counter() - t0, 4)})
             return out
-        results["search"], res = measure("search", search)
+        results["search"], res = timed("search", search)
         results["search"]["detail"] = res
 
-        results["prescan"], plans = measure("prescan", svc.prescan_all)
+        results["prescan"], plans = timed("prescan", svc.prescan_all)
         kinds: dict[str, int] = {}
         for p in plans:
             kinds[p.kind] = kinds.get(p.kind, 0) + 1
         results["prescan"]["detail"] = {"packs": len(plans), "kinds": kinds}
 
         approved = [(Path(p.zip_path), p.parsed) for p in plans]
-        results["extract"], res = measure("extract", lambda: svc.extract(approved))
+        results["extract"], res = timed("extract", lambda: svc.extract(approved))
         results["extract"]["detail"] = {k: res[k] for k in ("packs", "tracks", "loose")}
         results["extract"]["detail"]["rejected"] = len(res["rejected"])
 
         dest = target / "Exports" / "sample"
-        results["export"], res = measure(
+        results["export"], res = timed(
             "export", lambda: svc.export_sets("library", dest, "zip", limit=sample))
         results["export"]["detail"] = {"count": res["count"], "archives": len(res["archives"])}
 
@@ -190,7 +203,7 @@ def run(target: Path, sample: int) -> tuple[int, int, list[dict]]:
                 msd.msd_for_diffs(diffs, raw)
                 diffs_seen += len(diffs)
             return diffs_seen
-        results["read_metadata"], res = measure("read_metadata", read_metadata)
+        results["read_metadata"], res = timed("read_metadata", read_metadata)
         results["read_metadata"]["detail"] = {"sets": sample, "difficulties": res}
 
         if fingerprint.fpcalc_path() is None:
@@ -202,7 +215,7 @@ def run(target: Path, sample: int) -> tuple[int, int, list[dict]]:
             for p in lib_files[:sample]:
                 shutil.copyfile(p, fcfg.library_path / p.name)
             fsvc.refresh()   # setup, not measured
-            entry, res = measure("fingerprint", fsvc.fingerprint_library)
+            entry, res = timed("fingerprint", fsvc.fingerprint_library)
             if "error" in res:
                 entry = skipped("fingerprint", f"fingerprint_library: {res['error']}")
             elif res.get("computed", 0) == 0:
@@ -242,7 +255,7 @@ def markdown(report: dict) -> str:
         out.append(f"| {r['name']} | {r['status']} | {_wall(r['wall_s'])} | "
                    f"{_mem(r['peak_mem_bytes'])} | {detail} |")
     for r in report["results"]:
-        if r["status"] != "ok":
+        if r["status"] != "ok" or not r["top"]:   # skipped, or timed with --no-profile
             continue
         out += ["", f"## {r['name']}: top 10 by cumulative time", "",
                 "| Function | Calls | Cumulative time |", "|---|---|---|"]
@@ -255,6 +268,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("target", type=Path)
     ap.add_argument("--sample", type=int, default=1000,
                     help="sets for export, read_metadata and fingerprint (default 1000)")
+    ap.add_argument("--no-profile", action="store_true",
+                    help="time each path with perf_counter only (no cProfile, no tracemalloc)")
     ap.add_argument("--json", type=Path, metavar="PATH")
     ap.add_argument("--markdown", type=Path, metavar="PATH")
     args = ap.parse_args(argv)
@@ -266,7 +281,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: {target} was already profiled (data/ exists): regenerate it with "
               "make_big_library.py --force", file=sys.stderr)
         return 2
-    n, sample, results = run(target, max(1, args.sample))
+    n, sample, results = run(target, max(1, args.sample), profile=not args.no_profile)
     report = {"machine": machine(), "os": platform.platform(), "python": platform.python_version(),
               "n": n, "sample": sample, "results": results}
     print(text_table(results))
