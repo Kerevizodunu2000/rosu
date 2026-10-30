@@ -4,7 +4,7 @@ import datetime as _dt
 import time
 from pathlib import Path
 
-from .. import archives, config, extractor, osu_import, parsing
+from .. import archives, client_remove, config, extractor, osu_import, parsing
 from ..models import ExtractPlan, ParsedPack
 
 _CLIENT_LABEL = {"lazer": "osu!lazer", "stable": "osu!(stable)"}
@@ -20,6 +20,10 @@ def _sample_export(files, limit):
 
 
 def _clear_osz(folder: Path) -> int:
+    """Recycle every .osz in ``folder``; 0 (nothing touched) when its drive has
+    no Recycle Bin, so a file is never deleted for good."""
+    if not client_remove.recycle_bin_available(folder):
+        return 0
     from send2trash import send2trash
     count = 0
     for f in folder.glob("*.osz"):
@@ -31,6 +35,16 @@ def _clear_osz(folder: Path) -> int:
     return count
 
 class ExtractMixin:
+        def _warn(self, where: str, detail: str) -> None:
+            self.log.log("ERROR", "WARN", "", where=where, detail=detail)
+
+        def _clear_output_osz(self) -> int:
+            """``_clear_osz`` on Output, with a WARN when files were left behind."""
+            n = _clear_osz(self.cfg.output_path)
+            if n == 0 and any(self.cfg.output_path.glob("*.osz")):
+                self._warn("output:clear", "Output kept: no Recycle Bin on this drive")
+            return n
+
         def scan(self):
             packs = extractor.scan_packs(self.cfg.packs_path)
             self.log.info("SCAN_PACKS", count=len(packs), source="Packs/")
@@ -42,7 +56,12 @@ class ExtractMixin:
             plans: list[ExtractPlan] = []
             for zip_path, parsed in packs:
                 known_before = self.db.get_pack_by_code(parsed.code) is not None
-                plan = extractor.prescan_pack(zip_path, parsed, known, known_before)
+                try:
+                    plan = extractor.prescan_pack(zip_path, parsed, known, known_before)
+                except extractor.ARCHIVE_READ_ERRORS as exc:
+                    self._warn(f"prescan:{parsed.code}",
+                               f"{zip_path.name}: unreadable archive, skipped: {exc}")
+                    continue
                 plans.append(plan)
                 if plan.kind != "new":
                     self.log.info("READD_PROMPT", code=parsed.code, kind=plan.kind,
@@ -62,10 +81,16 @@ class ExtractMixin:
             when = now_iso()
             start = time.time()
             if self.cfg.clear_output_before_extract:
-                _clear_osz(self.cfg.output_path)
+                self._clear_output_osz()
             self.log.info("EXTRACT_START", pack_count=len(approved), source="Packs/")
     
-            total = sum(len(extractor.read_osz_entries(zp)) for zp, _ in approved)
+            def _count(zp) -> int:
+                try:
+                    return len(extractor.read_osz_entries(zp))
+                except extractor.ARCHIVE_READ_ERRORS:
+                    return 0   # unreadable: extract() below keeps and reports it
+
+            total = sum(_count(zp) for zp, _ in approved)
             done = [0]
     
             def _cb(pack_name: str, osz_name: str) -> None:
@@ -77,6 +102,7 @@ class ExtractMixin:
             total_tracks = 0
             processed_dir = self.cfg.root_path / "Processed"
             rejected: list[dict] = []
+            kept = 0
             for zip_path, parsed in approved:
                 if _eff():
                     break
@@ -94,16 +120,32 @@ class ExtractMixin:
                     rejected.append({"code": parsed.code, "reason": reason,
                                      "quarantined": bool(moved)})
                     continue
+                except extractor.ARCHIVE_READ_ERRORS as exc:
+                    kept += 1
+                    self._warn(f"extract:{parsed.code}",
+                               f"{zip_path.name} kept: unreadable archive: {exc}")
+                    continue
                 total_tracks += res["tracks"]
                 if res.get("extra_files"):
                     self.db.set_pack_extra(parsed.code, len(res["extra_files"]))
                 self.log.info("EXTRACT_PACK", code=parsed.code, tracks=res["tracks"],
                               subfolders=res["subfolders"])
+                if res["cancelled"] or res["failed"]:
+                    kept += 1
+                    why = ("cancelled" if res["cancelled"]
+                           else f"{res['failed']} beatmap(s) not extracted")
+                    self._warn(f"extract:{parsed.code}",
+                               f"{zip_path.name} kept: incomplete extract ({why})")
+                    continue
                 if self.cfg.zip_disposal == "drive":
                     action = self._dispose_archive_to_drive(zip_path)
                 else:
                     action = extractor.dispose_zip(zip_path, self.cfg.zip_disposal,
                                                    processed_dir)
+                if action == "ZIP_KEPT":
+                    kept += 1
+                    self._warn("dispose", f"{zip_path.name} kept: no Recycle Bin on this drive")
+                    continue
                 fields = {"file": zip_path.name}
                 if action == "ZIP_MOVED":
                     fields["dest"] = str(processed_dir)
@@ -120,7 +162,7 @@ class ExtractMixin:
                           tracks=total_tracks, rejected=len(rejected), loose=loose,
                           duration_s=duration)
             result = {"packs": len(approved) - len(rejected), "tracks": total_tracks,
-                      "rejected": rejected, "loose": loose, **info}
+                      "rejected": rejected, "loose": loose, "kept": kept, **info}
     
             if self.cfg.auto_backup_after_extract:
                 backup = self.copy_library(progress)
@@ -150,7 +192,12 @@ class ExtractMixin:
                 target = out / t.filename
                 try:
                     if target.exists():
-                        target.unlink()
+                        if not client_remove.recycle_bin_available(out):
+                            self._warn("loose", f"{p.name} kept in Packs: Output already "
+                                                "has it and there is no Recycle Bin")
+                            continue
+                        from send2trash import send2trash
+                        send2trash(str(target))
                     shutil.move(str(p), str(target))   # Packs -> Output (already final)
                 except OSError as exc:
                     self.log.error("loose", str(exc)[:200])
@@ -220,9 +267,9 @@ class ExtractMixin:
                 return None
 
         def dispose_archives(self, paths) -> int:
-            """Recycle / move / delete a set of Packs archives per the user's
-            zip_disposal setting (used by the Dashboard 'Remove already-added' action).
-            Returns how many were disposed."""
+            """Recycle / move a set of Packs archives per the user's zip_disposal
+            setting (used by ``remove_added_archives``). Returns how many were
+            disposed; an archive kept for want of a Recycle Bin is not counted."""
             processed = self.cfg.root_path / "Processed"
             n = 0
             for p in paths:
@@ -235,18 +282,45 @@ class ExtractMixin:
                         action = self._dispose_archive_to_drive(Path(p))
                     else:
                         action = extractor.dispose_zip(Path(p), self.cfg.zip_disposal, processed)
+                    if action == "ZIP_KEPT":
+                        self._warn("dispose", f"{Path(p).name} kept: no Recycle Bin "
+                                              "on this drive")
+                        continue
                     self.log.info(action, file=Path(p).name)
                     n += 1
                 except OSError as exc:
                     self.log.error("dispose", str(exc)[:200])
             return n
 
+        def remove_added_archives(self, paths) -> dict:
+            """'Remove already-added': dispose only the archives whose every .osz
+            is in the database; any other archive stays in Packs with a WARN.
+            Returns ``{"removed": int, "kept": int}``."""
+            added = []
+            for p in map(Path, paths):
+                try:
+                    with archives.open_reader(p) as r:
+                        names = [m for m in r.members() if m.name.lower().endswith(".osz")]
+                except extractor.ARCHIVE_READ_ERRORS as exc:
+                    self._warn("dispose", f"{p.name} kept: unreadable archive: {exc}")
+                    continue
+                tracks = [parsing.parse_osz_entry(m.name, m.size) for m in names]
+                if not tracks or None in tracks or not all(
+                        self.db.find_track_row(t.beatmapset_id, t.filename)
+                        for t in tracks):
+                    self._warn("dispose", f"{p.name} kept: not every beatmap in it "
+                                          "is in the library")
+                    continue
+                added.append(p)
+            removed = self.dispose_archives(added)
+            return {"removed": removed, "kept": len(paths) - removed}
+
         def clear_output(self) -> int:
             """Recycle every .osz still in Output/ — a manual "empty the staging
             folder" action for after a batch has been copied to the Library and/or
             imported into osu!. Uses the Recycle Bin (recoverable), like every other
             guarded delete. Returns how many were removed."""
-            n = _clear_osz(self.cfg.output_path)
+            n = self._clear_output_osz()
             self.log.info("OUTPUT_CLEARED", count=n)
             return n
 

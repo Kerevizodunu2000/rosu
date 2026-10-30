@@ -329,9 +329,10 @@ class DashboardTab(QWidget):
         self._start_worker(self.services.prescan_all, on_success=self._after_prescan)
 
     def on_purge_known(self) -> None:
-        """Recycle/move/delete the archives that are already in the library, per
-        the user's zip_disposal setting — clears clutter so Unpack can offer the
-        picker for new archives (user feedback)."""
+        """Recycle/move the archives that are fully in the library, per the
+        user's zip_disposal setting — clears clutter so Unpack can offer the
+        picker for new archives (user feedback). A partly added or unreadable
+        archive is kept."""
         if not self._known_paths:
             return
         t = self.ctx.t
@@ -340,8 +341,11 @@ class DashboardTab(QWidget):
             QMessageBox.Ok | QMessageBox.Cancel, QMessageBox.Ok)
         if reply != QMessageBox.Ok:
             return
-        n = self.services.dispose_archives(list(self._known_paths))
-        self.status.setText(t("purge_known_done", n=n))
+        res = self.services.remove_added_archives(list(self._known_paths))
+        msg = t("purge_known_done", n=res["removed"])
+        if res["kept"]:
+            msg += "  " + t("disposal_kept", n=res["kept"])
+        self.status.setText(msg)
         self.refresh_scan()
 
     def on_clear_output(self) -> None:
@@ -356,7 +360,10 @@ class DashboardTab(QWidget):
         if reply != QMessageBox.Ok:
             return
         n = self.services.clear_output()
-        self.status.setText(t("clear_output_done", n=n))
+        msg = t("clear_output_done", n=n)
+        if len(self._output) - n > 0:
+            msg += "  " + t("disposal_kept", n=len(self._output) - n)
+        self.status.setText(msg)
         self.refresh_scan()
 
     def _offer_pick_archives(self) -> None:
@@ -471,6 +478,8 @@ class DashboardTab(QWidget):
         rejected = result.get("rejected") or []
         if rejected:
             msg += "  " + self.ctx.t("archive_rejected", n=len(rejected))
+        if result.get("kept"):
+            msg += "  " + self.ctx.t("disposal_kept", n=result["kept"])
         self.status.setText(msg)
         self.refresh_scan()
         self.mw.packs.reload()

@@ -24,7 +24,7 @@ THEMES = (
 # What to do with a .zip once its contents have been extracted to Output.
 # "drive" = upload the original archive to Drive then remove it locally; it is
 # only offered in Settings while Drive is connected.
-ZIP_DISPOSAL = ("recycle", "move", "delete", "drive")
+ZIP_DISPOSAL = ("recycle", "move", "drive")
 
 PRUNE_MODES = ("video_only", "images_only", "video_and_images",
                "heavy_assets")
