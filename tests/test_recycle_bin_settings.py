@@ -84,3 +84,35 @@ def test_real_lookup_on_the_system_drive(tmp_path):
     # Default user settings (as on CI): the system drive has a bin and 1 KB fits.
     assert client_remove.recycle_bin_available(Path(os.environ["SystemDrive"] + "\\")) is True
     assert client_remove.recycle_bin_fits(_file(tmp_path / "small", 1024)) is True
+
+
+def test_a_removable_volume_mounted_into_a_folder_on_a_fixed_drive_counts_as_removable(
+        tmp_path, monkeypatch):
+    # Fake kernel32 and winreg: C:\ is fixed, a USB stick is mounted at C:\mnt\usb\.
+    import ctypes
+    import shutil
+    import types
+    usb = str(tmp_path / "usb")
+    types_by_mount = {"C:\\": 3, usb + "\\": 2}   # DRIVE_FIXED, DRIVE_REMOVABLE
+
+    def volume_path(path, buf, size):
+        buf.value = usb + "\\" if path.startswith(usb) else "C:\\"
+        return 1
+
+    def volume_name(mount, buf, size):
+        buf.value = "\\\\?\\Volume{%s}\\" % ("usb" if mount.startswith(usb) else "sys")
+        return 1
+    k32 = types.SimpleNamespace(GetDriveTypeW=lambda root: types_by_mount[root],
+                                GetVolumePathNameW=volume_path,
+                                GetVolumeNameForVolumeMountPointW=volume_name)
+    monkeypatch.setattr(ctypes, "WinDLL", lambda *a, **k: k32, raising=False)
+
+    def no_key(*a):
+        raise FileNotFoundError
+    monkeypatch.setitem(sys.modules, "winreg", types.SimpleNamespace(
+        HKEY_CURRENT_USER=0, KEY_READ=0, OpenKey=no_key))
+    monkeypatch.setattr(shutil, "disk_usage", lambda p: types.SimpleNamespace(total=10 ** 12))
+    monkeypatch.setattr(sys, "platform", "win32")
+    assert client_remove._volume_bin(Path(usb) / "Library")["fixed"] is False
+    assert client_remove.recycle_bin_available(Path(usb) / "Library") is False
+    assert client_remove._volume_bin(tmp_path / "Library")["fixed"] is True

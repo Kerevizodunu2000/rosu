@@ -135,13 +135,12 @@ def _volume_bin(path: Path) -> dict:
     k32.GetVolumeNameForVolumeMountPointW.restype = wintypes.BOOL
     try:
         resolved = str(Path(path).resolve())
-        drive = os.path.splitdrive(resolved)[0]
-        # UNC share: never a Recycle Bin
-        fixed = bool(drive) and not drive.startswith("\\\\") \
-            and k32.GetDriveTypeW(drive + "\\") == 3   # DRIVE_FIXED
         mount = ctypes.create_unicode_buffer(32768)   # MAX path length in wide chars
         if not k32.GetVolumePathNameW(resolved, mount, len(mount)):
             raise ctypes.WinError(ctypes.get_last_error())
+        # The volume's own mount point, not the drive letter: a USB stick mounted into
+        # a folder on C: is removable. A UNC share is DRIVE_REMOTE: never a Recycle Bin.
+        fixed = k32.GetDriveTypeW(mount.value) == 3   # DRIVE_FIXED
         name = ctypes.create_unicode_buffer(64)   # "\\?\Volume{GUID}\" is 49 chars
         if not k32.GetVolumeNameForVolumeMountPointW(mount.value, name, len(name)):
             raise ctypes.WinError(ctypes.get_last_error())
