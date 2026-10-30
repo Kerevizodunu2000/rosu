@@ -7,12 +7,12 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QAbstractItemView, QCheckBox, QFileDialog, QHBoxLayout, QHeaderView, QLabel,
+    QAbstractItemView, QCheckBox, QFileDialog, QFrame, QHBoxLayout, QHeaderView, QLabel,
     QMessageBox, QProgressBar, QPushButton, QTableWidget, QTableWidgetItem,
     QVBoxLayout, QWidget,
 )
 
-from .. import config, extractor, osu_import
+from .. import client_import, config, diskspace, extractor, osu_import
 from ..i18n import human_duration
 from ..workers import Worker
 from .drive_browser_dialog import _fmt_size as _fmt_drive_size
@@ -30,7 +30,18 @@ def no_space_text(t, ns: dict) -> str:
              "free": _fmt_size(ns["free"])}
     if ns.get("staging"):   # the 7z temp folder, not the folder the user chose
         return t("disk_no_space_temp", **sizes)
+    if ns.get("reexport"):   # the temp folder a client re-export is written into
+        return t("disk_no_space_reexport", **sizes)
     return t("disk_no_space", **sizes)
+
+
+def _disk_usage(cfg, progress=None) -> list:
+    """Worker body: usage per drive for the folders Rosu reads and writes. The client
+    folders are resolved here (they read config files); ``None`` is skipped."""
+    return diskspace.usage([
+        ("packs", cfg.packs_path), ("output", cfg.output_path),
+        ("library", cfg.library_path), ("stable", client_import.stable_songs_dir()),
+        ("lazer", client_import.lazer_data_dir())])
 
 
 class DashboardTab(QWidget):
@@ -44,6 +55,8 @@ class DashboardTab(QWidget):
         self._output: list[dict] = []
         self._known_paths: list[str] = []   # scanned archives already in the DB
         self._view = "packs"   # "packs" (scan) or "output" (unpacked .osz)
+        self._disks: list[dict] = []   # last result of the Disks card
+        self.disk_rows: list[tuple[QLabel, QProgressBar | None]] = []
 
         root = QVBoxLayout(self)
         root.setContentsMargins(18, 18, 18, 18)
@@ -92,6 +105,16 @@ class DashboardTab(QWidget):
         self.btn_backup.clicked.connect(self.on_backup)
         self.btn_rescan.clicked.connect(self.refresh_scan)
 
+        self.disk_card = QFrame(objectName="jobrow")
+        self.disk_card.setFrameShape(QFrame.StyledPanel)
+        self.disk_lay = QVBoxLayout(self.disk_card)
+        self.disk_lay.setContentsMargins(8, 6, 8, 6)
+        self.disk_lay.setSpacing(4)
+        self.disk_title = QLabel(objectName="status")
+        self.disk_title.setWordWrap(True)
+        self.disk_lay.addWidget(self.disk_title)
+        root.addWidget(self.disk_card)
+
         self.table = QTableWidget(0, 5)
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
@@ -118,6 +141,7 @@ class DashboardTab(QWidget):
         root.addLayout(bottom)
 
         self.refresh_scan()
+        self.refresh_disks()
 
     # -- i18n ----------------------------------------------------------------
     def retranslate(self) -> None:
@@ -148,6 +172,7 @@ class DashboardTab(QWidget):
         self._update_banner()
         self._sync_auto_copy()
         self._sync_import_buttons()
+        self._render_disks()
         if not self.status.text():
             self.status.setText(t("ready"))
 
@@ -170,7 +195,57 @@ class DashboardTab(QWidget):
 
     def on_shown(self) -> None:
         self.refresh_scan()
+        self.refresh_disks()
         self._sync_import_buttons()   # a client may have been configured meanwhile
+
+    # -- disks card ----------------------------------------------------------
+    def refresh_disks(self) -> None:
+        """Load the card's numbers off the UI thread; a failed load leaves it empty."""
+        w = Worker(_disk_usage, self.ctx.cfg)
+        self._threads.append(w)
+        w.succeeded.connect(self._on_disks)
+        w.failed.connect(lambda _msg: self._on_disks([]))
+        w.finished.connect(lambda: self._threads.remove(w) if w in self._threads else None)
+        w.start()
+
+    def _on_disks(self, result) -> None:
+        self._disks = list(result)
+        self._render_disks()
+
+    def _render_disks(self) -> None:
+        t = self.ctx.t
+        self.disk_title.setText(t("disk_card_title"))
+        for lbl, bar in self.disk_rows:
+            for w in (lbl, bar):
+                if w is not None:
+                    self.disk_lay.removeWidget(w)
+                    w.deleteLater()
+        self.disk_rows = []
+        for d in self._disks:
+            places = ", ".join(t(f"disk_place_{k}") for k in d["labels"])
+            lbl = QLabel(objectName="status")
+            lbl.setWordWrap(True)
+            bar = None
+            if d["readable"]:
+                figures = {"used": _fmt_drive_size(d["used"]),
+                           "total": _fmt_drive_size(d["total"]),
+                           "free": _fmt_drive_size(d["free"])}
+                text = t("disk_card_row", drive=d["drive"], places=places, **figures)
+                if d["low"]:
+                    text = t("disk_card_low") + text
+                bar = QProgressBar()
+                bar.setRange(0, 100)
+                bar.setValue(round(100 * d["used"] / d["total"]) if d["total"] else 0)
+                bar.setTextVisible(False)   # the label carries the numbers
+                bar.setAccessibleName(f"{d['drive']} {places}")
+                bar.setAccessibleDescription(text)
+            else:
+                text = t("disk_card_unreadable", drive=d["drive"], places=places)
+            lbl.setText(text)
+            self.disk_lay.addWidget(lbl)
+            if bar is not None:
+                self.disk_lay.addWidget(bar)
+            self.disk_rows.append((lbl, bar))
 
     # -- scanning ------------------------------------------------------------
     def refresh_scan(self) -> None:

@@ -45,6 +45,10 @@ class ExportMixin:
             self._cancel.clear()   # own the token for this export (gather → write)
             stage = Path(tempfile.mkdtemp(prefix="rosu_export_"))
             try:
+                no_space = self._reexport_no_space(source, stage, self._cancel.is_set)
+                if no_space:
+                    return {"source": source, "count": 0, "archives": [],
+                            "cancelled": False, "no_space": no_space}
                 files = self._gather_export_sources(source, stage, progress,
                                                     star_range=star_range)
                 files = _sample_export(files, limit)
@@ -84,6 +88,30 @@ class ExportMixin:
             if no_space:
                 self._warn("export:space",
                            "Export refused: " + str(diskspace.NotEnoughSpace(**no_space)))
+            return no_space
+
+        def _reexport_no_space(self, source: str, stage, cancel=None) -> dict | None:
+            """Pre-flight for the temporary re-export of ``lazer`` / ``stable`` /
+            ``merged``, before anything is written into ``stage``. The estimate is
+            the byte total of the Songs folder (stable) and of the lazer data folder
+            (an upper bound); a disabled or missing client adds 0. Returns the
+            ``no_space`` dict (with ``reexport``) on a refusal, else None."""
+            from .. import client_import
+            clients = {"lazer": ("lazer",), "stable": ("stable",),
+                       "merged": ("lazer", "stable")}.get(source, ())
+            roots = {"stable": client_import.stable_songs_dir,
+                     "lazer": client_import.lazer_data_dir}
+            need = 0
+            for client in clients:
+                root = roots[client]() if self.client_enabled(client) else None
+                if root is not None:
+                    need += diskspace.tree_size(root, cancel)
+            no_space = diskspace.shortfall([(stage, need)])
+            if no_space:
+                no_space["reexport"] = True
+                self._warn("export:space",
+                           "Re-export refused: " + str(diskspace.NotEnoughSpace(
+                               no_space["drive"], no_space["need"], no_space["free"])))
             return no_space
 
         def _write_export(self, files, dest_base, fmt, split_bytes, progress, cancel):
@@ -402,6 +430,10 @@ class ExportMixin:
             job.on_cleanup.append(lambda: shutil.rmtree(stage, ignore_errors=True))
     
             def s_gather(ctx, progress, cancel):
+                ctx["no_space"] = self._reexport_no_space(source, ctx["stage"], cancel)
+                if ctx["no_space"]:
+                    ctx["files"] = []
+                    return
                 files = self._gather_export_sources(source, ctx["stage"], progress,
                                                     cancel=cancel, star_range=star_range)
                 ctx["files"] = _sample_export(files, limit)

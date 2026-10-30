@@ -161,15 +161,11 @@ class LibraryMixin:
                 return res
             stage = Path(tempfile.mkdtemp(prefix="rosu_watch_"))
             try:
-                margin = 256 * 1024 * 1024
                 for where in (stage, self.cfg.library_path):
-                    try:
-                        if shutil.disk_usage(where).free < need + margin:
-                            res["failed"] = [str(p) for p in srcs]
-                            self.log.error("watch:space", f"not enough free space in {where}")
-                            return res
-                    except OSError:
-                        pass
+                    if not diskspace.space(where, need).fits:
+                        res["failed"] = [str(p) for p in srcs]
+                        self.log.error("watch:space", f"not enough free space in {where}")
+                        return res
                 staged: list[Path] = []
                 for src in srcs:
                     if _eff():
