@@ -5,10 +5,15 @@ Two storage shapes are handled, because the two osu! clients store beatmaps
 differently:
 
 * **.osz archives** (Rosu's Library) — :func:`prune_osz` rewrites the zip without
-  the unwanted members, atomically.
+  the unwanted members, atomically, and only after a copy of the original has
+  reached the Recycle Bin (a throwaway copy can opt out with
+  ``keep_original=False``).
 * **loose folders** (osu!(stable)'s ``Songs/<set>/``) — :func:`prune_folder`
   recycles the unwanted files in place. Stable reads the folder from disk, so a
   missing video simply means no video.
+
+Both refuse (free nothing) on a drive without a Recycle Bin, where "recycling"
+would delete for good.
 
 **osu!lazer is deliberately absent.** Lazer stores every file content-addressed
 under ``files/<h>/<hh>/<hash>`` and references it from ``client.realm`` by hash,
@@ -24,6 +29,7 @@ import zipfile
 import tempfile
 from pathlib import Path
 
+from . import client_remove
 from .zipread import TooBig, read_capped
 
 
@@ -188,7 +194,8 @@ def scan_osz(osz_path: Path | str, mode: str = "video_only") -> tuple[int, int]:
     return (total, removable)
 
 
-def prune_osz(osz_path: Path | str, mode: str = 'video_only', max_unessential_size: int = 2 * 1024 * 1024) -> int:
+def prune_osz(osz_path: Path | str, mode: str = 'video_only', max_unessential_size: int = 2 * 1024 * 1024,
+              *, keep_original: bool = True) -> int:
     """Remove non-essential files from an .osz to save space.
 
     ``mode`` is one of :data:`MODES` — ``video_only``, ``images_only``,
@@ -196,11 +203,19 @@ def prune_osz(osz_path: Path | str, mode: str = 'video_only', max_unessential_si
     ``heavy_assets`` (keeps whatever a ``.osu`` references, plus small
     audio/images, and drops the rest). A ``.osu`` is never removed.
 
+    With ``keep_original`` (the default) a copy of the original goes to the
+    Recycle Bin BEFORE the pruned file replaces it, so a failed trash step
+    leaves the original untouched; on a drive without a Recycle Bin nothing is
+    pruned. ``keep_original=False`` is for throwaway copies (an export, a staged
+    import): no Recycle Bin copy, just the swap.
+
     Returns bytes freed; 0 when nothing was removed (and then the original file
     is not rewritten at all).
     """
     p = Path(osz_path)
     if not p.exists():
+        return 0
+    if keep_original and not client_remove.recycle_bin_available(p.parent):
         return 0
 
     try:
@@ -236,30 +251,23 @@ def prune_osz(osz_path: Path | str, mode: str = 'video_only', max_unessential_si
             _discard(temp_path)
             return 0
 
-        # Keep the original recoverable (Recycle Bin) WITHOUT gating the
-        # swap's atomicity on it: copy it aside first (the live file at `p`
-        # is never touched by this), then do the actual swap-in with a
-        # SINGLE `os.replace(temp_path, p)` — an atomic rename that has no
-        # instant where `p` is missing, unlike a rename-aside-then-swap-back
-        # sequence (which a crash or a second I/O failure mid-recovery could
-        # leave stuck with `p` absent and the real file stranded under a
-        # temp name). Only trash the copy last, once the swap is done.
-        trash_copy = str(_aside_name(p))
-        try:
-            shutil.copy2(str(p), trash_copy)
-        except Exception:
-            _discard(trash_copy)
-            raise
-        try:
-            os.replace(temp_path, str(p))   # atomic: p always has valid content
-        except Exception:
-            _discard(trash_copy)   # p untouched; drop the now-unneeded copy
-            raise
-        try:
-            from send2trash import send2trash
-            send2trash(trash_copy)
-        except Exception:
-            _discard(trash_copy)
+        # Make the original recoverable FIRST: copy it aside (the live file at
+        # `p` is never touched by this) and send that copy to the Recycle Bin.
+        # If either step fails, drop the copy and the temp file and leave `p`
+        # as it was. Only once the copy is in the Recycle Bin is the pruned file
+        # swapped in, with a SINGLE `os.replace(temp_path, p)`: an atomic
+        # rename with no instant where `p` is missing. If that swap fails, `p`
+        # is still the original and the trashed copy is merely redundant.
+        if keep_original:
+            trash_copy = str(_aside_name(p))
+            try:
+                shutil.copy2(str(p), trash_copy)
+                from send2trash import send2trash
+                send2trash(trash_copy)
+            except Exception:
+                _discard(trash_copy)
+                raise
+        os.replace(temp_path, str(p))   # atomic: p always has valid content
         return freed
     except Exception:
         _discard(temp_path)
@@ -301,7 +309,8 @@ def _folder_targets(folder: Path, mode: str) -> list[Path] | None:
             size = p.stat().st_size
         except OSError:
             continue
-        if _is_removable(p.name.lower(), size, mode, essential):
+        # The relative path, so "sub/bg.jpg" matches a .osu's "sub/bg.jpg".
+        if _is_removable(p.relative_to(folder).as_posix().lower(), size, mode, essential):
             out.append(p)
     return out
 
@@ -339,7 +348,8 @@ def prune_folder(folder: Path | str, mode: str = "video_only",
     * ``root`` (the Songs directory) is enforced — a folder resolving outside it
       is refused outright, so a stray symlink or a bad path cannot walk the disk;
     * a folder with no ``.osu`` is not a beatmap folder and is left alone;
-    * files go to the **Recycle Bin**, never an unlink, so it stays undoable.
+    * files go to the **Recycle Bin**, never an unlink, so it stays undoable;
+      on a drive without one, nothing is removed.
     """
     folder = Path(folder)
     if not folder.is_dir():
@@ -349,6 +359,8 @@ def prune_folder(folder: Path | str, mode: str = "video_only",
             folder.resolve().relative_to(Path(root).resolve())
         except (ValueError, OSError):
             return 0          # outside the configured Songs folder — refuse
+    if not client_remove.recycle_bin_available(folder):
+        return 0              # send2trash would delete for good here
     targets = _folder_targets(folder, mode)
     if not targets:
         return 0
