@@ -49,7 +49,11 @@ jobs:
       - name: Build single .exe
         run: pyinstaller rosu.spec
       - name: Smoke-test the frozen build
-        run: dist/rosu.exe --selftest
+        # rosu.exe is windowed: PowerShell does not wait for it or set $LASTEXITCODE.
+        run: |
+          $p = Start-Process -FilePath dist/rosu.exe -ArgumentList '--selftest' -Wait -PassThru
+          Write-Host "selftest exit code: $($p.ExitCode)"
+          if ($p.ExitCode -ne 0) { exit 1 }
       - name: Upload build artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
