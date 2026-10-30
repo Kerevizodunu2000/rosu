@@ -69,6 +69,10 @@ the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Purging the Library marks as memory-only only the sets whose files actually went to the
   Recycle Bin.
 - An interrupted mirror download no longer leaves a stray `.osz` in the Library.
+- When Rosu can't prepare a copy of a beatmap for import (for example, the disk is full
+  or access is denied), it no longer sends osu! the original from Output or the Library.
+  Only the copies that worked are sent, and the Dashboard and Shortcuts say how many were
+  not sent and that they are still in Output.
 
 ### Removed
 - The **Delete permanently** processed-archive action. Existing settings switch to

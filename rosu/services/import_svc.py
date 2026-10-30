@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 from __future__ import annotations
 import datetime as _dt
+import errno
 import threading
 import time
 from pathlib import Path
@@ -11,6 +12,11 @@ _CLIENT_LABEL = {"lazer": "osu!lazer", "stable": "osu!(stable)"}
 
 def now_iso() -> str:
     return _dt.datetime.now().replace(microsecond=0).isoformat()
+
+# shortcut: duplicates diskspace.is_disk_full; switch to it once #43 is merged
+def _is_disk_full(exc) -> bool:
+    return isinstance(exc, OSError) and (
+        exc.errno == errno.ENOSPC or getattr(exc, "winerror", None) in (112, 39))
 
 def _sample_export(files, limit):
     if limit is None or limit <= 0 or len(files) <= limit:
@@ -240,6 +246,8 @@ class ImportMixin:
                 # already hides its controls; this is the belt-and-suspenders guard).
                 return {"disabled": True, "sent": 0, "files": 0, "batches": 0}
             _eff = cancel if cancel is not None else self._cancel.is_set
+            n_in = len(files)
+            failed: list = []
             if target == "stable":
                 exe = self.cfg.osu_stable_exe or config.detect_stable_exe()
                 # osu!(stable) *moves* each .osz into its Songs folder on import; a
@@ -247,13 +255,14 @@ class ImportMixin:
                 # install drive so the move is a same-drive rename, and the source is
                 # left intact. It also imports one file per launch (batching makes it
                 # fail), so send max_batch_files=1.
-                files = self._stage_for_stable(files, exe)
+                files = self._stage_for_stable(files, exe, failed)
                 batch_kw = {"max_batch_files": 1}
             else:
                 exe = self.cfg.osu_lazer_exe or config.detect_osu_exe()
                 # osu!lazer consumes the source .osz on import; stage copies so the
                 # source survives too, consistent with stable.
-                files = self._stage_copies(files, self.cfg.data_path / "_import_stage")
+                files = self._stage_copies(files, self.cfg.data_path / "_import_stage",
+                                           failed)
                 batch_kw = {}
     
             def _prog(i, total, n):
@@ -274,14 +283,17 @@ class ImportMixin:
                 self.db._bump()   # let Search/Artists see the new 🎮 flags on reload
             self.log.info("OSU_IMPORT_DONE", target=target, files=res["files"],
                           batches=res["batches"])
+            res["stage_failed"] = n_in - len(files)
+            res["disk_full"] = any(_is_disk_full(e) for e in failed)
             return res
 
-        def _stage_copies(self, files, stage_dir):
+        def _stage_copies(self, files, stage_dir, failed=None):
             """Copy ``files`` into ``stage_dir`` (clearing prior leftovers first) so the
             osu! client consumes the COPIES and the Output folder is preserved — the
             same batch can then also go to the other client. Clears the read-only bit
-            so osu can move each file. Returns the staged paths, or the originals if
-            staging can't be set up (or per-file, on a copy error)."""
+            so osu can move each file. Returns only the paths actually staged — a file
+            whose copy fails is skipped, and ``[]`` if the stage folder can't be set
+            up — never the originals. Each ``OSError`` goes into ``failed`` if given."""
             import os
             import shutil
             stage = Path(stage_dir)
@@ -293,8 +305,11 @@ class ImportMixin:
                         except OSError:
                             pass
                 stage.mkdir(parents=True, exist_ok=True)
-            except OSError:
-                return files
+            except OSError as exc:
+                self.log.error("import:stage", f"{stage}: {str(exc)[:150]}")
+                if failed is not None:
+                    failed.append(exc)
+                return []
             staged = []
             for f in files:
                 dst = stage / f.name
@@ -315,13 +330,15 @@ class ImportMixin:
                     # break the "Output is preserved" guarantee, silently. Log and skip
                     # — the set stays in Output (and the Library) to retry.
                     self.log.error("import:stage", f"{f.name}: {str(exc)[:150]}")
-            return staged or files
+                    if failed is not None:
+                        failed.append(exc)
+            return staged
 
-        def _stage_for_stable(self, files, exe=None):
+        def _stage_for_stable(self, files, exe=None, failed=None):
             """Stage on the osu!(stable) install drive, so its import-move is a
             same-drive rename. Derives the install dir from the configured exe (custom
-            paths work), falling back to auto-detection; returns the Output paths
-            unchanged if neither can be located."""
+            paths work), falling back to auto-detection; returns ``[]`` (never the
+            originals) if neither can be located."""
             from .. import client_import
             install = None
             if exe:
@@ -333,8 +350,9 @@ class ImportMixin:
                 songs = client_import.stable_songs_dir()
                 install = songs.parent if songs else None
             if install is None:
-                return files
-            return self._stage_copies(files, install / "_rosu_import")
+                self.log.error("import:stage", "osu!(stable) folder not found")
+                return []
+            return self._stage_copies(files, install / "_rosu_import", failed)
 
         def installed_summary(self, progress=None) -> dict:
             """Read-only counts for the Shortcuts (Kısayollar) tab: how many beatmap
