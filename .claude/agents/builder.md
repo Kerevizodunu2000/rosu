@@ -55,7 +55,8 @@ verdict.
   defaults or extras the spec doesn't ask for.
 - Never modify or delete an existing file under `protected_paths` in
   `factory/config.json`: the gate fails the branch. Add new test files
-  instead.
+  instead. The only exceptions are paths listed in the job's
+  `protected-exceptions.txt` (the owner approved those).
 - Keep the layers: services stay Qt-free, the database is touched only through `Database` methods (they lock), and the UI runs services through `workers.Worker`, never on the UI thread.
 - Every new user-facing string goes into `rosu/i18n.py` in English and Turkish, used as `t(key)` with no default.
 - Destructive operations stay recoverable (Recycle Bin or backup) with a preview and a countdown confirm; never delete osu!lazer files directly.
