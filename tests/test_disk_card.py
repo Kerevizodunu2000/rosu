@@ -224,3 +224,37 @@ def test_long_turkish_rows_wrap_and_add_no_width(make_win):
         assert w.wordWrap() and w.minimumSizeHint().width() < 1280
     assert bar.minimumSizeHint().width() < 1280
     assert tab.minimumSizeHint().width() <= before
+
+
+def test_an_older_load_cannot_overwrite_a_newer_one(make_win, monkeypatch):
+    win = make_win("en", NORMAL)
+    tab = _load(win)
+    fresh = [lbl.text() for lbl, _ in tab.disk_rows]
+    sent = []
+
+    class Held:   # a Worker that never finishes on its own: the test emits by hand
+        def __init__(self, *a, **k):
+            from PySide6.QtCore import QObject, Signal
+
+            class S(QObject):
+                succeeded = Signal(object)
+                failed = Signal(str)
+                finished = Signal()
+            self.s = S()
+            self.succeeded, self.failed, self.finished = (
+                self.s.succeeded, self.s.failed, self.s.finished)
+            sent.append(self)
+
+        def start(self):
+            pass
+
+    monkeypatch.setattr(dashboard_tab, "Worker", Held)
+    tab.refresh_disks()
+    tab.refresh_disks()
+    old, new = sent
+    new.succeeded.emit([])
+    assert tab.disk_rows == []
+    old.succeeded.emit([{"drive": "Z:\\", "labels": ["packs"], "used": 1, "total": 2,
+                         "free": 1, "readable": True, "low": False}])
+    assert tab.disk_rows == [] and fresh   # the stale result was dropped
+    tab._threads.clear()

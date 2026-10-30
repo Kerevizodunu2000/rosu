@@ -56,6 +56,7 @@ class DashboardTab(QWidget):
         self._known_paths: list[str] = []   # scanned archives already in the DB
         self._view = "packs"   # "packs" (scan) or "output" (unpacked .osz)
         self._disks: list[dict] = []   # last result of the Disks card
+        self._disk_gen = 0   # a load's result is dropped when a newer load has started
         self.disk_rows: list[tuple[QLabel, QProgressBar | None]] = []
 
         root = QVBoxLayout(self)
@@ -105,7 +106,7 @@ class DashboardTab(QWidget):
         self.btn_backup.clicked.connect(self.on_backup)
         self.btn_rescan.clicked.connect(self.refresh_scan)
 
-        self.disk_card = QFrame(objectName="jobrow")
+        self.disk_card = QFrame(objectName="diskcard")
         self.disk_card.setFrameShape(QFrame.StyledPanel)
         self.disk_lay = QVBoxLayout(self.disk_card)
         self.disk_lay.setContentsMargins(8, 6, 8, 6)
@@ -201,10 +202,12 @@ class DashboardTab(QWidget):
     # -- disks card ----------------------------------------------------------
     def refresh_disks(self) -> None:
         """Load the card's numbers off the UI thread; a failed load leaves it empty."""
+        self._disk_gen += 1
+        gen = self._disk_gen
         w = Worker(_disk_usage, self.ctx.cfg)
         self._threads.append(w)
-        w.succeeded.connect(self._on_disks)
-        w.failed.connect(lambda _msg: self._on_disks([]))
+        w.succeeded.connect(lambda res: gen == self._disk_gen and self._on_disks(res))
+        w.failed.connect(lambda _msg: gen == self._disk_gen and self._on_disks([]))
         w.finished.connect(lambda: self._threads.remove(w) if w in self._threads else None)
         w.start()
 
