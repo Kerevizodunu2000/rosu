@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""The Shortcuts tab status line wraps, so a long message never widens the window."""
+"""The Shortcuts tab status line wraps, so a long message never widens the tab."""
 import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -7,7 +7,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from rosu import config, theming
 
 
-def test_long_status_message_keeps_the_tab_under_the_default_width(tmp_path, monkeypatch):
+def test_long_status_message_wraps_instead_of_widening_the_tab(tmp_path, monkeypatch):
     from PySide6.QtWidgets import QApplication
     from rosu.app import AppContext
     from rosu.ui.main_window import MainWindow
@@ -25,7 +25,8 @@ def test_long_status_message_keeps_the_tab_under_the_default_width(tmp_path, mon
     tab.ensurePolished()
     tab.status.ensurePolished()
     assert tab.status.fontMetrics().horizontalAdvance(tab.status.text()) > 1280   # one line would not fit
-    assert tab.minimumSizeHint().width() < 1280                                   # main window default
+    # The label's own minimum width, not the tab's: other widgets set the tab's width per platform font.
+    assert tab.status.minimumSizeHint().width() < 1280
     app.setStyleSheet("")
     win.close()
     ctx.db.close()
