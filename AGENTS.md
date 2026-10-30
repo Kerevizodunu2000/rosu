@@ -79,6 +79,14 @@ To look at a widget without a display, build it with
   streamer-mode API, a local MCP server) bind to `127.0.0.1` and are off by
   default. LAN features (the phone remote, LAN transfer) listen on the LAN
   only while the user has turned them on, and only for paired devices.
+- **Rust:** the app stays Python + PySide6; there is no full rewrite. Move an
+  existing function to Rust (a PyO3 module, as `rosu-pp-py` already is) only
+  after a profile on a large library shows it is a bottleneck. For a new
+  feature, decide at intake whether its heavy core (hashing or scanning large
+  data, audio or image processing, a long-running engine) is better written
+  in Rust; the UI, services and tests stay in Python. Rust modules follow the
+  same rules: GPL-3.0-or-later, tested, built with free tools, and CI builds
+  the Windows wheel.
 - **Releases:** each version passes a review gate (Sonnet finders → Opus
   verification → fixes) before it ships. Agents never tag or publish a
   release.
