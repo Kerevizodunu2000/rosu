@@ -148,21 +148,21 @@ def test_long_notes_do_not_resize_the_window(qapp, win):
     qapp.setStyleSheet(theming.stylesheet_for(win.ctx.cfg.theme))   # what users see
     try:
         win.show()
-        qapp.processEvents()
-        win.resize(1280, win.minimumSizeHint().height() + 200)   # room for a banner
-        size = win.size()
         win.show_updated_notice("1.2.3")
-        three = "\n".join(["short"] * 3)
-        win._on_update_checked({**SAME, "notes": three})
+        win._on_update_checked({**SAME, "notes": "\n".join(["short"] * 3)})
         qapp.processEvents()
-        min_three = win.minimumSizeHint().height()
+        # no fixed size: the window's own minimum depends on the platform's fonts
+        win.resize(win.width(), win.minimumSizeHint().height() + 200)
+        qapp.processEvents()
+        size, hint = win.size(), win.update_banner.minimumSizeHint()
+        min_w = win.minimumSizeHint().width()
         # as update_check hands it over: at most 1500 characters
         notes = "x" * 400 + "\n" + "\n".join("long words " * 5 for _ in range(20))
         win._on_update_checked({**SAME, "notes": notes})
         qapp.processEvents()
-        assert win.size() == size
+        assert win.size() == size and win.minimumSizeHint().width() == min_w
         # the 3-line cap bounds the banner: 20 lines need no more room than 3
-        assert win.minimumSizeHint().height() == min_three
+        assert win.update_banner.minimumSizeHint().height() <= hint.height()
     finally:
         qapp.setStyleSheet("")
 
