@@ -1,10 +1,11 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 from __future__ import annotations
 import datetime as _dt
+import tempfile
 import time
 from pathlib import Path
 
-from .. import archives, client_remove, config, extractor, osu_import, parsing
+from .. import archives, client_remove, config, diskspace, extractor, osu_import, parsing
 from ..models import ExtractPlan, ParsedPack
 
 _CLIENT_LABEL = {"lazer": "osu!lazer", "stable": "osu!(stable)"}
@@ -78,19 +79,38 @@ class ExtractMixin:
             _eff = cancel if cancel is not None else self._cancel.is_set
             if cancel is None:
                 self._cancel.clear()   # fresh extract; makes unpacking cancellable
+            # Pre-flight, before anything is written: one read per archive gives
+            # the progress total and the bytes Output (and the 7z staging) need.
+            total = need_out = largest_7z = 0
+            for zp, _ in approved:
+                try:
+                    tracks = extractor.read_osz_entries(zp)
+                    if archives.archive_kind(Path(zp).name) == "7z":
+                        # a 7z is staged whole (every member) in the temp folder,
+                        # one archive at a time
+                        with archives.open_reader(zp) as r:
+                            largest_7z = max(largest_7z,
+                                             sum(m.size or 0 for m in r.members()))
+                except extractor.ARCHIVE_READ_ERRORS:
+                    tracks = []   # unreadable: the loop below keeps and reports it
+                total += len(tracks)
+                need_out += sum(t.size_bytes for t in tracks)
+            for where, need in ((self.cfg.output_path, need_out),
+                                (tempfile.gettempdir(), largest_7z)):
+                sp = diskspace.space(where, need) if need > 0 else None
+                if sp is not None and not sp.fits:
+                    no_space = {"drive": sp.drive, "need": need + diskspace.MARGIN,
+                                "free": sp.free}
+                    self._warn("extract:space", "Unpack refused: "
+                               + str(diskspace.NotEnoughSpace(**no_space)))
+                    return {"packs": 0, "tracks": 0, "rejected": [], "loose": 0,
+                            "kept": len(approved), "no_space": no_space}
+
             when = now_iso()
             start = time.time()
             if self.cfg.clear_output_before_extract:
                 self._clear_output_osz()
             self.log.info("EXTRACT_START", pack_count=len(approved), source="Packs/")
-    
-            def _count(zp) -> int:
-                try:
-                    return len(extractor.read_osz_entries(zp))
-                except extractor.ARCHIVE_READ_ERRORS:
-                    return 0   # unreadable: extract() below keeps and reports it
-
-            total = sum(_count(zp) for zp, _ in approved)
             done = [0]
     
             def _cb(pack_name: str, osz_name: str) -> None:
@@ -103,6 +123,7 @@ class ExtractMixin:
             processed_dir = self.cfg.root_path / "Processed"
             rejected: list[dict] = []
             kept = 0
+            disk_full = False
             for zip_path, parsed in approved:
                 if _eff():
                     break
@@ -130,6 +151,12 @@ class ExtractMixin:
                     self.db.set_pack_extra(parsed.code, len(res["extra_files"]))
                 self.log.info("EXTRACT_PACK", code=parsed.code, tracks=res["tracks"],
                               subfolders=res["subfolders"])
+                if res.get("disk_full"):
+                    disk_full = True
+                    kept += 1
+                    self._warn(f"extract:{parsed.code}",
+                               f"{zip_path.name} kept: the disk is full; Unpack stopped")
+                    break
                 if res["cancelled"] or res["failed"]:
                     kept += 1
                     why = ("cancelled" if res["cancelled"]
@@ -153,7 +180,7 @@ class ExtractMixin:
     
             # loose .osz dropped straight into Packs need no unpacking — move them to
             # Output and record with a "Direct" source (fixes "no archive found").
-            loose = self.process_loose_osz()
+            loose = 0 if disk_full else self.process_loose_osz()
             total_tracks += loose
     
             info = self.rebuild()
@@ -164,7 +191,9 @@ class ExtractMixin:
             result = {"packs": len(approved) - len(rejected), "tracks": total_tracks,
                       "rejected": rejected, "loose": loose, "kept": kept, **info}
     
-            if self.cfg.auto_backup_after_extract:
+            if disk_full:
+                result["disk_full"] = True
+            elif self.cfg.auto_backup_after_extract:
                 backup = self.copy_library(progress)
                 result["backup"] = backup
             return result
