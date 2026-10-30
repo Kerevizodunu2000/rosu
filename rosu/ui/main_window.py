@@ -2,9 +2,10 @@
 """Main window: a tabbed shell hosting the five feature tabs."""
 from __future__ import annotations
 
+from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import (
-    QHBoxLayout, QLabel, QMainWindow, QMessageBox, QPushButton, QSizePolicy,
-    QTabWidget, QVBoxLayout, QWidget,
+    QApplication, QHBoxLayout, QLabel, QMainWindow, QMessageBox, QPushButton,
+    QSizePolicy, QTabWidget, QVBoxLayout, QWidget,
 )
 
 from .. import __version__, theming, updater
@@ -40,6 +41,8 @@ class MainWindow(QMainWindow):
         from .links import wire_link_hover
         wire_link_hover(self.update_banner)
         self.update_banner.setContentsMargins(12, 6, 12, 6)
+        # long text wraps, but an unbroken token is clipped rather than widening the window
+        self.update_banner.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         self.update_banner.setVisible(False)
         # banner row: the text plus "Restart now" once an update is staged
         self._banner_row = QHBoxLayout()
@@ -52,6 +55,11 @@ class MainWindow(QMainWindow):
         self.update_restart.setVisible(False)
         self.update_restart.clicked.connect(self._on_restart_now)
         self._banner_row.addWidget(self.update_restart)
+        self.update_dismiss = QPushButton()
+        self.update_dismiss.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Preferred)
+        self.update_dismiss.setVisible(False)
+        self.update_dismiss.clicked.connect(self._on_dismiss_notice)
+        self._banner_row.addWidget(self.update_dismiss)
         col.addLayout(self._banner_row)
         self.tabs = QTabWidget()
         col.addWidget(self.tabs, 1)
@@ -62,6 +70,12 @@ class MainWindow(QMainWindow):
         self._update_phase = ""          # "", "downloading" or "ready"
         self._update_percent = 0
         self._update_cancel = None       # threading.Event of the running download
+        self._update_check: dict | None = None   # last valid check result, newer or not
+        self._installed_version: str | None = None   # the "was installed" notice, until dismissed
+        self._restart_armed = False      # "Restart now" pressed while busy
+        self._restart_timer = QTimer(self)
+        self._restart_timer.setInterval(1000)
+        self._restart_timer.timeout.connect(self._restart_if_idle)
         self.restart_for_update = False  # read by app.run() after the DB is closed
 
         self.dashboard = DashboardTab(self)
@@ -102,7 +116,11 @@ class MainWindow(QMainWindow):
         w.start()
 
     def _on_update_checked(self, res) -> None:
-        if not res or not res.get("newer"):
+        if not res:
+            return
+        self._update_check = res   # kept even when not newer: the notice uses its notes
+        if not res.get("newer"):
+            self._render_update_banner()
             return
         self._update_info = res
         if updater.can_auto_update(self.ctx.cfg):
@@ -131,30 +149,90 @@ class MainWindow(QMainWindow):
         self._update_phase = "ready" if ready else ""   # else: today's banner
         self._render_update_banner()
 
-    def _on_restart_now(self) -> None:
-        if self._operation_running():
-            QMessageBox.information(self, self.ctx.t("app_title"),
-                                    self.ctx.t("update_restart_later"))
+    def show_updated_notice(self, version: str | None) -> None:
+        """One-time "Rosu vX was installed" line; ``version`` is mark_healthy()'s result."""
+        if version is None:
             return
+        self._installed_version = version
+        self._render_update_banner()
+
+    def _on_dismiss_notice(self) -> None:
+        self._installed_version = None
+        self._render_update_banner()
+        self.tabs.setFocus()   # the focused button just hid
+
+    def _installed_text(self) -> str:
+        """The notice, plus the first 6 note lines as literal text when the kept
+        check result is for the installed tag (same escaping as links.plain_tip)."""
+        from html import escape
+        version = self._installed_version
+        text = escape(self.ctx.t("update_installed", version=version))
+        chk = self._update_check
+        if chk and str(chk.get("tag", "")).lstrip("v") == version.lstrip("v") \
+                and chk.get("notes"):
+            text += "<br>" + "<br>".join(
+                escape(line) for line in str(chk["notes"]).splitlines()[:6])
+        return text
+
+    def _idle_for_restart(self) -> bool:
+        """No worker, no unfinished queue job (gates included), no open dialog."""
+        if self._operation_running() or QApplication.activeModalWidget() is not None:
+            return False
+        return not any(q.has_unfinished() for q in
+                       (getattr(tab, "queue", None) for tab in self._ordered_tabs) if q)
+
+    def _on_restart_now(self) -> None:
+        if self._restart_armed:
+            self._set_restart_armed(False)
+        elif self._idle_for_restart():
+            self._restart()
+        else:
+            self._set_restart_armed(True)
+
+    def _set_restart_armed(self, armed: bool) -> None:
+        self._restart_armed = armed
+        if armed:
+            self._restart_timer.start()
+        else:
+            self._restart_timer.stop()
+        self._render_update_banner()
+
+    def _restart_if_idle(self) -> None:
+        if self._restart_armed and self._idle_for_restart():
+            self._restart_timer.stop()
+            self._restart()
+
+    def _restart(self) -> None:
         self.restart_for_update = True
         if not self.close():
             self.restart_for_update = False   # close refused: don't relaunch later
+            self._set_restart_armed(False)
 
     def _render_update_banner(self) -> None:
         info = self._update_info
         ready = bool(info) and self._update_phase == "ready"
+        notice = not info and self._installed_version is not None   # an update takes its place
         self.update_restart.setVisible(ready)
-        self._banner_row.setContentsMargins(0, 0, 12 if ready else 0, 0)   # off the edge
+        self.update_dismiss.setVisible(notice)
+        self._banner_row.setContentsMargins(0, 0, 12 if ready or notice else 0, 0)   # off the edge
+        from html import escape
+        t = self.ctx.t
+        if notice:
+            self.update_dismiss.setText(t("update_dismiss"))
+            self.update_banner.setText(self._installed_text())
+            self.update_banner.setVisible(True)
+            return
         if not info:
             self.update_banner.setVisible(False)
             return
-        from html import escape
-        t = self.ctx.t
         if self._update_phase:
-            key = "update_ready" if self._update_phase == "ready" else "update_downloading"
+            armed = ready and self._restart_armed
+            key = ("update_restart_armed" if armed else
+                   "update_ready" if ready else "update_downloading")
             self.update_banner.setText(escape(t(key, tag=info["tag"],
                                                 percent=self._update_percent)))
-            self.update_restart.setText(t("update_restart"))
+            self.update_restart.setText(t("update_cancel_restart" if armed
+                                          else "update_restart"))
             self.update_banner.setVisible(True)
             return
         # The direct .exe when the site supplied one, else the release page. Both

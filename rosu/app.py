@@ -158,7 +158,8 @@ def run() -> int:
     win = MainWindow(ctx, app)
     win.setWindowIcon(QIcon(asset_path("icon.png")))
     win.showMaximized()   # start maximized so the wide tables fit on screen
-    QTimer.singleShot(0, updater.mark_healthy)   # this version starts fine: keep it
+    # this version starts fine: keep it, and say once that it was installed
+    QTimer.singleShot(0, lambda: win.show_updated_notice(updater.mark_healthy()))
     if splash:
         splash.finish(win)
     code = app.exec()

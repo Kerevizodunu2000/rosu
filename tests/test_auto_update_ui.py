@@ -76,7 +76,7 @@ def test_ready_shows_a_focusable_restart_button(win):
     assert btn.focusPolicy() & Qt.TabFocus
 
 
-def test_restart_with_a_task_running_only_informs(win, monkeypatch):
+def test_restart_with_a_task_running_arms_and_cancels(win, monkeypatch):
     from rosu.ui import main_window
     shown = []
     monkeypatch.setattr(main_window.QMessageBox, "information",
@@ -87,8 +87,13 @@ def test_restart_with_a_task_running_only_informs(win, monkeypatch):
     win._update_info = NEWER
     win._on_update_downloaded({"status": updater.READY, "tag": "v9.9.9"})
     win.update_restart.click()
-    assert shown and "next time" in shown[0][2]
-    assert win.restart_for_update is False and closed == []
+    assert shown == [] and closed == [] and win.restart_for_update is False
+    assert "will restart when the current task finishes" in win.update_banner.text()
+    assert win.update_restart.text() == "Cancel restart"
+    assert win._restart_timer.isActive()
+    win.update_restart.click()
+    assert win.update_restart.text() == "Restart now"
+    assert not win._restart_timer.isActive()
 
 
 def test_restart_closes_the_window(win, monkeypatch):

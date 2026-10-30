@@ -108,6 +108,10 @@ class JobQueueController(QObject):
     def has_active(self) -> bool:
         return any(w is not None for w in self._workers.values())
 
+    def has_unfinished(self) -> bool:
+        """Any job not yet DONE/FAILED/CANCELLED, including one waiting at a gate."""
+        return any(j.state not in _JOB_TERMINAL for j in self.jobs)
+
     def cancel_all(self) -> None:
         """App is closing: trip every job's OWN cancel token so running steps stop
         cooperatively (they poll their own token, so ``services.request_cancel`` —
