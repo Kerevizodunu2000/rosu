@@ -128,8 +128,12 @@ QTabBar::tab:hover:!selected {{ background: {header_bg}; }}
 QPushButton {{ background-color: {accent}; color: {accent_text};
     border: none; border-radius: 6px; padding: 9px 16px; font-weight: 600; }}
 QPushButton:hover {{ background-color: {accent_hover}; }}
-QPushButton:disabled {{ background-color: {border}; color: {muted}; }}
+/* Disabled: flat window-colour fill, thin border (padding is 1px less to keep the size). */
+QPushButton:disabled {{ background-color: {bg}; color: {muted};
+    border: 1px solid {bar_border}; padding: 8px 15px; }}
 QPushButton#secondary {{ background-color: {secondary}; color: {secondary_text}; }}
+QPushButton#secondary:disabled {{ background-color: {bg}; color: {muted};
+    border: 1px solid {bar_border}; padding: 8px 15px; }}
 QPushButton#secondary:hover {{ background-color: {header_bg}; }}
 /* Small square buttons (a job's cancel ×, a step's skip ×, ⟳ refresh). The
    base rule's 16px side padding needs 32px of width before a single character
@@ -167,7 +171,16 @@ QCheckBox::indicator {{ width: 16px; height: 16px; border-radius: 4px;
     border: 1px solid {border}; background: {surface}; }}
 QCheckBox::indicator:checked {{ background: {accent}; border: 1px solid {accent}; }}
 QCheckBox:disabled {{ color: {muted}; }}
-QCheckBox::indicator:checked:disabled {{ background: {border}; border: 1px solid {border}; }}
+QCheckBox::indicator:disabled {{ background: {bg}; border: 1px dashed {bar_border}; }}
+QCheckBox::indicator:checked:disabled {{ background: {muted}; border: 1px dashed {muted}; }}
+
+QRadioButton {{ spacing: 8px; }}
+QRadioButton::indicator {{ width: 16px; height: 16px; border-radius: 8px;
+    border: 1px solid {border}; background: {surface}; }}
+QRadioButton::indicator:checked {{ background: {accent}; border: 1px solid {accent}; }}
+QRadioButton:disabled {{ color: {muted}; }}
+QRadioButton::indicator:disabled {{ background: {bg}; border: 1px dashed {bar_border}; }}
+QRadioButton::indicator:checked:disabled {{ background: {muted}; border: 1px dashed {muted}; }}
 
 QSplitter::handle {{ background: {border}; }}
 QLabel#banner {{ background-color: {banner_bg}; color: {banner_text};
