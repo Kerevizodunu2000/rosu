@@ -16,6 +16,10 @@ the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Exporting from a large Library is faster.
 
 ### Fixed
+- A beatmap with an infinite, NaN or huge number in it no longer stops a Library
+  refresh or reads as an empty set. Rosu treats a difficulty setting, game mode, note
+  time or key count it can't use as missing.
+- A mania note with such a number is skipped when rating the difficulty.
 - An archive is removed from Packs only after every beatmap in it was extracted. A
   cancelled Unpack, a beatmap that failed to extract or one with a name Rosu can't read
   now keeps the archive (the Logs tab says why), and the track count shows what was
