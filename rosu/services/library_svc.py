@@ -3,7 +3,7 @@ from __future__ import annotations
 import datetime as _dt
 from pathlib import Path
 
-from .. import diskspace, jobs, library
+from .. import client_remove, diskspace, jobs, library
 
 _CLIENT_LABEL = {"lazer": "osu!lazer", "stable": "osu!(stable)"}
 
@@ -48,21 +48,32 @@ class LibraryMixin:
             rows as memory-only (item 17). Metadata stays; the files go. Only
             the rows whose file actually reached the Recycle Bin are marked."""
             from send2trash import send2trash
+            if not client_remove.recycle_bin_available(self.cfg.library_path):
+                # send2trash would delete every file for good
+                self.log.error("library:purge", "no Recycle Bin on the Library drive; nothing deleted")
+                return {"deleted": 0, "error": "no_recycle_bin"}
             trashed: list[str] = []
+            too_large = 0
             files = list(self.cfg.library_path.glob("*.osz"))
             for i, p in enumerate(files, 1):
-                try:
-                    send2trash(str(p))
-                    trashed.append(p.name)
-                except Exception:
-                    pass   # still on disk: its row stays in the Library
+                if not client_remove.recycle_bin_available(p):
+                    self.log.error("library:purge", f"{p.name}: no Recycle Bin on this drive; left in place")
+                elif not client_remove.recycle_bin_fits(p):
+                    too_large += 1
+                    self.log.error("library:purge", f"{p.name}: too large for the Recycle Bin; left in place")
+                else:
+                    try:
+                        send2trash(str(p))
+                        trashed.append(p.name)
+                    except Exception:
+                        pass   # still on disk: its row stays in the Library
                 if progress:
                     progress({"kind": "purge", "done": i, "total": len(files)})
             deleted = len(trashed)
             self.db.mark_library_memory(now_iso(), trashed)
             self.rebuild()
-            self.log.info("LIBRARY_PURGE", deleted=deleted)
-            return {"deleted": deleted}
+            self.log.info("LIBRARY_PURGE", deleted=deleted, too_large=too_large)
+            return {"deleted": deleted, "too_large": too_large}
 
         def _scan_library_files(self) -> dict:
             """``{filename: size_bytes}`` for every ``.osz`` in the Library folder.
@@ -562,19 +573,31 @@ class LibraryMixin:
                     except OSError:
                         sizes[n] = 0
                 groups = 0
-            removed = freed = 0
+            if not client_remove.recycle_bin_available(lib):
+                # send2trash would delete every duplicate for good
+                self.log.error("dedup", "no Recycle Bin on the Library drive; nothing deleted")
+                return {"removed": 0, "freed_bytes": 0, "groups": groups,
+                        "error": "no_recycle_bin"}
+            removed = freed = too_large = 0
             for i, name in enumerate(names, 1):
                 if _eff():
                     break
-                try:
-                    send2trash(str(lib / name))
-                    removed += 1
-                    freed += sizes.get(name, 0)
-                except OSError as exc:
-                    self.log.error("dedup", str(exc)[:200])
+                if not client_remove.recycle_bin_available(lib / name):
+                    self.log.error("dedup", f"{name}: no Recycle Bin on this drive; left in place")
+                elif not client_remove.recycle_bin_fits(lib / name):
+                    too_large += 1
+                    self.log.error("dedup", f"{name}: too large for the Recycle Bin; left in place")
+                else:
+                    try:
+                        send2trash(str(lib / name))
+                        removed += 1
+                        freed += sizes.get(name, 0)
+                    except OSError as exc:
+                        self.log.error("dedup", str(exc)[:200])
                 if progress:
                     progress({"kind": "dedup", "done": i, "total": len(names)})
             self.log.info("LIBRARY_DEDUP", removed=removed,
-                          freed_mb=freed // (1024 * 1024), groups=groups)
-            return {"removed": removed, "freed_bytes": freed, "groups": groups}
+                          freed_mb=freed // (1024 * 1024), groups=groups, too_large=too_large)
+            return {"removed": removed, "freed_bytes": freed, "groups": groups,
+                    "too_large": too_large}
 

@@ -379,6 +379,10 @@ class RemovalMixin:
                     res["failed"].append(key)   # send2trash would delete it for good
                     self.log.error("remove:stable",
                                    f"{key}: no Recycle Bin on this drive; left in place")
+                elif not client_remove.recycle_bin_fits(folder):
+                    res["failed"].append(key)   # Windows would delete it for good
+                    self.log.error("remove:stable",
+                                   f"{key}: too large for the Recycle Bin; left in place")
                 else:
                     try:
                         send2trash(str(folder))
