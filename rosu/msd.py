@@ -207,15 +207,25 @@ def msd_for_diffs(diffs: list, raw_by_name: dict) -> dict:
     and the whole-library ``compute_msd`` scan. Reads note rows from the raw ``.osu``
     bytes already in hand (via :func:`rosu.beatmap.read_mania_notes`) — no disk I/O.
     """
-    from .beatmap import read_mania_notes
-    out: dict = {}
+    from .beatmap import _native_batch, read_mania_notes
+    kept = []
     for d in diffs:
         if getattr(d, "mode_int", None) != 3 or not getattr(d, "keycount", None):
             continue
         raw = raw_by_name.get(d.filename)
         if raw is None:
             continue
-        res = skillset(read_mania_notes(raw, d.keycount), d.keycount)
-        if res is not None:
-            out[d.filename] = res
+        kept.append((d, raw))
+    out: dict = {}
+    # The native module rates with the diff's own key count, as the Python path does.
+    native = _native_batch([(d.filename, raw, d.keycount) for d, raw in kept]) if kept else None
+    if native is None:
+        for d, raw in kept:
+            res = skillset(read_mania_notes(raw, d.keycount), d.keycount)
+            if res is not None:
+                out[d.filename] = res
+    else:
+        for (d, _raw), parsed in zip(kept, native):
+            if parsed["msd"] is not None:
+                out[d.filename] = MsdResult(*parsed["msd"], source=_SOURCE)
     return out

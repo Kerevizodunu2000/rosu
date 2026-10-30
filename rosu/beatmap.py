@@ -27,6 +27,14 @@ from pathlib import Path
 from .models import MODE_NAMES, DiffMeta, TrackMeta
 from .zipread import TooBig, read_capped
 
+# The native parser (rosu-native-osu-core, a Rust/PyO3 wheel) is optional: without
+# it, or with a broken build, the pure-Python path below does the same work slower.
+# msd.py reads this attribute at call time, so setting it to None switches both.
+try:
+    from rosu_native_osu_core import parse_batch as _parse_batch
+except Exception:  # ImportError, or a broken/half-stripped compiled extension
+    _parse_batch = None
+
 # A real .osu is text and well under 1 MB even for dense marathon maps; cap the
 # uncompressed read so a crafted .osz can't decompression-bomb us into OOM now
 # that we read EVERY .osu (the old code read only one). An oversized entry is
@@ -151,7 +159,11 @@ def fill_track_meta(text: str, meta: TrackMeta) -> None:
     This preserves the exact behaviour the old ``osz_meta._parse_osu`` had, so the
     set-level record is unchanged from prior versions.
     """
-    parsed = parse_osu_sections(text)
+    _fill_meta(parse_osu_sections(text), meta)
+
+
+def _fill_meta(parsed: dict, meta: TrackMeta) -> None:
+    """Fill ``meta`` from a parsed ``.osu`` (``parse_osu_sections`` or ``_parse_batch``)."""
     if parsed["mode_int"] is not None:
         meta.mode = MODE_NAMES.get(parsed["mode_int"])
     for key, attr in _META_KEYS.items():
@@ -175,6 +187,11 @@ def read_osu_diff(raw: bytes, filename: str) -> DiffMeta:
         parsed = parse_osu_sections(raw.decode("utf-8", errors="replace"))
     except Exception:
         return DiffMeta(filename=filename, checksum=checksum)
+    return _diff_meta(parsed, filename, checksum)
+
+
+def _diff_meta(parsed: dict, filename: str, checksum: str) -> DiffMeta:
+    """A :class:`DiffMeta` from a parsed ``.osu`` (``parse_osu_sections`` or ``_parse_batch``)."""
     mode_int = parsed["mode_int"]
     diff = parsed["difficulty"]
     cs = diff.get("CircleSize")
@@ -253,6 +270,18 @@ def read_mania_notes(raw: bytes, keycount: int) -> list[tuple[int, int, int | No
     return notes
 
 
+def _native_batch(items: list[tuple[str, bytes, int | None]]) -> list[dict] | None:
+    """``_parse_batch(items)``, or ``None`` when the caller should use the Python path:
+    the module is missing, or it refused the batch (a size or count limit), so a
+    boundary error never turns a set into empties."""
+    if _parse_batch is None:
+        return None
+    try:
+        return _parse_batch(items)
+    except (ValueError, OverflowError):
+        return None
+
+
 def read_osz_full(osz_path: Path) -> tuple[TrackMeta, list[DiffMeta], dict[str, bytes]]:
     """Open an ``.osz`` once → ``(TrackMeta, [DiffMeta...], {filename: raw_bytes})``.
 
@@ -267,8 +296,7 @@ def read_osz_full(osz_path: Path) -> tuple[TrackMeta, list[DiffMeta], dict[str, 
             meta = TrackMeta(diff_count=len(osu_names))
             if not osu_names:
                 return meta, [], {}
-            raw_by_name: dict[str, bytes] = {}
-            diffs: list[DiffMeta] = []
+            read: list[tuple[str, bytes]] = []
             for name in osu_names:
                 try:
                     # Bounded read: the declared size alone can be forged.
@@ -277,11 +305,20 @@ def read_osz_full(osz_path: Path) -> tuple[TrackMeta, list[DiffMeta], dict[str, 
                     continue   # implausibly large .osu — skip (bomb guard)
                 except Exception:   # corrupt member: zlib error, CRC, EOF…
                     continue
-                raw_by_name[name] = raw
-                diffs.append(read_osu_diff(raw, name))
+                read.append((name, raw))
+            raw_by_name = dict(read)
             rep = sorted(osu_names)[0]  # unchanged representative selection
-            if rep in raw_by_name:
-                fill_track_meta(raw_by_name[rep].decode("utf-8", errors="replace"), meta)
+            native = _native_batch([(name, raw, None) for name, raw in read])
+            if native is None:
+                diffs = [read_osu_diff(raw, name) for name, raw in read]
+                if rep in raw_by_name:
+                    fill_track_meta(raw_by_name[rep].decode("utf-8", errors="replace"), meta)
+            else:
+                diffs = [_diff_meta(parsed, name, hashlib.md5(raw).hexdigest())
+                         for (name, raw), parsed in zip(read, native)]
+                parsed_by_name = {name: parsed for (name, _raw), parsed in zip(read, native)}
+                if rep in parsed_by_name:
+                    _fill_meta(parsed_by_name[rep], meta)
             return meta, diffs, raw_by_name
     except (zipfile.BadZipFile, OSError, KeyError, ValueError):
         return TrackMeta(), [], {}
