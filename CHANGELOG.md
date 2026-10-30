@@ -15,6 +15,10 @@ the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   downloads it in the background, checks its signature and SHA-256, and installs it when
   you click **Restart now** (or on the next start). A new version that fails to start is
   rolled back and skipped. Turn it off with **Install updates automatically** in Settings.
+- **Unpack** and **Copy to Library** check the free space first. When it is short they
+  refuse before writing anything, with a message naming the drive, the space needed and
+  the space free. A disk that fills up during the run stops it cleanly with "disk full":
+  beatmaps already written stay, and the archive stays in Packs.
 
 ### Changed
 - Library refresh and other lookups by file name are faster on large libraries.
@@ -22,6 +26,8 @@ the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Exporting from a large Library is faster.
 
 ### Fixed
+- A full disk during **Copy to Library** no longer leaves a truncated beatmap in the
+  Library or overwrites a good copy already there.
 - A beatmap with an infinite, NaN or huge number in it no longer stops a Library
   refresh or reads as an empty set. Rosu treats a difficulty setting, game mode, note
   time or key count it can't use as missing.
