@@ -57,6 +57,18 @@ STRINGS: dict[str, dict[str, str]] = {
                    "tr": "{n} arşivsiz müzik doğrudan Output'a taşındı (Direct)."},
     "library_done": {"en": "{new} added, {dup} duplicates — names saved to memory.",
                      "tr": "{new} eklendi, {dup} kopya ile karşılandı — isimler hafızaya eklendi."},
+    "disk_no_space": {"en": "Not enough free space on {drive}: {need} needed, {free} free. "
+                            "Nothing was written.",
+                      "tr": "{drive} sürücüsünde yeterli boş alan yok: {need} gerekli, "
+                            "{free} boş. Hiçbir şey yazılmadı."},
+    "extract_disk_full": {"en": "Disk full: Unpack stopped. Beatmaps already extracted "
+                                "stay in Output and the archive stays in Packs.",
+                          "tr": "Disk dolu: arşiv açma durduruldu. Çıkarılan müzikler "
+                                "Output'ta, arşiv Packs'te kalıyor."},
+    "library_disk_full": {"en": "Disk full: Copy to Library stopped. Sets already copied "
+                                "stay in the Library.",
+                          "tr": "Disk dolu: Library'e kopyalama durduruldu. Kopyalanan "
+                                "setler Library'de kalıyor."},
     "library_all_present": {
         "en": "All {n} beatmaps are already in your Library — nothing to copy.",
         "tr": "{n} müziğin tamamı zaten kütüphanende — kopyalanacak bir şey yok."},

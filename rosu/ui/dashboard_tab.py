@@ -467,25 +467,44 @@ class DashboardTab(QWidget):
         box.exec()
         return box.clickedButton() == yes, checkbox.isChecked()
 
+    def _no_space_text(self, ns: dict) -> str:
+        return self.ctx.t("disk_no_space", drive=ns["drive"], need=_fmt_size(ns["need"]),
+                          free=_fmt_size(ns["free"]))
+
     def _after_extract(self, result) -> None:
         self._idle()
+        if result.get("no_space"):   # refused up front: nothing changed
+            msg = self._no_space_text(result["no_space"])
+            self.status.setText(msg)
+            QMessageBox.warning(self, self.ctx.t("app_title"), msg)
+            return
+        warn = self.ctx.t("extract_disk_full") if result.get("disk_full") else None
         msg = self.ctx.t("extract_done", packs=result["packs"], tracks=result["tracks"])
         if result.get("loose"):
             msg += "  " + self.ctx.t("loose_done", n=result["loose"])
         if "backup" in result:
             b = result["backup"]
-            msg += "  " + self.ctx.t("library_done", new=b["new"], dup=b["duplicates"])
+            if b.get("no_space"):
+                warn = self._no_space_text(b["no_space"])
+            elif b.get("disk_full"):
+                warn = self.ctx.t("library_disk_full")
+            msg += "  " + (warn or self.ctx.t("library_done", new=b["new"],
+                                               dup=b["duplicates"]))
         rejected = result.get("rejected") or []
         if rejected:
             msg += "  " + self.ctx.t("archive_rejected", n=len(rejected))
         if result.get("kept"):
             msg += "  " + self.ctx.t("disposal_kept", n=result["kept"])
+        if result.get("disk_full"):
+            msg += "  " + warn
         self.status.setText(msg)
         self.refresh_scan()
         self.mw.packs.reload()
         self.mw.search.reload()          # reflect newly-added tracks live (item 7)
         if rejected:
             self._warn_rejected(rejected)
+        if warn:
+            QMessageBox.warning(self, self.ctx.t("app_title"), warn)
 
     def _warn_rejected(self, rejected: list) -> None:
         """Show which packs were refused as unsafe (zip-bomb / traversal) and why."""
@@ -511,13 +530,19 @@ class DashboardTab(QWidget):
 
     def _after_copy(self, res) -> None:
         self._idle()
-        if res["new"] == 0 and res["duplicates"] > 0:
+        warn = (self._no_space_text(res["no_space"]) if res.get("no_space")
+                else self.ctx.t("library_disk_full") if res.get("disk_full") else None)
+        if warn:
+            self.status.setText(warn)
+        elif res["new"] == 0 and res["duplicates"] > 0:
             # Nothing new — everything in Output was already in the Library. Say so
             # plainly instead of a bare "0 added" (spamming Copy is otherwise silent).
             self.status.setText(self.ctx.t("library_all_present", n=res["duplicates"]))
         else:
             self.status.setText(self.ctx.t("library_done", new=res["new"], dup=res["duplicates"]))
         self.mw.search.reload()          # reflect the new library rows live (item 7)
+        if warn:
+            QMessageBox.warning(self, self.ctx.t("app_title"), warn)
 
     # -- Import to osu! (lazer / stable) -------------------------------------
     def _import_exe(self, target: str) -> str:
