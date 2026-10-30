@@ -572,10 +572,13 @@ class DashboardTab(QWidget):
 
     def _after_refresh(self, res) -> None:
         self._idle()
-        self.status.setText(self.ctx.t("refresh_done", added=res["added"],
-                                       enriched=res.get("enriched", 0),
-                                       disappeared=res["disappeared"],
-                                       present=res["present"]))
+        text = self.ctx.t("refresh_done", added=res["added"],
+                          enriched=res.get("enriched", 0),
+                          disappeared=res["disappeared"],
+                          present=res["present"])
+        if len(res["skipped"]) > 0:
+            text += " " + self.ctx.t("refresh_skipped", n=len(res["skipped"]))
+        self.status.setText(text)
         self._update_banner()
         self.mw.search.reload()          # reflect refreshed library rows live (item 7)
 
