@@ -30,19 +30,21 @@ class LibraryMixin:
 
         def purge_library_files(self, progress=None) -> dict:
             """Move every physical .osz in Library to the Recycle Bin but keep the
-            rows as memory-only (item 17). Metadata stays; the files go."""
+            rows as memory-only (item 17). Metadata stays; the files go. Only
+            the rows whose file actually reached the Recycle Bin are marked."""
             from send2trash import send2trash
-            deleted = 0
+            trashed: list[str] = []
             files = list(self.cfg.library_path.glob("*.osz"))
             for i, p in enumerate(files, 1):
                 try:
                     send2trash(str(p))
-                    deleted += 1
-                except OSError:
-                    pass
+                    trashed.append(p.name)
+                except Exception:
+                    pass   # still on disk: its row stays in the Library
                 if progress:
                     progress({"kind": "purge", "done": i, "total": len(files)})
-            self.db.mark_library_memory(now_iso())
+            deleted = len(trashed)
+            self.db.mark_library_memory(now_iso(), trashed)
             self.rebuild()
             self.log.info("LIBRARY_PURGE", deleted=deleted)
             return {"deleted": deleted}
@@ -70,12 +72,15 @@ class LibraryMixin:
             return res
 
         def import_osz_folder(self, folder, progress=None, source_label=None,
-                              physical_copy: bool | None = None) -> dict:
+                              physical_copy: bool | None = None,
+                              auto_prune: bool | None = None) -> dict:
             """Dedup every .osz in ``folder`` into the Library (shared by the stable,
             lazer and manual import paths). Emits k/n import progress (item 3) and, when
             ``source_label`` is set, tags each set with its origin (item 9).
             ``physical_copy`` overrides the setting: saving a set before it leaves
-            osu!, or restoring one from Drive, must leave a real file."""
+            osu!, or restoring one from Drive, must leave a real file.
+            ``auto_prune`` overrides the setting the same way: a set saved
+            before removal must stay whole."""
             folder = Path(folder)
             total = sum(1 for _ in folder.glob("*.osz")) if folder.exists() else 0
             done = [0]
@@ -89,7 +94,8 @@ class LibraryMixin:
                 folder, self.cfg.library_path, self.db, now_iso(),
                 self.cfg.library_physical_copy if physical_copy is None else physical_copy,
                 cb if progress else None,
-                source_label=source_label, auto_prune=self.cfg.auto_prune,
+                source_label=source_label,
+                auto_prune=self.cfg.auto_prune if auto_prune is None else auto_prune,
                 prune_mode=self.cfg.prune_mode)
             self.rebuild()
             self.log.info("LIBRARY_COPY", new=res["new"], duplicates=res["duplicates"],

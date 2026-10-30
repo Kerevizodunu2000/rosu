@@ -143,49 +143,68 @@ def _osu_key(rel: str) -> str:
     return rel.replace("\\", "/").lower()   # Windows names are case-insensitive
 
 
-def folder_fingerprint(folder: Path) -> dict[str, tuple[int, int]] | None:
+def _stream_crc(fh) -> tuple[int, int]:
+    """``(size, crc32)`` of an open binary stream, read in chunks so a large
+    video is never held in memory whole."""
+    size, crc = 0, 0
+    while block := fh.read(1024 * 1024):
+        size += len(block)
+        crc = zlib.crc32(block, crc)
+    return size, crc
+
+
+def folder_fingerprint(folder: Path, *, every_file: bool = False
+                       ) -> dict[str, tuple[int, int]] | None:
     """``{relative .osu name: (size, crc32)}`` for a stable set folder; None when
-    it cannot be read (or holds an oversized ``.osu``)."""
+    it cannot be read (or holds an oversized ``.osu``). ``every_file`` maps
+    every file of the folder, not only the ``.osu`` (a symlinked one: None)."""
     folder = Path(folder)
     out: dict[str, tuple[int, int]] = {}
     try:
         for root, _dirs, files in os.walk(folder, followlinks=False):
             for f in files:
-                if not f.lower().endswith(".osu"):
+                is_osu = f.lower().endswith(".osu")
+                if not is_osu and not every_file:
                     continue
                 p = Path(root) / f
-                if p.is_symlink() or p.stat().st_size > _OSU_CAP:
+                if p.is_symlink() or (is_osu and p.stat().st_size > _OSU_CAP):
                     return None
-                data = p.read_bytes()
-                out[_osu_key(p.relative_to(folder).as_posix())] = (len(data), zlib.crc32(data))
+                with p.open("rb") as fh:
+                    out[_osu_key(p.relative_to(folder).as_posix())] = _stream_crc(fh)
     except OSError:
         return None
     return out
 
 
-def osz_fingerprint(path: Path) -> dict[str, tuple[int, int]] | None:
+def osz_fingerprint(path: Path, *, every_file: bool = False
+                    ) -> dict[str, tuple[int, int]] | None:
     """The same map for a ``.osz``, computed from the members' actual bytes
     (reading verifies each stored CRC too). None for a missing, truncated or
-    otherwise unreadable archive — it proves nothing."""
+    otherwise unreadable archive — it proves nothing. ``every_file`` maps
+    every member, not only the ``.osu``."""
     out: dict[str, tuple[int, int]] = {}
     try:
         with zipfile.ZipFile(path) as zf:
             for info in zf.infolist():
-                if info.is_dir() or not info.filename.lower().endswith(".osu"):
+                if info.is_dir():
                     continue
-                if info.file_size > _OSU_CAP:
-                    return None
-                data = read_capped(zf, info, _OSU_CAP)
-                out[_osu_key(info.filename)] = (len(data), zlib.crc32(data))
+                if info.filename.lower().endswith(".osu"):
+                    if info.file_size > _OSU_CAP:
+                        return None
+                    data = read_capped(zf, info, _OSU_CAP)
+                    out[_osu_key(info.filename)] = (len(data), zlib.crc32(data))
+                elif every_file:
+                    with zf.open(info) as fh:   # reading to the end checks the CRC
+                        out[_osu_key(info.filename)] = _stream_crc(fh)
     except Exception:   # BadZipFile, zlib.error, encrypted, EOF, unsupported method…
         return None
     return out
 
 
 def covers(have: dict | None, want: dict | None) -> bool:
-    """Does archive fingerprint ``have`` contain every ``.osu`` of ``want``?
-    A set with no ``.osu`` at all is never "covered"."""
-    if not have or not want:
+    """Does archive fingerprint ``have`` hold every entry of ``want`` byte for
+    byte? A set with no ``.osu`` at all is never "covered"."""
+    if not have or not want or not any(k.endswith(".osu") for k in want):
         return False
     return all(have.get(k) == v for k, v in want.items())
 

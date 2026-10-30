@@ -100,7 +100,7 @@ def _write_volume(members: list[tuple[str, Path]], out_path: Path, fmt: str,
                     os.close(fd)
                     try:
                         shutil.copy2(path, tmp_osz)
-                        prune_osz(tmp_osz, mode=prune_mode)
+                        prune_osz(tmp_osz, mode=prune_mode, keep_original=False)
                         z.write(tmp_osz, arcname=name)
                     finally:
                         try:
