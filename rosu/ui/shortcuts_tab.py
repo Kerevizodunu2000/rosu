@@ -877,10 +877,10 @@ class ShortcutsTab(QWidget):
         return False
 
     def _confirm_volume_overwrite(self, dest_base: Path, suffix: str) -> bool:
-        """A split export writes ``<stem>.partNN<suffix>`` volumes, which the save
+        """A split export writes ``<name>.partNN<suffix>`` volumes, which the save
         dialog never vets (it only checked the single name the user typed). Ask
         before overwriting any that already exist."""
-        prefix = f"{dest_base.stem}.part"
+        prefix = f"{dest_base.name}.part"
         try:
             hits = sorted(p.name for p in dest_base.parent.iterdir()
                           if p.name.startswith(prefix)
