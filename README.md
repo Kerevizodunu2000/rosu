@@ -193,6 +193,17 @@ pyinstaller rosu.spec
 # output: dist/rosu.exe  (rename to rosu-<version>.exe when publishing a release)
 ```
 
+Release builds also bundle the optional native module (Rust, for faster `.osu` parsing
+and skillset ratings). The app builds and runs without it; to include it, install it
+before `pyinstaller` (needs Rust from [rustup](https://rustup.rs/)):
+
+```bash
+pip install maturin
+cd native/osu_core
+maturin build --release
+pip install --force-reinstall target/wheels/rosu_native_osu_core-*.whl
+```
+
 ## Testing
 
 ```bash

@@ -21,6 +21,22 @@ python run.py                 # run from source
 python -m pytest tests/ -q    # run the test suite
 ```
 
+The optional native module `native/osu_core` (Rust + PyO3) parses `.osu` files and
+computes the mania skillset ratings faster. Rosu runs without it: the same functions
+fall back to pure Python. To build and install it (needs Rust from
+[rustup](https://rustup.rs/)):
+
+```bash
+pip install maturin
+cd native/osu_core
+maturin build --release
+pip install --force-reinstall target/wheels/rosu_native_osu_core-*.whl
+```
+
+`tests/test_native_osu_core.py` checks it gives the same results as the Python code;
+those tests skip when the module isn't installed (set `ROSU_REQUIRE_NATIVE=1` to make
+them fail instead).
+
 ## Guidelines
 
 - **Code, comments, logs, and commit messages are English.** Only the user-facing
