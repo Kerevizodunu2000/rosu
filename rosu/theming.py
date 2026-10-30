@@ -88,7 +88,7 @@ PALETTES: dict[str, dict[str, str]] = {
         banner_bg="#45475a", banner_text="#f5c2e7", banner_border="#f38ba8"),
     "catppuccin-latte": dict(
         bg="#eff1f5", surface="#ffffff", table="#ffffff", alt="#e6e9ef",
-        text="#4c4f69", muted="#64677c", border="#ccd0da", bar_border="#878990",
+        text="#464962", muted="#64677c", border="#ccd0da", bar_border="#878990",
         accent="#ce68b3", accent_text="#ffffff", accent_hover="#8839ef",
         secondary="#e6e9ef", secondary_text="#4c4f69",
         header_bg="#e6e9ef", header_text="#5c5f77",
@@ -104,7 +104,7 @@ PALETTES: dict[str, dict[str, str]] = {
         banner_bg="#073642", banner_text="#b58900", banner_border="#dc322f"),
     "solarized-light": dict(
         bg="#fdf6e3", surface="#ffffff", table="#fdf6e3", alt="#eee8d5",
-        text="#586e75", muted="#586b72", border="#ded8c0", bar_border="#908c7d",
+        text="#073642", muted="#586b72", border="#ded8c0", bar_border="#908c7d",
         accent="#268bd2", accent_text="#fdf6e3", accent_hover="#299c93",
         secondary="#eee8d5", secondary_text="#586e75",
         header_bg="#eee8d5", header_text="#586e75",

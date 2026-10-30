@@ -60,6 +60,14 @@ def test_light_theme_targets(theme):
     _check(theme, "bar_border", "surface", 3)
 
 
+@pytest.mark.parametrize("theme", LIGHT)
+def test_light_muted_stays_distinct_from_text(theme):
+    # Disabled and muted text must stay visibly lighter than body text.
+    pal = theming.PALETTES[theme]
+    got = ratio(pal["text"], pal["muted"])
+    assert got >= 1.4, f"{theme}: text vs muted is {got:.2f}, need 1.4"
+
+
 @pytest.mark.parametrize("theme", DARK)
 def test_dark_theme_passing_pairs(theme):
     for s in SURFACES:
