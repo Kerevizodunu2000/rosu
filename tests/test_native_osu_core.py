@@ -16,6 +16,7 @@ import os
 import random
 import subprocess
 import sys
+import unicodedata
 import zipfile
 from pathlib import Path
 
@@ -248,6 +249,19 @@ def test_int_and_float_acceptance(native):
     items += [(osu("[General]", f"Mode: {t}"), None) for t in times]
     items += [(mania_text([f"{f},192,{t},1" for _, t in stream(20)]), 4) for f in floats]
     items += [(mania_text([f"64,192,{t}.9,1" for _, t in stream(20)]), 4)]
+    check(native, items)
+
+
+def test_every_unicode_digit_run(native):
+    """Each run of decimal digits this Python knows parses the same natively (the
+    module's table follows Python 3.14, Unicode 16.0)."""
+    zeros = [c for c in range(0x110000) if unicodedata.decimal(chr(c), -1) == 0]
+    assert len(zeros) >= 68
+    items = []
+    for z in zeros:
+        digits = "".join(chr(z + int(d)) for d in "7250")
+        items.append((osu("[HitObjects]", f"1,1,{digits}"), None))
+        items.append((osu("[TimingPoints]", f"0,{chr(z + 3)}{chr(z)}{chr(z)}.5"), None))
     check(native, items)
 
 
