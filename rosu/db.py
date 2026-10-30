@@ -113,6 +113,7 @@ CREATE TABLE IF NOT EXISTS audio_fingerprints (
 );
 CREATE INDEX IF NOT EXISTS idx_tracks_display ON tracks(display_name);
 CREATE INDEX IF NOT EXISTS idx_tracks_lib ON tracks(in_library);
+CREATE INDEX IF NOT EXISTS idx_tracks_filename ON tracks(filename);
 CREATE INDEX IF NOT EXISTS idx_packs_series ON packs(series);
 CREATE INDEX IF NOT EXISTS idx_diff_track ON difficulties(track_id);
 CREATE INDEX IF NOT EXISTS idx_diff_star ON difficulties(star_rating);
