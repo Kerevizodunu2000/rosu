@@ -118,6 +118,3 @@ jobs:
             dist/rosu-update.json
             dist/rosu-update.json.sig
 
-  # macOS build is intentionally deferred (see README "Roadmap").
-  # Enable it later by adding a macos-latest job that runs the same steps and
-  # packages a .app/.dmg with PyInstaller.

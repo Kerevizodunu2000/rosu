@@ -596,7 +596,7 @@ Documentation patch — no functional changes.
 ### Changed
 - **README** refreshed to document shipped v1.1–v1.6 features: Library Health, Shortcuts job queue,
   per-difficulty star ratings & query-syntax search, mania skillset ratings, the visual Filters panel,
-  and star-range export; roadmap updated through v1.6.
+  and star-range export.
 
 ### Fixed
 - **THIRD-PARTY-LICENSES.md** now lists **rosu-pp-py** (local star-rating engine, v1.5).
@@ -950,7 +950,7 @@ disk space goes, and whether the files are intact.
 ### Notes
 - Everything here is **read-only** — a health check never modifies or deletes a
   beatmap. Reclaiming space by pruning heavy assets, moving the Library across
-  drives, and watch-folder auto-import are planned for later minors of this line.
+  drives, and watch-folder auto-import came later.
 
 ## [1.0.1] - 2026-07-15
 
@@ -1137,8 +1137,6 @@ bundled archives, with per-track location tracking (item 11).
 - Built on the standard library (urllib + `http.server`) to match the app's
   stdlib-only HTTP policy; the only new runtime dependency is `keyring`. The
   OAuth client is embedded at build time from a CI secret and never committed.
-- Bidirectional cross-device sync, offload / free-space, and import-to-osu! from
-  Drive are planned for v0.8.1 / v0.8.2.
 
 ## [0.7.1] - 2026-07-13
 

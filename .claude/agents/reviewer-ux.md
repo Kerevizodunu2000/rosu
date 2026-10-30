@@ -39,7 +39,7 @@ Rosu is a Qt desktop app, so there are no pages. Render the changed widget, dial
 
 ## Who uses it
 
-osu! players on Windows, many of them teenagers, with libraries from a few hundred to a hundred thousand beatmap sets; many read English as a second language (Turkish UI ships; Japanese, Chinese and Korean are planned). Streamers and tournament organisers are planned audiences.
+osu! players on Windows, many of them teenagers, with libraries from a few hundred to a hundred thousand beatmap sets; many read English as a second language (the UI ships in English and Turkish).
 
 ## What to look for
 

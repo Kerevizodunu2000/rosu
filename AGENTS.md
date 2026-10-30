@@ -75,10 +75,9 @@ To look at a widget without a display, build it with
   supporter tiers, paywalls, paid services or paid infrastructure; only free
   tiers.
 - **Security:** the repo is public. Nothing may leak the owner's personal
-  data or let anyone use the owner's keys or accounts. Local servers (the
-  streamer-mode API, a local MCP server) bind to `127.0.0.1` and are off by
-  default. LAN features (the phone remote, LAN transfer) listen on the LAN
-  only while the user has turned them on, and only for paired devices.
+  data or let anyone use the owner's keys or accounts. Any local server binds
+  to `127.0.0.1` and is off by default. Any LAN feature listens on the LAN
+  only while the user has turned it on, and only for paired devices.
 - **Rust:** the app stays Python + PySide6; there is no full rewrite. Move an
   existing function to Rust (a PyO3 module, as `rosu-pp-py` already is) only
   after a profile on a large library shows it is a bottleneck. For a new

@@ -23,7 +23,7 @@ def _raise(exc):
 
 
 def test_scrub_and_module_paths():
-    assert crash_report.scrub(r"cannot open C:\Users\halil\osu!\Songs\x.osz") == "cannot open <path>"
+    assert crash_report.scrub(r"cannot open C:\Users\you\osu!\Songs\x.osz") == "cannot open <path>"
     assert crash_report.scrub("mail me@example.com") == "mail <email>"
     # Spaces inside a path, quoted library names and relative paths all go.
     spaced = r"bad C:\Users\John Smith\Documents\osu!\Songs\123 Artist - Title\a.osu"

@@ -28,7 +28,7 @@ verdict.
 
 ## Decide
 
-Rosu is a free, open-source (GPL-3.0-or-later) Windows desktop companion app for osu! (stable and lazer), in Python 3.13 and PySide6: a beatmap library, backup, collections and planned player, coach and streamer tools. Its roadmap and the owner's rules in `AGENTS.md` decide what belongs. It never cheats, edits game memory or input, charges money, or deletes osu! files unrecoverably.
+Rosu is a free, open-source (GPL-3.0-or-later) Windows desktop companion app for osu! (stable and lazer), in Python 3.13 and PySide6: a beatmap library, backup and collections. The owner's rules in `AGENTS.md` decide what belongs. It never cheats, edits game memory or input, charges money, or deletes osu! files unrecoverably.
 
 - **ACCEPT** when it belongs in the project and can be built without asking
   anyone. If it's too big for one reviewable pull request, or vague, rescope

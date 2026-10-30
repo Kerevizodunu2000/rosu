@@ -23,8 +23,7 @@ AGENTS.md has the binding rule; this skill is the how.
   costs roughly a microsecond; a function called per file from Python gains
   little. Pass a list of paths or a buffer, get a list back.
 - Good candidates: hashing and scanning many files, parsing large `.osu` or
-  `.osr` batches, audio fingerprinting, Map Lab audio work, replay analysis,
-  the streamer-mode engine. Poor candidates: UI, DB access (it goes through
+  `.osr` batches, audio fingerprinting. Poor candidates: UI, DB access (it goes through
   locked `Database` methods), network code (stdlib HTTP rule), glue.
 - New features: decide at intake. If the core is heavy (large data, audio
   or image processing, a long-running engine), write that core in Rust from

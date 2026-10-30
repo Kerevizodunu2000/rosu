@@ -260,11 +260,7 @@ when unprofiled they are only part of them:
 - `extract`: mostly archive extraction, star ratings and database writes.
 
 The module made parse and MSD about 10x faster, but it missed the 2x bar on
-`read_metadata` and `extract` without the profiler. It did not merge and is kept on
-the branch
-[`parked/rust-osu-core`](https://github.com/Kerevizodunu2000/rosu/tree/parked/rust-osu-core).
-Revisit it when an unprofiled measurement shows parse/MSD dominating a path users
-wait on. The likelier next candidates are star ratings and zip read + MD5.
+`read_metadata` and `extract` without the profiler, so it did not merge.
 
 **Rule for future measurements:** report the unprofiled wall time
 (`--no-profile`) next to any profile, and base a Rust decision on the unprofiled
