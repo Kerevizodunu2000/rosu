@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from PySide6.QtWidgets import (
-    QLabel, QMainWindow, QMessageBox, QTabWidget, QVBoxLayout, QWidget,
+    QHBoxLayout, QLabel, QMainWindow, QMessageBox, QPushButton, QTabWidget,
+    QVBoxLayout, QWidget,
 )
 
-from .. import __version__, theming
+from .. import __version__, theming, updater
 from ..workers import Worker
 from .artists_tab import ArtistsTab
 from .dashboard_tab import DashboardTab
@@ -40,13 +41,25 @@ class MainWindow(QMainWindow):
         wire_link_hover(self.update_banner)
         self.update_banner.setContentsMargins(12, 6, 12, 6)
         self.update_banner.setVisible(False)
-        col.addWidget(self.update_banner)
+        # banner row: the text plus "Restart now" once an update is staged
+        banner_row = QHBoxLayout()
+        banner_row.setContentsMargins(0, 0, 0, 0)
+        banner_row.addWidget(self.update_banner, 1)
+        self.update_restart = QPushButton()
+        self.update_restart.setVisible(False)
+        self.update_restart.clicked.connect(self._on_restart_now)
+        banner_row.addWidget(self.update_restart)
+        col.addLayout(banner_row)
         self.tabs = QTabWidget()
         col.addWidget(self.tabs, 1)
         self.setCentralWidget(central)
 
         self._threads: list[Worker] = []
         self._update_info: dict | None = None
+        self._update_phase = ""          # "", "downloading" or "ready"
+        self._update_percent = 0
+        self._update_cancel = None       # threading.Event of the running download
+        self.restart_for_update = False  # read by app.run() after the DB is closed
 
         self.dashboard = DashboardTab(self)
         self.shortcuts = ShortcutsTab(self)
@@ -89,15 +102,56 @@ class MainWindow(QMainWindow):
         if not res or not res.get("newer"):
             return
         self._update_info = res
+        if updater.can_auto_update(self.ctx.cfg):
+            self._start_update_download(res["tag"])
         self._render_update_banner()
+
+    def _start_update_download(self, tag: str) -> None:
+        import threading
+        self._update_cancel = threading.Event()
+        self._update_phase, self._update_percent = "downloading", 0
+        w = Worker(updater.download, self.ctx.cfg, tag, cancel=self._update_cancel)
+        self._threads.append(w)
+        w.progressed.connect(self._on_update_progress)
+        w.succeeded.connect(self._on_update_downloaded)
+        w.failed.connect(lambda _msg: self._on_update_downloaded(None))
+        w.finished.connect(lambda: self._threads.remove(w) if w in self._threads else None)
+        w.start()
+
+    def _on_update_progress(self, p) -> None:
+        if isinstance(p, dict) and isinstance(p.get("percent"), int):
+            self._update_percent = p["percent"]
+            self._render_update_banner()
+
+    def _on_update_downloaded(self, res) -> None:
+        ready = isinstance(res, dict) and res.get("status") == updater.READY
+        self._update_phase = "ready" if ready else ""   # else: today's banner
+        self._render_update_banner()
+
+    def _on_restart_now(self) -> None:
+        if self._operation_running():
+            QMessageBox.information(self, self.ctx.t("app_title"),
+                                    self.ctx.t("update_restart_later"))
+            return
+        self.restart_for_update = True
+        if not self.close():
+            self.restart_for_update = False   # close refused: don't relaunch later
 
     def _render_update_banner(self) -> None:
         info = self._update_info
+        self.update_restart.setVisible(bool(info) and self._update_phase == "ready")
         if not info:
             self.update_banner.setVisible(False)
             return
         from html import escape
         t = self.ctx.t
+        if self._update_phase:
+            key = "update_ready" if self._update_phase == "ready" else "update_downloading"
+            self.update_banner.setText(escape(t(key, tag=info["tag"],
+                                                percent=self._update_percent)))
+            self.update_restart.setText(t("update_restart"))
+            self.update_banner.setVisible(True)
+            return
         # The direct .exe when the site supplied one, else the release page. Both
         # were validated as links into this project's GitHub releases.
         dl = info.get("download_url") or info["url"]
@@ -194,6 +248,8 @@ class MainWindow(QMainWindow):
                     q.cancel_all()
         except Exception:
             pass
+        if self._update_cancel is not None:
+            self._update_cancel.set()   # the download stops at its next chunk
         self.search.gallery.stop()   # thumbnails: stop at the next cover
         from .. import workers
         holders = [getattr(h, "_threads", []) for h in self._ordered_tabs + [self]]

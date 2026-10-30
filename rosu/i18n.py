@@ -246,6 +246,24 @@ STRINGS: dict[str, dict[str, str]] = {
     "update_available": {"en": "Rosu {tag} is available.",
                          "tr": "Rosu {tag} yayınlandı."},
     "update_open": {"en": "Download", "tr": "İndir"},
+    "set_auto_update": {"en": "Install updates automatically",
+                        "tr": "Güncellemeleri otomatik yükle"},
+    "tip_auto_update": {
+        "en": "When a newer release is found, download it in the background, check its "
+              "signature and install it when you restart Rosu. Needs the startup update "
+              "check. A new version that fails to start is rolled back.",
+        "tr": "Daha yeni bir sürüm bulunduğunda arka planda indirir, imzasını denetler ve "
+              "Rosu'yu yeniden başlattığında yükler. Başlangıçta güncelleme denetimi açık "
+              "olmalı. Açılamayan yeni bir sürüm geri alınır."},
+    "update_downloading": {"en": "Downloading Rosu {tag}… {percent}%",
+                           "tr": "Rosu {tag} indiriliyor… %{percent}"},
+    "update_ready": {"en": "Rosu {tag} is ready.", "tr": "Rosu {tag} hazır."},
+    "update_restart": {"en": "Restart now", "tr": "Şimdi yeniden başlat"},
+    "update_restart_later": {
+        "en": "A task is still running. The update will be installed the next time "
+              "Rosu starts.",
+        "tr": "Bir işlem hâlâ sürüyor. Güncelleme, Rosu bir sonraki açılışında "
+              "yüklenecek."},
     "set_zip_disposal": {"en": "Processed .zip action", "tr": "İşlenen .zip işlemi"},
     "zip_recycle": {"en": "Move to Recycle Bin", "tr": "Geri Dönüşüm Kutusu'na taşı"},
     "zip_move": {"en": "Move to Processed/", "tr": "Processed/ klasörüne taşı"},
