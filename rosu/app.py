@@ -95,6 +95,15 @@ def _heal_paths(cfg: config.Config, headless: bool) -> pathheal.Diagnosis | None
     return diag
 
 
+def _apply_update_on_exit(log) -> None:
+    """After Restart now: swap in the staged exe, or restart this one so the app
+    doesn't just vanish."""
+    reasons: list[str] = []
+    if updater.apply_staged(log=reasons.append) != updater.EXIT:
+        log.log("UPDATE_NOT_APPLIED", "WARN", reason="; ".join(reasons) or "unknown")
+        updater.relaunch()
+
+
 def run() -> int:
     argv = sys.argv[1:]
     if "--version" in argv:
@@ -157,5 +166,5 @@ def run() -> int:
     ctx.log.info("APP_STOP", reason="window closed")
     ctx.db.close()
     if win.restart_for_update:
-        updater.apply_staged()   # swaps in the staged exe and starts it
+        _apply_update_on_exit(ctx.log)
     return code

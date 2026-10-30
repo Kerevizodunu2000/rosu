@@ -5,6 +5,7 @@ No network and no real process start: ``urlopen``, ``popen`` and ``replace``
 are fakes, ``sys.frozen`` is monkeypatched and the exe folder is ``tmp_path``.
 """
 import hashlib
+import http.client
 import io
 import json
 import os
@@ -47,6 +48,19 @@ class Resp:
         return False
 
 
+class BrokenResp(Resp):
+    """Serves ``good`` bytes, then raises ``exc`` (a connection cut mid-stream)."""
+
+    def __init__(self, good: bytes, exc: BaseException):
+        super().__init__(good)
+        self.exc = exc
+
+    def read(self, n=-1):
+        if self.pos >= len(self.data):
+            raise self.exc
+        return super().read(min(n, 1000) if n and n > 0 else 1000)
+
+
 class Net:
     """Fake ``urlopen``: serves ``files`` by URL; a missing URL is a 404."""
 
@@ -59,7 +73,8 @@ class Net:
         self.calls.append(req.full_url)
         if req.full_url not in self.files:
             raise urllib.error.HTTPError(req.full_url, 404, "Not Found", {}, None)
-        resp = Resp(self.files[req.full_url])
+        data = self.files[req.full_url]
+        resp = data() if callable(data) else Resp(data)
         self.responses[req.full_url] = resp
         return resp
 
@@ -248,6 +263,35 @@ def test_big_exe_streams_in_chunks(app, monkeypatch):
     assert len(seen) == 4
 
 
+@pytest.mark.parametrize("which", ["exe", "manifest", "sig"])
+def test_incomplete_read_falls_back_and_leaves_no_part(app, which):
+    files = release()
+    url = {"exe": BASE + f"rosu-{TAG}-win64.exe", "manifest": BASE + "rosu-update.json",
+           "sig": BASE + "rosu-update.json.sig"}[which]
+    # _fetch reads once, so the manifest and sig fail on that first read
+    good = files[url][:len(files[url]) // 2] if which == "exe" else b""
+    files[url] = lambda: BrokenResp(good, http.client.IncompleteRead(good, 100))
+    assert download(app, Net(files)) == {"status": updater.BANNER}
+    assert nothing_staged(app)
+
+
+def test_unexpected_error_mid_stream_still_removes_part(app):
+    files = release()
+    url = BASE + f"rosu-{TAG}-win64.exe"
+    files[url] = lambda: BrokenResp(NEW_EXE[:3000], RuntimeError("boom"))
+    with pytest.raises(RuntimeError):
+        download(app, Net(files))
+    assert nothing_staged(app)
+
+
+def test_failed_stage_rename_leaves_nothing_staged(app):
+    rep = Replace(fail_on=1)
+    res = updater.download(app.cfg, TAG, exe=app.exe, urlopen=Net(release()), replace=rep)
+    assert res == {"status": updater.BANNER}
+    assert rep.calls == [("rosu.exe.part", "rosu.exe.new")]
+    assert nothing_staged(app)
+
+
 # -- URLs ---------------------------------------------------------------------------
 @pytest.mark.parametrize("tag", ["v9.9", "9.9.9/../../evil", "v9.9.9/x", "", "v9.9.9?x=1"])
 def test_tag_failing_release_link_makes_no_request(app, tag):
@@ -385,6 +429,37 @@ def test_apply_staged_is_off_when_not_frozen(app, monkeypatch):
     assert app.exe.read_bytes() == OLD_EXE and pop.calls == []
 
 
+@pytest.mark.parametrize("case", ["tampered", "swap fails", "fine"])
+def test_apply_staged_logs_why_it_kept_running(app, case):
+    stage(app)
+    if case == "tampered":
+        p(app, ".new").write_bytes(b"x")
+    why = []
+    res = updater.apply_staged(exe=app.exe, popen=Popen(fail=case == "swap fails"),
+                               log=why.append)
+    if case == "fine":
+        assert res == updater.EXIT and why == []
+    else:
+        assert res == updater.KEEP and len(why) == 1
+        assert ("verification" if case == "tampered" else "OSError") in why[0]
+
+
+def test_relaunch_starts_the_current_exe_safely(app):
+    pop = Popen()
+    assert updater.relaunch(exe=app.exe, popen=pop) is True
+    (args, kwargs), = pop.calls
+    assert args[0] == [str(app.exe)] and not kwargs.get("shell", False)
+    assert kwargs["env"]["PYINSTALLER_RESET_ENVIRONMENT"] == "1"
+    assert kwargs["creationflags"] == 0x208
+    assert updater.relaunch(exe=app.exe, popen=Popen(fail=True)) is False
+
+
+def test_relaunch_is_off_when_not_frozen(app, monkeypatch):
+    monkeypatch.setattr(sys, "frozen", False)
+    pop = Popen()
+    assert updater.relaunch(exe=app.exe, popen=pop) is False and pop.calls == []
+
+
 # -- startup, rollback, healthy ----------------------------------------------------------
 def test_first_boot_counts(app):
     write_state(app, **{"from": "1.0.0", "to": __version__, "boots": 0, "skip": []})
@@ -503,8 +578,41 @@ def test_app_source_order():
     assert load < start < src.index("ctx = AppContext(cfg)")
     assert '"--selftest" not in argv and updater.on_startup' in src
     assert src.index("win.showMaximized()") < src.index("updater.mark_healthy")
-    assert src.index("    ctx.db.close()\n    if win.restart_for_update") \
-        < src.index("updater.apply_staged()")
+    run_src = src[src.index("def run()"):]
+    assert "    ctx.db.close()\n    if win.restart_for_update:\n" \
+           "        _apply_update_on_exit(ctx.log)" in run_src
+    assert run_src.count("_apply_update_on_exit(") == 1
+    assert "apply_staged" not in run_src   # only through the helper, after the close
+
+
+class FakeLog:
+    def __init__(self):
+        self.lines = []
+
+    def log(self, action, level="INFO", message="", **fields):
+        self.lines.append((action, level, fields))
+
+
+@pytest.mark.parametrize("result", [updater.EXIT, updater.KEEP])
+def test_failed_swap_after_restart_relaunches_and_logs(monkeypatch, result):
+    from rosu import app as app_mod
+    relaunched = []
+
+    def fake_apply(log=None, **kw):
+        if result == updater.KEEP:
+            log("the swap failed and was undone: PermissionError")
+        return result
+
+    monkeypatch.setattr(updater, "apply_staged", fake_apply)
+    monkeypatch.setattr(updater, "relaunch", lambda **kw: relaunched.append(1) or True)
+    log = FakeLog()
+    app_mod._apply_update_on_exit(log)
+    if result == updater.EXIT:
+        assert relaunched == [] and log.lines == []
+    else:
+        assert relaunched == [1]
+        assert log.lines == [("UPDATE_NOT_APPLIED", "WARN",
+                              {"reason": "the swap failed and was undone: PermissionError"})]
 
 
 def test_run_version_and_selftest_skip_on_startup(tmp_path, monkeypatch, capsys):

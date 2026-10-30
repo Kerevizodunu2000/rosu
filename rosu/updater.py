@@ -16,6 +16,7 @@ app folder is touched. Nothing about the user is sent.
 from __future__ import annotations
 
 import hashlib
+import http.client
 import json
 import os
 import re
@@ -45,6 +46,8 @@ _TIMEOUT = 30
 _KEYS = {"version", "asset", "size", "sha256"}
 _TAG = re.compile(r"v\d+\.\d+\.\d+")
 _SHA256 = re.compile(r"[0-9a-f]{64}")
+# Anything a fetch or a stream can raise: network, HTTP protocol, bad data, disk.
+_FAILURES = (urllib.error.URLError, http.client.HTTPException, ValueError, OSError)
 # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP, as literals so this imports on Linux.
 _CREATION_FLAGS = 0x00000008 | 0x00000200
 
@@ -176,7 +179,7 @@ def download(cfg, tag: str, cancel=None, progress=None, *, exe: Path | None = No
     try:
         manifest = _fetch(base + MANIFEST, _MANIFEST_CAP, urlopen)
         sig = _fetch(base + SIGNATURE, _SIG_CAP, urlopen)
-    except (urllib.error.URLError, ValueError, OSError):
+    except _FAILURES:
         return banner
     m = _accept(manifest, sig, tag, _read_state(f)["skip"])
     if m is None or not _release_link(base + m["asset"]):
@@ -185,7 +188,7 @@ def download(cfg, tag: str, cancel=None, progress=None, *, exe: Path | None = No
         out = open(f["part"], "wb")
     except OSError:
         return banner
-    size, h, n, ok = m["size"], hashlib.sha256(), 0, False
+    size, h, n, ok, staged = m["size"], hashlib.sha256(), 0, False, False
     try:
         with out:
             req = urllib.request.Request(base + m["asset"],
@@ -207,10 +210,14 @@ def download(cfg, tag: str, cancel=None, progress=None, *, exe: Path | None = No
             f["manifest"].write_bytes(manifest)
             f["sig"].write_bytes(sig)
             replace(f["part"], f["new"])
+            staged = True
             return {"status": READY, "tag": tag}
-    except (urllib.error.URLError, ValueError, OSError):
+    except _FAILURES:
         pass
-    _unlink(f["part"])
+    finally:
+        if not staged:   # any failure, cancel or unexpected error: leave nothing half-staged
+            for key in ("part", "manifest", "sig") if ok else ("part",):
+                _unlink(f[key])
     return banner
 
 
@@ -236,9 +243,12 @@ def _launch(exe: Path, popen) -> None:
 
 
 def apply_staged(*, exe: Path | None = None, replace=os.replace,
-                 popen=subprocess.Popen) -> str:
-    """Swap a verified ``<exe>.new`` in and start it. Returns EXIT or KEEP."""
+                 popen=subprocess.Popen, log=None) -> str:
+    """Swap a verified ``<exe>.new`` in and start it. Returns EXIT or KEEP;
+    on KEEP, ``log`` (if given) gets one line saying why."""
+    log = log or (lambda _why: None)
     if not _frozen():
+        log("not running as the frozen exe")
         return KEEP
     f = _files(exe)
     st = _read_state(f)
@@ -249,11 +259,13 @@ def apply_staged(*, exe: Path | None = None, replace=os.replace,
     if m is None or _hash_file(f["new"]) != (m["size"], m["sha256"]):
         for key in ("new", "manifest", "sig"):
             _unlink(f[key])
+        log("the staged update failed verification and was deleted")
         return KEEP
     try:
         _write_state(f, st["skip"], **{"from": __version__, "to": m["version"][1:],
                                        "boots": 0})
-    except OSError:
+    except OSError as exc:
+        log(f"could not write {STATE}: {type(exc).__name__}")
         return KEEP
     done = []
     try:
@@ -262,7 +274,8 @@ def apply_staged(*, exe: Path | None = None, replace=os.replace,
             done.append((src, dst))
         _launch(f["exe"], popen)
         return EXIT
-    except Exception:
+    except Exception as exc:
+        log(f"the swap failed and was undone: {type(exc).__name__}")
         for src, dst in reversed(done):
             try:
                 replace(dst, src)
@@ -273,6 +286,17 @@ def apply_staged(*, exe: Path | None = None, replace=os.replace,
         except OSError:
             pass
         return KEEP
+
+
+def relaunch(*, exe: Path | None = None, popen=subprocess.Popen) -> bool:
+    """Start the current exe again (after a failed swap); True if it started."""
+    if not _frozen():
+        return False
+    try:
+        _launch(_files(exe)["exe"], popen)
+    except Exception:
+        return False
+    return True
 
 
 # -- startup ----------------------------------------------------------------------
