@@ -151,3 +151,46 @@ def test_auto_update_setting(win):
     assert win.ctx.cfg.auto_update is False
     tab.cb_auto_update.setChecked(True)
     assert win.ctx.cfg.auto_update is True
+
+
+def test_restart_button_matches_the_banner_and_keeps_off_the_edge(qapp, win):
+    from rosu.app import load_stylesheet
+    qapp.setStyleSheet(load_stylesheet(win.ctx.cfg.theme))   # real banner padding
+    try:
+        win.resize(1280, 600)
+        win.show()
+        win._update_info = NEWER
+        win._on_update_downloaded({"status": updater.READY, "tag": "v9.9.9"})
+        qapp.processEvents()
+        banner, btn = win.update_banner.geometry(), win.update_restart.geometry()
+        assert btn.height() == banner.height() and btn.top() == banner.top()
+        assert btn.left() - banner.right() - 1 == 12                # the 12 px inset
+        assert win.centralWidget().width() - btn.right() - 1 == 12  # off the edge
+        win._on_update_downloaded(None)                            # today's banner
+        qapp.processEvents()
+        assert win.update_restart.isHidden()
+        assert win.update_banner.geometry().right() == win.centralWidget().width() - 1
+    finally:
+        qapp.setStyleSheet("")
+
+
+def test_auto_update_follows_the_check_updates_toggle(qapp, tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "save_config", lambda cfg: None)
+    from rosu.app import AppContext
+    from rosu.ui.main_window import MainWindow
+    cfg = config._fill_defaults(config.Config(root=str(tmp_path)))
+    cfg.check_updates = False
+    ctx = AppContext(cfg)
+    w = MainWindow(ctx, qapp)
+    try:
+        tab = w.settings
+        assert not tab.cb_auto_update.isEnabled()        # off at build time
+        tab.cb_check_updates.setChecked(True)
+        assert tab.cb_auto_update.isEnabled()
+        tab.cb_check_updates.setChecked(False)
+        assert not tab.cb_auto_update.isEnabled()
+        tab._restore({**tab._snapshot(), "check_updates": True})   # Discard path
+        assert tab.cb_auto_update.isEnabled()
+    finally:
+        w.close()
+        ctx.db.close()

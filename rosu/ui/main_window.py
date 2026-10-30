@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from PySide6.QtWidgets import (
-    QHBoxLayout, QLabel, QMainWindow, QMessageBox, QPushButton, QTabWidget,
-    QVBoxLayout, QWidget,
+    QHBoxLayout, QLabel, QMainWindow, QMessageBox, QPushButton, QSizePolicy,
+    QTabWidget, QVBoxLayout, QWidget,
 )
 
 from .. import __version__, theming, updater
@@ -42,14 +42,17 @@ class MainWindow(QMainWindow):
         self.update_banner.setContentsMargins(12, 6, 12, 6)
         self.update_banner.setVisible(False)
         # banner row: the text plus "Restart now" once an update is staged
-        banner_row = QHBoxLayout()
-        banner_row.setContentsMargins(0, 0, 0, 0)
-        banner_row.addWidget(self.update_banner, 1)
+        self._banner_row = QHBoxLayout()
+        self._banner_row.setContentsMargins(0, 0, 0, 0)
+        self._banner_row.setSpacing(12)   # the banner's own 12 px inset
+        self._banner_row.addWidget(self.update_banner, 1)
         self.update_restart = QPushButton()
+        # as tall as the banner beside it, not a smaller centred button
+        self.update_restart.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Preferred)
         self.update_restart.setVisible(False)
         self.update_restart.clicked.connect(self._on_restart_now)
-        banner_row.addWidget(self.update_restart)
-        col.addLayout(banner_row)
+        self._banner_row.addWidget(self.update_restart)
+        col.addLayout(self._banner_row)
         self.tabs = QTabWidget()
         col.addWidget(self.tabs, 1)
         self.setCentralWidget(central)
@@ -139,7 +142,9 @@ class MainWindow(QMainWindow):
 
     def _render_update_banner(self) -> None:
         info = self._update_info
-        self.update_restart.setVisible(bool(info) and self._update_phase == "ready")
+        ready = bool(info) and self._update_phase == "ready"
+        self.update_restart.setVisible(ready)
+        self._banner_row.setContentsMargins(0, 0, 12 if ready else 0, 0)   # off the edge
         if not info:
             self.update_banner.setVisible(False)
             return

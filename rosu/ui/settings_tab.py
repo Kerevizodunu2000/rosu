@@ -98,6 +98,9 @@ class SettingsTab(SettingsActionsMixin, SettingsDriveMixin, QWidget):
         self.cb_auto_backup = QCheckBox(); self.cb_auto_backup.setChecked(cfg.auto_backup_after_extract)
         self.cb_check_updates = QCheckBox(); self.cb_check_updates.setChecked(cfg.check_updates)
         self.cb_auto_update = QCheckBox(); self.cb_auto_update.setChecked(cfg.auto_update)
+        # auto-update needs the startup check: greyed out while that is off
+        self.cb_auto_update.setEnabled(cfg.check_updates)
+        self.cb_check_updates.toggled.connect(self.cb_auto_update.setEnabled)
         self.cb_crash_reports = QCheckBox(); self.cb_crash_reports.setChecked(getattr(cfg, "crash_reports", False))
         self.cb_auto_refresh = QCheckBox(); self.cb_auto_refresh.setChecked(cfg.auto_refresh_on_tab)
         self.cb_auto_prune = QCheckBox(); self.cb_auto_prune.setChecked(getattr(cfg, "auto_prune", False))
@@ -406,6 +409,7 @@ class SettingsTab(SettingsActionsMixin, SettingsDriveMixin, QWidget):
             cb.blockSignals(True)
             cb.setChecked(bool(snap[key]))
             cb.blockSignals(False)
+        self.cb_auto_update.setEnabled(self.cb_check_updates.isChecked())
         self.zip.blockSignals(True)
         idx = self.zip.findData(snap["zip"])
         if idx >= 0:
