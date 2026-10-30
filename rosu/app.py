@@ -10,7 +10,7 @@ from PySide6.QtCore import QTimer
 from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtWidgets import QApplication, QMessageBox, QSplashScreen
 
-from . import __version__, config, logsvc, pathheal, theming, updater
+from . import __version__, config, logsvc, pathheal, selftest_codecs, theming, updater
 from .db import Database
 from .i18n import I18N
 from .services import Services
@@ -138,6 +138,12 @@ def run() -> int:
     if "--selftest" in argv:
         # Verify a packaged build boots: theme, icon, db and dirs are available.
         ok = bool(qss) and ctx.cfg.data_path.exists() and Path(asset_path("icon.png")).exists()
+        # ...and that the 7z codecs py7zr loads at runtime were packaged.
+        codec_error = selftest_codecs.check_codecs() if ok else None
+        if codec_error:
+            print(f"selftest FAIL ({codec_error})")
+            ctx.db.close()
+            return 1
         print("selftest OK" if ok else "selftest FAIL")
         ctx.db.close()
         return 0 if ok else 1
