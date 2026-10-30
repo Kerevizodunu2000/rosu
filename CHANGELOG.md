@@ -41,6 +41,8 @@ the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Library refresh and other lookups by file name are faster on large libraries.
   Existing libraries get the speed-up the first time Rosu opens them.
 - Exporting from a large Library is faster.
+- The light themes now meet the WCAG contrast targets for muted text, primary buttons
+  and progress bars. Solarized Light body text is darker so muted text stays distinct.
 
 ### Fixed
 - The Windows build named the wrong module for the BCJ filter of 7z archives (`pybcj` instead of `bcj`); it is fixed, and the build now checks the 7z codecs inside the packaged exe.
