@@ -25,7 +25,7 @@ class SettingsDriveMixin:
             connected = self.ctx.services.drive_status().get("connected")
         except Exception:
             connected = False
-        order = ["recycle", "move", "delete"] + (["drive"] if connected else [])
+        order = ["recycle", "move"] + (["drive"] if connected else [])
         dropped = cur not in order
         self.zip.blockSignals(True)
         self.zip.clear()

@@ -8,16 +8,25 @@ each beatmap came from.
 """
 from __future__ import annotations
 
+import tarfile
+import zipfile
 from pathlib import Path
 from typing import BinaryIO, Callable
 
-from . import archives, msd, ratings
+import py7zr.exceptions
+
+from . import archives, client_remove, msd, ratings
 from .beatmap import read_osz_full
 from .models import ExtractPlan, ParsedPack, ParsedTrack
 from .parsing import parse_osz_entry, parse_pack_name
 
 _CHUNK = 1 << 20  # 1 MiB streaming buffer
 _MAX_OSZ_BYTES = 500 * 1024 * 1024  # per-.osz cap (zip-bomb / disk-exhaustion guard)
+
+# What a corrupt or unreadable archive raises when opened or listed. Callers skip
+# that archive (and keep it) instead of aborting the whole Unpack.
+ARCHIVE_READ_ERRORS = (zipfile.BadZipFile, tarfile.TarError,
+                       py7zr.exceptions.ArchiveError, OSError, EOFError)
 
 
 def archive_dialog_filter() -> str:
@@ -83,7 +92,10 @@ def extract_pack(archive_path: Path, parsed: ParsedPack, output_dir: Path, db,
     Each .osz is best-effort: a broken entry is logged and skipped, never
     stopping the extraction. Non-``.osz`` members are noted as ``extra_files``
     so a pack that also carried readmes/images can be flagged (item 25).
-    Returns ``{"tracks": int, "subfolders": [..], "extra_files": [..]}``.
+    Returns ``{"tracks": int, "failed": int, "cancelled": bool,
+    "subfolders": [..], "extra_files": [..]}``: ``tracks`` counts the entries
+    extracted and recorded, ``failed`` every ``.osz`` member skipped for any
+    reason but cancel, so the caller disposes the archive only when it is whole.
     """
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -91,6 +103,8 @@ def extract_pack(archive_path: Path, parsed: ParsedPack, output_dir: Path, db,
 
     subfolders: set[str] = set()
     extra_files: list[str] = []
+    tracks = failed = 0
+    cancelled = False
     with archives.open_reader(archive_path) as r:
         members = r.members()
         # Reject zip-bombs / path-traversal up front, before any DB write or
@@ -102,9 +116,14 @@ def extract_pack(archive_path: Path, parsed: ParsedPack, output_dir: Path, db,
 
         for m in osz:
             if cancel is not None and cancel():
+                cancelled = True
                 break
             t = parse_osz_entry(m.name, m.size)
             if t is None:
+                failed += 1
+                if log is not None:
+                    log.log("ERROR", "WARN", "", where=f"extract:{parsed.code}",
+                            detail=f"{m.name}: not a beatmap file name")
                 continue
             try:
                 if m.size and m.size > _MAX_OSZ_BYTES:
@@ -127,15 +146,17 @@ def extract_pack(archive_path: Path, parsed: ParsedPack, output_dir: Path, db,
                 else:
                     track_id, _is_new = db.upsert_track(t, when, None)
                 db.add_track_source(track_id, pack_id, t.subfolder, when)
+                tracks += 1
             except Exception as exc:  # keep going on a single bad beatmap
+                failed += 1
                 if log is not None:
                     log.log("ERROR", "WARN", "", where=f"extract:{parsed.code}",
                             detail=f"{t.filename}: {exc}")
             if progress:
                 progress(parsed.full_name, t.filename)
 
-    return {"tracks": len(osz), "subfolders": sorted(subfolders),
-            "extra_files": extra_files}
+    return {"tracks": tracks, "failed": failed, "cancelled": cancelled,
+            "subfolders": sorted(subfolders), "extra_files": extra_files}
 
 
 def _stream_copy(src: BinaryIO, target: Path, max_bytes: int | None = None) -> None:
@@ -158,11 +179,9 @@ def _stream_copy(src: BinaryIO, target: Path, max_bytes: int | None = None) -> N
 
 
 def dispose_zip(zip_path: Path, mode: str, processed_dir: Path) -> str:
-    """Recycle / move / delete a processed .zip. Returns the action code."""
+    """Recycle or move a processed .zip. Returns the action code; ``"ZIP_KEPT"``
+    when its drive has no Recycle Bin (the archive is left untouched)."""
     zip_path = Path(zip_path)
-    if mode == "delete":
-        zip_path.unlink(missing_ok=True)
-        return "ZIP_DELETED"
     if mode == "move":
         processed_dir = Path(processed_dir)
         processed_dir.mkdir(parents=True, exist_ok=True)
@@ -174,6 +193,8 @@ def dispose_zip(zip_path: Path, mode: str, processed_dir: Path) -> str:
         zip_path.replace(dest)
         return "ZIP_MOVED"
     # default: Recycle Bin
+    if not client_remove.recycle_bin_available(zip_path):
+        return "ZIP_KEPT"   # send2trash would delete it for good here
     from send2trash import send2trash
     send2trash(str(zip_path))
     return "ZIP_TRASHED"

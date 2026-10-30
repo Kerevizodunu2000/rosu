@@ -100,7 +100,7 @@ def _write_volume(members: list[tuple[str, Path]], out_path: Path, fmt: str,
                     os.close(fd)
                     try:
                         shutil.copy2(path, tmp_osz)
-                        prune_osz(tmp_osz, mode=prune_mode)
+                        prune_osz(tmp_osz, mode=prune_mode, keep_original=False)
                         z.write(tmp_osz, arcname=name)
                     finally:
                         try:
@@ -171,10 +171,10 @@ def write_export(files: list[Path], dest_base: Path, fmt: str = "zip",
         if cancel is not None and cancel():
             break
         if single:
-            out_path = dest_base.with_suffix(suffix)
+            out_path = dest_base.parent / (dest_base.name + suffix)
         else:
             out_path = dest_base.parent / (
-                f"{dest_base.stem}.part{vol_num:0{width}d}{suffix}")
+                f"{dest_base.name}.part{vol_num:0{width}d}{suffix}")
         members = [(names[i], existing[i]) for i in vol]
         if not _write_volume(members, out_path, fmt, progress, cancel,
                              counter, total, prune_mode=prune_mode):
