@@ -1093,6 +1093,11 @@ STRINGS: dict[str, dict[str, str]] = {
               "({found} candidates).",
         "tr": "Aktarım: {transferred} gönderildi, {skipped} zaten hedefte "
               "({found} aday)."},
+    "sc_transfer_disk_full": {
+        "en": "Disk full: some beatmaps could not be prepared for osu! and were not "
+              "sent. Free up space and run the transfer again.",
+        "tr": "Disk dolu: bazı müzikler osu! için hazırlanamadı ve gönderilmedi. Yer "
+              "açıp aktarımı yeniden çalıştırın."},
     "sc_no_target_exe": {
         "en": "The target osu! client isn't set up. Set its path in Settings.",
         "tr": "Hedef osu! istemcisi ayarlı değil. Yolunu Ayarlar'dan belirtin."},
@@ -1138,6 +1143,12 @@ STRINGS: dict[str, dict[str, str]] = {
     "sc_export_done": {
         "en": "Exported {count} set(s) into {archives} archive(s).",
         "tr": "{count} set {archives} arşive aktarıldı."},
+    "export_disk_full": {
+        "en": "{drive} is full: Export stopped. Archives already finished are kept; "
+              "nothing was uploaded. Free up space on {drive} and export again.",
+        "tr": "{drive} sürücüsü dolu: dışa aktarma durduruldu. Tamamlanan arşivler "
+              "korunuyor; hiçbir şey yüklenmedi. {drive} sürücüsünde yer açıp yeniden "
+              "dışa aktarın."},
     "sc_export_empty": {"en": "Nothing to export from that source.",
                         "tr": "Bu kaynakta dışa aktarılacak bir şey yok."},
     # -- v1.7.1: what every queued job actually chose ------------------------

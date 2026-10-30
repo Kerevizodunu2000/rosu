@@ -29,6 +29,7 @@ _STAR_CAP = 12.0   # star-range export: max = cap = "no upper bound"
 from .. import config
 from ..jobs import State
 from ..workers import Worker
+from .dashboard_tab import no_space_text
 from .job_queue import JobQueueController
 from .links import wire_link_hover
 
@@ -1010,9 +1011,17 @@ class ShortcutsTab(QWidget):
         self.on_shown()
 
     def _present_transfer(self, res) -> None:
+        t = self.ctx.t
+        if res.get("no_space"):   # refused before staging: nothing was sent
+            self._warn_status(no_space_text(t, res["no_space"]))
+            return
         self._set_status("sc_transfer_done", found=res.get("found", 0),
                          transferred=res.get("transferred", 0),
                          skipped=res.get("skipped", 0))
+        if res.get("disk_full"):
+            full = t("sc_transfer_disk_full")
+            self._set_status_lit(self.status.text() + "  " + full)
+            QMessageBox.warning(self, t("app_title"), full)
 
     def _present_save(self, res) -> None:
         new = sum(v.get("new", 0) for v in res.values() if isinstance(v, dict))
@@ -1024,6 +1033,11 @@ class ShortcutsTab(QWidget):
         skipped = sum(v.get("skipped", 0) for v in res.get("imports", {}).values())
         self._set_status("sc_unpack_done2", tracks=ex.get("tracks", 0), skipped=skipped)
         imports = res.get("imports", {}).values()
+        refused = [v["no_space"] for v in imports if v.get("no_space")]
+        if refused:
+            msg = no_space_text(self.ctx.t, refused[0])
+            self._set_status_lit(self.status.text() + "  " + msg)
+            QMessageBox.warning(self, self.ctx.t("app_title"), msg)
         failed = sum(v.get("stage_failed", 0) for v in imports)
         if failed > 0:
             t = self.ctx.t
@@ -1034,13 +1048,21 @@ class ShortcutsTab(QWidget):
 
     def _present_export(self, res) -> None:
         t = self.ctx.t
+        if res.get("no_space"):   # refused before writing: nothing exported
+            self._warn_status(no_space_text(t, res["no_space"]))
+            return
+        archives = res.get("archives", [])
+        full = t("export_disk_full", drive=res["full_drive"]) if res.get("disk_full") else ""
+        if full and not archives:
+            self._warn_status(full)
+            return
         if res.get("count", 0) == 0:
             self._set_status("sc_export_empty")
             return
-        archives = res.get("archives", [])
         location = str(Path(archives[0]).parent) if archives else ""
         msg = t("sc_export_done", count=res["count"], archives=len(archives))
-        self._set_status_lit(msg + "  " + t("sc_export_saved_to", path=location))
+        self._set_status_lit(msg + "  " + t("sc_export_saved_to", path=location)
+                             + ("  " + full if full else ""))
         drive = res.get("drive") or {}
         dfiles = drive.get("files", [])
         links = [f["link"] for f in dfiles if f.get("link")]
@@ -1048,6 +1070,8 @@ class ShortcutsTab(QWidget):
         # Completion dialog: exactly WHERE it went + the archive filenames (+ links).
         body = [html.escape(msg), "", html.escape(t("sc_export_saved_to", path=location))]
         body += [f"• {html.escape(Path(a).name)}" for a in archives]
+        if full:
+            body += ["", html.escape(full)]
         if drive.get("error"):
             body += ["", html.escape(t("sc_export_upload_failed"))]
         if links:
@@ -1055,6 +1079,8 @@ class ShortcutsTab(QWidget):
             body += [f'<a href="{html.escape(u, quote=True)}">{html.escape(u)}</a>'
                      for u in links]
         self._export_result_dialog("<br>".join(body), links)
+        if full:
+            QMessageBox.warning(self, t("app_title"), full)
         if shared_no_link:
             # The file(s) were made public but the link couldn't be fetched — the
             # user must know so they can review/revoke the share in Drive.
@@ -1123,7 +1149,13 @@ class ShortcutsTab(QWidget):
         err = job.error or ""
         if job.kind == "watch_import":
             self.mw.folder_watch.job_failed(job.ctx.get("paths") or [])
-        if job.kind == "export" and job.ctx.get("written"):
+        ex = (job.ctx.get("extract") or {}) if job.kind == "unpack" else {}
+        if ex.get("no_space"):   # Unpack refused up front: nothing was sent
+            self._warn_status(no_space_text(t, ex["no_space"]))
+        elif ex.get("disk_full"):   # stopped part-way: some beatmaps were extracted
+            self._warn_status(t("extract_disk_full", drive=ex["full_drive"]))
+            self.mw.search.reload()
+        elif job.kind == "export" and job.ctx.get("written"):
             archives = [str(a) for a in job.ctx["written"]]
             location = str(Path(archives[0]).parent)
             body = [t("sc_export_done", count=len(job.ctx.get("files", [])),
@@ -1258,6 +1290,11 @@ class ShortcutsTab(QWidget):
         """Set a non-translatable status line (an error message or a path)."""
         self._status_key, self._status_kwargs = None, {}
         self.status.setText(text)
+
+    def _warn_status(self, text: str) -> None:
+        """Show ``text`` in the status line and in a warning dialog."""
+        self._set_status_lit(text)
+        QMessageBox.warning(self, self.ctx.t("app_title"), text)
 
     def _start_worker(self, fn, *args, on_success=None, on_failure=None) -> None:
         w = Worker(fn, *args)
