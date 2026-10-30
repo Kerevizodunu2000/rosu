@@ -26,6 +26,10 @@ the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Exporting from a large Library is faster.
 
 ### Fixed
+- One set that fails no longer stops Refresh Library: it is skipped, counted in the
+  status line and detailed in the Logs tab.
+- A map with an infinite beat length gets no BPM instead of 0.
+- A prune error is logged instead of stopping the prune.
 - A beatmap with an infinite, NaN or huge number in it no longer stops a Library
   refresh or reads as an empty set. Rosu treats a difficulty setting, game mode, note
   time or key count it can't use as missing.

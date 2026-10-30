@@ -123,7 +123,7 @@ def parse_osu_sections(text: str) -> dict:
             parts = line.split(",")
             if len(parts) >= 2:
                 try:
-                    beat = float(parts[1])
+                    beat = _finite(float(parts[1]))
                 except ValueError:
                     continue
                 if beat > 0:  # uninherited (a real BPM point)
