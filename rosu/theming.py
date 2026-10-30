@@ -166,6 +166,8 @@ QCheckBox {{ spacing: 8px; }}
 QCheckBox::indicator {{ width: 16px; height: 16px; border-radius: 4px;
     border: 1px solid {border}; background: {surface}; }}
 QCheckBox::indicator:checked {{ background: {accent}; border: 1px solid {accent}; }}
+QCheckBox:disabled {{ color: {muted}; }}
+QCheckBox::indicator:checked:disabled {{ background: {border}; border: 1px solid {border}; }}
 
 QSplitter::handle {{ background: {border}; }}
 QLabel#banner {{ background-color: {banner_bg}; color: {banner_text};

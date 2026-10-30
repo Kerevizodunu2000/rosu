@@ -25,6 +25,7 @@ FIELD_SEP = " | "
 ACTIONS: dict[str, tuple[tuple[str, ...], str]] = {
     "APP_START":     (("version", "root"), "Application launched"),
     "APP_STOP":      (("reason",), "Application closed"),
+    "UPDATE_NOT_APPLIED": (("reason",), "Restart now could not install the update; restarted this version"),
     "PATH_HEAL":     (("status", "root"), "Re-pointed working folders after the app folder moved"),
     "SCAN_PACKS":    (("count", "source"), "Scanned the Packs/ folder for .zip archives"),
     "READD_PROMPT":  (("code", "kind", "missing"), "Asked the user about re-adding an already-known pack"),

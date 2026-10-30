@@ -55,24 +55,50 @@ jobs:
         with:
           name: rosu-windows
           path: dist/rosu.exe
+
+  # Release on tags only, in a job that installs no dependencies: the signing
+  # secret never shares a runner with pip packages, the tests or PyInstaller.
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: windows
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - name: Download the built exe
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: rosu-windows
+          path: dist
       - name: Rename asset for release
-        if: startsWith(github.ref, 'refs/tags/')
         shell: bash
         run: cp dist/rosu.exe "dist/rosu-${GITHUB_REF_NAME}-win64.exe"
       - name: Checksum the release exe (SHA-256)
-        if: startsWith(github.ref, 'refs/tags/')
         shell: bash
         run: |
           cd dist
           sha256sum "rosu-${GITHUB_REF_NAME}-win64.exe" > "rosu-${GITHUB_REF_NAME}-win64.exe.sha256"
           cat "rosu-${GITHUB_REF_NAME}-win64.exe.sha256"
+      - name: Sign the update manifest (from secret, if present)
+        shell: bash
+        env:
+          ROSU_UPDATE_SIGNING_KEY: ${{ secrets.ROSU_UPDATE_SIGNING_KEY }}
+        run: |
+          if [ -n "$ROSU_UPDATE_SIGNING_KEY" ]; then
+            # The runner's own Python, isolated (-I) and without site-packages (-S).
+            python3 -I -S tools/update_key.py manifest "dist/rosu-${GITHUB_REF_NAME}-win64.exe" "$GITHUB_REF_NAME" dist
+          else
+            echo "No ROSU_UPDATE_SIGNING_KEY secret — releasing without a signed update manifest."
+          fi
       - name: Attach exe to the GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           files: |
             dist/rosu-${{ github.ref_name }}-win64.exe
             dist/rosu-${{ github.ref_name }}-win64.exe.sha256
+            dist/rosu-update.json
+            dist/rosu-update.json.sig
 
   # macOS build is intentionally deferred (see README "Roadmap").
   # Enable it later by adding a macos-latest job that runs the same steps and
