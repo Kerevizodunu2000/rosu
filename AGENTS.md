@@ -75,8 +75,10 @@ To look at a widget without a display, build it with
   supporter tiers, paywalls, paid services or paid infrastructure; only free
   tiers.
 - **Security:** the repo is public. Nothing may leak the owner's personal
-  data or let anyone use the owner's keys or accounts. Local servers bind to
-  `127.0.0.1` and are off by default.
+  data or let anyone use the owner's keys or accounts. Local servers (the
+  streamer-mode API, a local MCP server) bind to `127.0.0.1` and are off by
+  default. LAN features (the phone remote, LAN transfer) listen on the LAN
+  only while the user has turned them on, and only for paired devices.
 - **Releases:** each version passes a review gate (Sonnet finders → Opus
   verification → fixes) before it ships. Agents never tag or publish a
   release.
