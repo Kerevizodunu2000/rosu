@@ -33,6 +33,7 @@ the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Exporting from a large Library is faster.
 
 ### Fixed
+- The Windows build named the wrong module for the BCJ filter of 7z archives (`pybcj` instead of `bcj`); it is fixed, and the build now checks the 7z codecs inside the packaged exe.
 - Turning off the Library's physical copy and removing duplicates no longer delete files
   for good when the Library is on a drive without a Recycle Bin: nothing is deleted and
   Rosu says why. A Recycle Bin turned off for a drive now counts as no Recycle Bin, and a
