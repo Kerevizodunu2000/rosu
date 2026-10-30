@@ -2,7 +2,7 @@
 """Main window: a tabbed shell hosting the five feature tabs."""
 from __future__ import annotations
 
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QApplication, QHBoxLayout, QLabel, QMainWindow, QMessageBox, QPushButton,
     QSizePolicy, QTabWidget, QVBoxLayout, QWidget,
@@ -55,7 +55,7 @@ class MainWindow(QMainWindow):
         self.update_restart.setVisible(False)
         self.update_restart.clicked.connect(self._on_restart_now)
         self._banner_row.addWidget(self.update_restart)
-        self.update_dismiss = QPushButton()
+        self.update_dismiss = QPushButton(objectName="secondary")
         self.update_dismiss.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Preferred)
         self.update_dismiss.setVisible(False)
         self.update_dismiss.clicked.connect(self._on_dismiss_notice)
@@ -162,7 +162,7 @@ class MainWindow(QMainWindow):
         self.tabs.setFocus()   # the focused button just hid
 
     def _installed_text(self) -> str:
-        """The notice, plus the first 6 note lines as literal text when the kept
+        """The notice, plus the first 3 note lines as literal text when the kept
         check result is for the installed tag (same escaping as links.plain_tip)."""
         from html import escape
         version = self._installed_version
@@ -171,7 +171,7 @@ class MainWindow(QMainWindow):
         if chk and str(chk.get("tag", "")).lstrip("v") == version.lstrip("v") \
                 and chk.get("notes"):
             text += "<br>" + "<br>".join(
-                escape(line) for line in str(chk["notes"]).splitlines()[:6])
+                escape(line) for line in str(chk["notes"]).splitlines()[:3])
         return text
 
     def _idle_for_restart(self) -> bool:
@@ -197,6 +197,14 @@ class MainWindow(QMainWindow):
             self._restart_timer.stop()
         self._render_update_banner()
 
+    def _set_restart_style(self, name: str) -> None:
+        """Primary accent normally, the secondary style while "Cancel restart"."""
+        b = self.update_restart
+        if b.objectName() != name:
+            b.setObjectName(name)
+            b.style().unpolish(b)
+            b.style().polish(b)
+
     def _restart_if_idle(self) -> None:
         if self._restart_armed and self._idle_for_restart():
             self._restart_timer.stop()
@@ -219,7 +227,11 @@ class MainWindow(QMainWindow):
         t = self.ctx.t
         if notice:
             self.update_dismiss.setText(t("update_dismiss"))
-            self.update_banner.setText(self._installed_text())
+            text = self._installed_text()
+            self.update_banner.setText(text)
+            # beside several lines the button keeps its own height, at the top
+            self._banner_row.setAlignment(
+                self.update_dismiss, Qt.AlignTop if "<br>" in text else Qt.Alignment())
             self.update_banner.setVisible(True)
             return
         if not info:
@@ -233,6 +245,7 @@ class MainWindow(QMainWindow):
                                                 percent=self._update_percent)))
             self.update_restart.setText(t("update_cancel_restart" if armed
                                           else "update_restart"))
+            self._set_restart_style("secondary" if armed else "")
             self.update_banner.setVisible(True)
             return
         # The direct .exe when the site supplied one, else the release page. Both

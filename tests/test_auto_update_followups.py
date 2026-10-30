@@ -112,7 +112,7 @@ def test_notes_are_absent_for_another_tag_or_no_check(win):
     assert "Fixed A" in win.update_banner.text()
 
 
-def test_notes_are_plain_text_and_capped_at_six_lines(win):
+def test_notes_are_plain_text_and_capped_at_three_lines(win):
     win.show_updated_notice("1.2.3")
     win._on_update_checked({**SAME, "notes": "<a href='https://evil.example'>x</a>\n"
                                              "<b>bold</b><img src=x>"})
@@ -121,7 +121,7 @@ def test_notes_are_plain_text_and_capped_at_six_lines(win):
     assert "<a " not in text and "<b>" not in text and "<img" not in text
     win._on_update_checked({**SAME, "notes": "\n".join(f"line{i}" for i in range(20))})
     text = win.update_banner.text()
-    assert "line5" in text and "line6" not in text
+    assert "line2" in text and "line3" not in text
 
 
 def test_dismiss_clears_the_notice_for_good(qapp, win):
@@ -144,15 +144,36 @@ def test_an_update_banner_takes_the_notices_place(win, monkeypatch):
 
 
 def test_long_notes_do_not_resize_the_window(qapp, win):
-    # taller than 760: the Shortcuts tab alone needs ~800 px here, which is not the banner
-    win.resize(1280, 1000)
-    win.show()
+    from rosu import theming
+    qapp.setStyleSheet(theming.stylesheet_for(win.ctx.cfg.theme))   # what users see
+    try:
+        win.show()
+        qapp.processEvents()
+        win.resize(1280, win.minimumSizeHint().height() + 200)   # room for a banner
+        size = win.size()
+        win.show_updated_notice("1.2.3")
+        three = "\n".join(["short"] * 3)
+        win._on_update_checked({**SAME, "notes": three})
+        qapp.processEvents()
+        min_three = win.minimumSizeHint().height()
+        # as update_check hands it over: at most 1500 characters
+        notes = "x" * 400 + "\n" + "\n".join("long words " * 5 for _ in range(20))
+        win._on_update_checked({**SAME, "notes": notes})
+        qapp.processEvents()
+        assert win.size() == size
+        # the 3-line cap bounds the banner: 20 lines need no more room than 3
+        assert win.minimumSizeHint().height() == min_three
+    finally:
+        qapp.setStyleSheet("")
+
+
+def test_dismiss_is_secondary_and_top_aligned_beside_notes(win):
+    from PySide6.QtCore import Qt
     win.show_updated_notice("1.2.3")
-    # as update_check hands it over: at most 1500 characters
-    notes = "x" * 400 + "\n" + "\n".join("long words " * 5 for _ in range(20))
-    win._on_update_checked({**SAME, "notes": notes})
-    qapp.processEvents()
-    assert (win.size().width(), win.size().height()) == (1280, 1000)
+    assert win.update_dismiss.objectName() == "secondary"
+    assert not win._banner_row.alignment() & Qt.AlignTop   # single line: stretched
+    win._on_update_checked(SAME)
+    assert win._banner_row.itemAt(2).alignment() & Qt.AlignTop
 
 
 def test_turkish_strings(win):
@@ -165,6 +186,17 @@ def test_turkish_strings(win):
     win._set_restart_armed(True)
     assert "Geçerli işlem bitince" in win.update_banner.text()
     assert win.update_restart.text() == "Yeniden başlatmayı iptal et"
+
+
+def test_cancel_restart_is_secondary_until_disarmed(win):
+    win._update_info = NEWER
+    win._update_phase = "ready"
+    win._render_update_banner()
+    assert win.update_restart.objectName() == ""
+    win._set_restart_armed(True)
+    assert win.update_restart.objectName() == "secondary"
+    win._set_restart_armed(False)
+    assert win.update_restart.objectName() == ""
 
 
 # -- armed restart --------------------------------------------------------------
