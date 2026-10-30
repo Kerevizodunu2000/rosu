@@ -85,7 +85,7 @@ Rosu bulk-extracts `.zip`/`.7z`/`.tar` beatmap packs into a deduplicated `.osz` 
 - **Logs** — any day's log as a filterable table (errors only, word filter), growing live.
 - Per-client **enable/disable** toggles (lazer on, stable off by default) — a disabled client vanishes app-wide (Settings path row, Dashboard import, Shortcuts).
 - **Save ⇄ Auto-Save** for Settings; **Report a problem** posts to the hosted form (with e-mail / web-form fallback).
-- Optional startup **update check** (Rosu's site first, GitHub as the fallback) with a banner linking the new `.exe` directly (on by default, fails silently offline).
+- Optional startup **update check** (Rosu's site first, GitHub as the fallback) with a banner linking the new `.exe` directly (on by default, fails silently offline), plus **auto-update** for the Windows exe: it downloads the new release, checks its signature and SHA-256, installs it on restart and rolls back a version that fails to start (on by default; Settings → Install updates automatically).
 - **Report a problem** shows a private link to follow your report's status (received → in review → fixed in vX).
 - Opt-in **anonymous crash reports** (off by default): the error type, a scrubbed message and the code locations involved — no files, no library data, no usernames.
 
