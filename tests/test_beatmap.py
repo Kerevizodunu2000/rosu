@@ -149,3 +149,46 @@ def test_osz_meta_wrapper_matches_representative(tmp_path):
     assert meta.artist == "Tester"
     assert meta.mode == "osu!mania"
     assert meta.bpm == 200.0
+
+
+def _mania_with_cs(cs: str) -> str:
+    return _MANIA_7K.replace("CircleSize:7", f"CircleSize:{cs}")
+
+
+def test_read_osu_diff_non_finite_circle_size_is_skipped():
+    for cs in ("inf", "-inf", "1e400", "nan"):
+        d = beatmap.read_osu_diff(_mania_with_cs(cs).encode("utf-8"), "x.osu")
+        assert d.cs is None and d.keycount is None, cs
+        assert d.version == "7K Insane" and d.mode_int == 3 and d.od == 8.5
+
+
+def test_read_osz_full_keeps_a_set_with_a_non_finite_circle_size(tmp_path):
+    for cs in ("inf", "1e400", "nan"):
+        osz = tmp_path / f"{cs}.osz"
+        with zipfile.ZipFile(osz, "w") as zf:
+            zf.writestr("song [7K Insane].osu", _mania_with_cs(cs))
+            zf.writestr("song [Hard].osu", _STD)
+        meta, diffs, raw = beatmap.read_osz_full(osz)
+        assert len(diffs) == 2 and len(raw) == 2, cs
+        assert meta.artist == "Tester"
+        mania = next(d for d in diffs if d.mode_int == 3)
+        assert mania.cs is None and mania.keycount is None
+
+
+def test_huge_circle_size_in_mania_has_no_keycount():
+    d = beatmap.read_osu_diff(_mania_with_cs("1e300").encode("utf-8"), "x.osu")
+    assert d.cs == 1e300 and d.keycount is None
+
+
+def test_hit_object_time_beyond_64_bits_is_ignored():
+    text = _MANIA_7K + "64,192," + "9" * 30 + ",1,0,0:0:0:0:\n"
+    parsed = beatmap.parse_osu_sections(text)
+    assert parsed["length_seconds"] == 3        # from the 3000 ms note, not 1e27 s
+    assert beatmap.read_osu_diff(text.encode("utf-8"), "x.osu").length_seconds == 3
+
+
+def test_mode_beyond_64_bits_is_none():
+    text = _STD.replace("Mode: 0", "Mode: " + "1" * 30)
+    assert beatmap.parse_osu_sections(text)["mode_int"] is None
+    d = beatmap.read_osu_diff(text.encode("utf-8"), "x.osu")
+    assert d.mode_int is None and d.mode is None and d.version == "Hard"

@@ -235,3 +235,37 @@ too once item 1 is done. It is not a separate port.
   has it before any verdict.
 
 Each recommendation above becomes its own issue; none is done in this change.
+
+## Profiled vs unprofiled
+
+Items 2 and 3 were acted on in #30. A Rust (PyO3) module was built for the `.osu`
+parse and the skillset windows, with a Python fallback and parity tests. It was
+measured with `tools/profile_library.py` both with the profiler and with
+`--no-profile` (wall time only). The library had N = 10,000 sets with a sample of
+1,000, was regenerated before each run, and the four runs went back to back on the
+machine above:
+
+| Path | Python, `--no-profile` | Rust, `--no-profile` | Speed-up | Python, profiler | Rust, profiler | Speed-up |
+|---|---|---|---|---|---|---|
+| read_metadata | 1.60 s | 0.90 s | 1.78x | 32.44 s | 2.09 s | 15.5x |
+| extract | 0.40 s | 0.40 s | 1.00x | 3.32 s | 0.61 s | 5.4x |
+| refresh | 34.77 s | 24.98 s | 1.39x | 348.54 s | 41.34 s | 8.4x |
+
+cProfile inflated the pure-Python cost about 10x: refresh took 348.54 s profiled
+and 34.77 s unprofiled. So parse and MSD looked like nearly all of these paths,
+when unprofiled they are only part of them:
+
+- `read_metadata`: rosu-pp star ratings take about 0.50 s per 1,000 sets, and zip
+  reading plus MD5 about 0.18 s.
+- `extract`: mostly archive extraction, star ratings and database writes.
+
+The module made parse and MSD about 10x faster, but it missed the 2x bar on
+`read_metadata` and `extract` without the profiler. It did not merge and is kept on
+the branch
+[`parked/rust-osu-core`](https://github.com/Kerevizodunu2000/rosu/tree/parked/rust-osu-core).
+Revisit it when an unprofiled measurement shows parse/MSD dominating a path users
+wait on. The likelier next candidates are star ratings and zip read + MD5.
+
+**Rule for future measurements:** report the unprofiled wall time
+(`--no-profile`) next to any profile, and base a Rust decision on the unprofiled
+share.
