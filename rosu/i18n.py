@@ -2236,12 +2236,12 @@ STRINGS: dict[str, dict[str, str]] = {
         "tr": "osu!'nun açık olup olmadığı kontrol edilemedi. osu!'yu kapatıp tekrar dene — "
               "hiçbir şey kaldırılmadı."},
     "rm_err_no_recycle_bin": {
-        "en": "The Songs folder is on a drive without a Recycle Bin (removable or network), "
-              "so removed folders could not be brought back. Use \"Save to Library, then "
-              "remove\" instead — nothing was removed.",
-        "tr": "Songs klasörü Geri Dönüşüm Kutusu olmayan bir sürücüde (çıkarılabilir ya da "
-              "ağ), bu yüzden kaldırılan klasörler geri getirilemez. Bunun yerine \"Library'e "
-              "kaydet, sonra kaldır\"ı kullan — hiçbir şey kaldırılmadı."},
+        "en": "Removing needs a drive with a Recycle Bin, and the Songs folder is on a "
+              "removable or network drive without one, so removed folders could not be "
+              "brought back — nothing was removed.",
+        "tr": "Kaldırmak için Geri Dönüşüm Kutusu olan bir sürücü gerekir; Songs klasörü "
+              "ise Geri Dönüşüm Kutusu olmayan çıkarılabilir ya da ağ sürücüsünde, bu "
+              "yüzden kaldırılan klasörler geri getirilemez — hiçbir şey kaldırılmadı."},
     "rm_err_client_running": {
         "en": "osu! is running. Close it and try again — nothing was removed.",
         "tr": "osu! açık. Kapatıp tekrar dene — hiçbir şey kaldırılmadı."},

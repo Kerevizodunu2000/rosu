@@ -206,10 +206,12 @@ class RemovalMixin:
             With ``save_first`` each set is copied into the Library first and only
             the sets that are then PROVABLY in the Library (a Library ``.osz``
             holding every one of its files byte for byte) are removed;
-            the rest are reported as ``kept``. Without it (stable only, and only
-            where the Recycle Bin works) every chosen set is removed. osu!lazer
-            is always saved first. Refuses while the client is running — or
-            when that cannot be checked.
+            the rest are reported as ``kept``. Without it (stable only) every
+            chosen set is removed. osu!stable removal, in either mode, needs a
+            Recycle Bin on the Songs drive and on every target folder; without
+            one nothing is saved or removed. osu!lazer is always saved first.
+            Refuses while the client is running — or when that cannot be
+            checked.
             Returns ``{"source","removed","kept","failed","saved","backup"?,
             "cancelled","error"?}``.
             """
@@ -230,7 +232,7 @@ class RemovalMixin:
                 songs = client_import.stable_songs_dir()
                 if songs is None:
                     return {**res, "error": "no_stable"}
-                if not save_first and not client_remove.recycle_bin_available(songs):
+                if not client_remove.recycle_bin_available(songs):
                     return {**res, "error": "no_recycle_bin"}
                 targets = {}
                 for k in keys:
@@ -238,6 +240,8 @@ class RemovalMixin:
                     if folder is None:
                         res["failed"].append(k)
                         self.log.error("remove:refused", f"not a Songs set folder: {k[:120]}")
+                    elif not client_remove.recycle_bin_available(folder):
+                        return {**res, "error": "no_recycle_bin"}   # all or nothing
                     else:
                         targets[k] = client_import.beatmapset_id_for_folder(folder)
                 if save_first:
@@ -371,6 +375,10 @@ class RemovalMixin:
                         client_remove.folder_fingerprint(folder, every_file=True),
                         files.get(bid, []) + [lib / self._stable_save_name(folder, bid)]):
                     res["kept"].append(key)   # not provably in the Library: leave it
+                elif not client_remove.recycle_bin_available(folder):
+                    res["failed"].append(key)   # send2trash would delete it for good
+                    self.log.error("remove:stable",
+                                   f"{key}: no Recycle Bin on this drive; left in place")
                 else:
                     try:
                         send2trash(str(folder))
