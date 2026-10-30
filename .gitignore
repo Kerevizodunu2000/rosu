@@ -121,3 +121,9 @@ graphify-out/
 #     flow (its default destination is wherever the app was launched from).
 rosu-export-*.zip
 rosu-export-*.7z
+
+# Software factory runtime state (see factory/ and .claude/skills/factory)
+/factory/jobs/
+/factory/.github-cache/
+# The factory's settings hold no secrets (the root config.json does, and stays ignored).
+!/factory/config.json
