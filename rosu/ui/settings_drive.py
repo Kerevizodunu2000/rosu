@@ -9,6 +9,14 @@ import html
 from PySide6.QtWidgets import QMessageBox
 
 from ..workers import Worker
+from .drive_browser_dialog import _fmt_size
+
+
+def storage_permille(usage: int, limit: int | None) -> int | None:
+    """How full Drive is, 0..1000; None when the quota is unlimited (or zero)."""
+    if not limit:
+        return None
+    return max(0, min(1000, usage * 1000 // limit))
 
 
 class SettingsDriveMixin:
@@ -56,11 +64,56 @@ class SettingsDriveMixin:
             f'<br>{html.escape(t("drive_folder_scope_note"))}')
         self.lbl_drive_folder.setVisible(True)
 
+    def refresh_drive_storage(self) -> None:
+        """Load the Drive quota off the UI thread. The worker stays out of
+        ``_threads``: a quick read is not an operation to warn about on quit."""
+        if self._storage_worker is not None:
+            return
+        if not self.ctx.services.drive_status().get("connected"):
+            self._drive_storage_loaded(None)
+            return
+        w = Worker(self.ctx.services.drive_storage)
+        self._storage_worker = w
+        w.succeeded.connect(self._drive_storage_loaded)
+        w.failed.connect(lambda _msg: self._drive_storage_loaded(None))
+        w.finished.connect(lambda: setattr(self, "_storage_worker", None))
+        w.start()
+
+    def _drive_storage_loaded(self, res) -> None:
+        if res and not self.ctx.services.drive_status().get("connected"):
+            res = None   # disconnected while loading
+        self._storage_res = res
+        self._render_drive_storage()
+
+    def _render_drive_storage(self) -> None:
+        """Show the last ``drive_storage()`` result; hidden on any error."""
+        res = self._storage_res
+        if not res or res.get("error"):
+            self.bar_drive_storage.setVisible(False)
+            self.lbl_drive_storage.setVisible(False)
+            return
+        t = self.ctx.t
+        limit = res["limit"]
+        text = t("drive_storage_line", used=_fmt_size(res["usage"]),
+                 total=_fmt_size(limit) if limit else t("drive_storage_unlimited"),
+                 rosu=_fmt_size(res["rosu"]), trash=_fmt_size(res["usage_in_drive_trash"]))
+        self.lbl_drive_storage.setText(text)
+        self.lbl_drive_storage.setVisible(True)
+        permille = storage_permille(res["usage"], limit)
+        self.bar_drive_storage.setAccessibleName(t("drive_storage_name"))
+        self.bar_drive_storage.setAccessibleDescription(text)
+        if permille is not None:
+            self.bar_drive_storage.setValue(permille)
+        self.bar_drive_storage.setVisible(permille is not None)
+
     def _refresh_drive_status(self) -> None:
         t = self.ctx.t
         self._reload_zip_options()   # offer/remove the Drive disposal option
         self._refresh_drive_folder()
         st = self.ctx.services.drive_status()
+        if not st["connected"]:
+            self._storage_res = None   # no network call: just hide the numbers
+        self._render_drive_storage()
         if not st["configured"]:
             self.btn_drive.setEnabled(False)
             self.btn_drive.setText(t("btn_drive_connect"))
@@ -113,6 +166,7 @@ class SettingsDriveMixin:
             else:
                 self.lbl_drive_status.setText(self.ctx.t("drive_login_failed"))
             return
+        self.refresh_drive_storage()
         # Success: the browser had focus — bring Rosu back to the front so the user
         # "returns to the app" automatically. (The OAuth tab can't be reliably
         # script-closed — browsers only let a script close tabs it opened — so we

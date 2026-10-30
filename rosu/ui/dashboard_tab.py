@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 from .. import config, extractor, osu_import
 from ..i18n import human_duration
 from ..workers import Worker
+from .drive_browser_dialog import _fmt_size as _fmt_drive_size
 from .progress_panel import ProgressPanel
 from .reveal import reveal_in_explorer
 
@@ -616,8 +617,21 @@ class DashboardTab(QWidget):
     def _after_backup(self, res) -> None:
         self._idle()
         t = self.ctx.t
+        self.mw.settings.refresh_drive_storage()
         if res.get("error") == "not_connected":
             self.status.setText(t("drive_connect_first"))
+            return
+        if res.get("error") == "drive_full":
+            if "needed" in res:   # refused before anything was uploaded
+                self.status.setText(t("drive_full_status"))
+                msg = t("drive_full_precheck", needed=_fmt_drive_size(res["needed"]),
+                        free=_fmt_drive_size(res["free"]),
+                        trash=_fmt_drive_size(res["trash"]))
+            else:                 # ran out mid-upload; what went up is kept
+                self.status.setText(t("drive_full_stopped_status"))
+                msg = t("drive_full_stopped", uploaded=res["uploaded"],
+                        chunks=res["chunks"])
+            QMessageBox.warning(self, t("app_title"), msg)
             return
         if res.get("error"):
             self.status.setText(t("drive_backup_failed"))
