@@ -43,6 +43,7 @@ the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Exporting from a large Library is faster.
 
 ### Fixed
+- The Windows build named the wrong module for the BCJ filter of 7z archives (`pybcj` instead of `bcj`); it is fixed, and the build now checks the 7z codecs inside the packaged exe.
 - A refused or disk-full **Unpack** from the Shortcuts tab no longer goes on to send
   Output to osu!: the job shows as failed and says which drive is short.
 - Turning off the Library's physical copy and removing duplicates no longer delete files
