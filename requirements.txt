@@ -1,7 +1,7 @@
 PySide6>=6.12
 openpyxl>=3.1
 Send2Trash>=1.8
-rapidfuzz>=3.0
+rapidfuzz>=3.14.6
 py7zr>=1.1.4
 # py7zr's Brotli codec: 1.2.1 fixes an out-of-bounds write in the decoder (GHSA-9v8h-qqgm-4m35).
 brotli>=1.2.1
